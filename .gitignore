@@ -1,0 +1,16 @@
+# Ignore build results
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Ignore logs and temp files
+*.log
+*.tmp
+
+# Ignore publish output
+publish/
+
+# Ignore secrets
+appsettings.Development.json

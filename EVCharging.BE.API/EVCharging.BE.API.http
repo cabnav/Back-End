@@ -1,0 +1,6 @@
+@EVCharging.BE.API_HostAddress = http://localhost:5167
+
+GET {{EVCharging.BE.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
