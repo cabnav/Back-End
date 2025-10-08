@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVCharging.BE.DAL.Models
+{
     [Table("DriverProfile")]
     public class DriverProfile
     {

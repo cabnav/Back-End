@@ -1,16 +1,59 @@
-# Ignore build results
+## .gitignore cho .NET
 bin/
 obj/
-.vs/
 *.user
 *.suo
+*.cache
+*.vs/
+.vscode/
+*.swp
+*.*sdf
+*.pidb
+*.ncb
+*.opensdf
+*.db
+*.db-shm
+*.db-wal
 
-# Ignore logs and temp files
-*.log
-*.tmp
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+msbuild.log
+msbuild.err
+msbuild.wrn
 
-# Ignore publish output
-publish/
+# NuGet
+packages/
+*.nupkg
+.nuget/
+nuget.exe
 
-# Ignore secrets
-appsettings.Development.json
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+*.sln.ide
+
+# Database
+*.mdf
+*.ldf
+App_Data/
+
+# User-specific files
+*.userprefs
+
+# Backup folder
+_Backup/
+
+# Local History for Visual Studio
+.localhistory/

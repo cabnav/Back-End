@@ -1,53 +1,60 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using EVCharging.BE.DAL.Models;
+using EVCharging.BE.DAL.Models.EVChargingManagement.Models;
+using EVChargingManagement.Models;
+using Microsoft.EntityFrameworkCore;
 
-namespace EVCharging.BE.DAL.Models
+namespace EVChargingManagement.Data
 {
-    using Microsoft.EntityFrameworkCore;
-
     public class EVChargingDbContext : DbContext
     {
         public EVChargingDbContext(DbContextOptions<EVChargingDbContext> options) : base(options) { }
 
-        public DbSet<User> Users { get; set; }
-        public DbSet<DriverProfile> DriverProfiles { get; set; }
-        public DbSet<CorporateAccount> CorporateAccounts { get; set; }
-        public DbSet<ChargingStation> ChargingStations { get; set; }
-        public DbSet<ChargingPoint> ChargingPoints { get; set; }
-        public DbSet<PricingPlan> PricingPlans { get; set; }
-        public DbSet<Subscription> Subscriptions { get; set; }
-        public DbSet<Reservation> Reservations { get; set; }
-        public DbSet<ChargingSession> ChargingSessions { get; set; }
-        public DbSet<Payment> Payments { get; set; }
-        public DbSet<WalletTransaction> WalletTransactions { get; set; }
-        public DbSet<StationStaff> StationStaffs { get; set; }
-        public DbSet<IncidentReport> IncidentReports { get; set; }
-        public DbSet<SessionLog> SessionLogs { get; set; }
-        public DbSet<Notification> Notifications { get; set; }
-        public DbSet<Invoice> Invoices { get; set; }
-        public DbSet<InvoiceItem> InvoiceItems { get; set; }
+        // DbSets với tên khớp hoàn toàn
+        public DbSet<User> User { get; set; }
+        public DbSet<CorporateAccount> CorporateAccount { get; set; }
+        public DbSet<DriverProfile> DriverProfile { get; set; }
+        public DbSet<ChargingStation> ChargingStation { get; set; }
+        public DbSet<ChargingPoint> ChargingPoint { get; set; }
+        public DbSet<PricingPlan> PricingPlan { get; set; }
+        public DbSet<Subscription> Subscription { get; set; }
+        public DbSet<Reservation> Reservation { get; set; }
+        public DbSet<ChargingSession> ChargingSession { get; set; }
+        public DbSet<Payment> Payment { get; set; }
+        public DbSet<WalletTransaction> WalletTransaction { get; set; }
+        public DbSet<StationStaff> StationStaff { get; set; }
+        public DbSet<IncidentReport> IncidentReport { get; set; }
+        public DbSet<SessionLog> SessionLog { get; set; }
+        public DbSet<Notification> Notification { get; set; }
+        public DbSet<Invoice> Invoice { get; set; }
+        public DbSet<InvoiceItem> InvoiceItem { get; set; }
         public DbSet<UsageAnalytics> UsageAnalytics { get; set; }
-        public DbSet<BillingPlan> BillingPlans { get; set; }
+        public DbSet<BillingPlan> BillingPlan { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            // Configure relationships and constraints
+            // Cấu hình quan hệ và ràng buộc
+            modelBuilder.Entity<Subscription>()
+                .HasCheckConstraint("CK_Subscription_UserOrCorporate",
+                    "user_id IS NOT NULL OR corporate_id IS NOT NULL");
+
+            modelBuilder.Entity<Invoice>()
+                .HasCheckConstraint("CK_Invoice_UserOrCorporate",
+                    "user_id IS NOT NULL OR corporate_id IS NOT NULL");
+
+            // Cấu hình unique constraints
             modelBuilder.Entity<User>()
-                .HasIndex(u => u.Email)
+                .HasIndex(u => u.email)
                 .IsUnique();
 
             modelBuilder.Entity<ChargingPoint>()
-                .HasIndex(cp => cp.QrCode)
+                .HasIndex(cp => cp.qr_code)
                 .IsUnique();
 
             modelBuilder.Entity<Invoice>()
-                .HasIndex(i => i.InvoiceNumber)
+                .HasIndex(i => i.invoice_number)
                 .IsUnique();
 
-            // Additional configuration can be added here
+            base.OnModelCreating(modelBuilder);
         }
     }
 }
