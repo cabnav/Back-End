@@ -2,5 +2,7 @@
 {
     public class AuthController
     {
+        // Controller code here
+         
     }
 }
