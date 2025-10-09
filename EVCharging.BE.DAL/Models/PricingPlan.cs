@@ -5,12 +5,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVCharging.BE.DAL.Models
 {
-    [Table("PricingPlan")]
     public class PricingPlan
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("plan_id")]
         public int plan_id { get; set; }
 
         [Required]
@@ -18,7 +16,6 @@ namespace EVCharging.BE.DAL.Models
         public string name { get; set; }
 
         [StringLength(20)]
-        [Column("plan_type")]
         public string plan_type { get; set; } // pay_per_use, subscription, corporate
 
         public string description { get; set; }
@@ -27,19 +24,16 @@ namespace EVCharging.BE.DAL.Models
         public decimal price { get; set; }
 
         [StringLength(20)]
-        [Column("billing_cycle")]
         public string billing_cycle { get; set; } // monthly, yearly
 
         [Column("discount_rate", TypeName = "decimal(5,2)")]
         public decimal discount_rate { get; set; } = 0;
 
         [StringLength(20)]
-        [Column("target_audience")]
         public string target_audience { get; set; } // individual, corporate
 
         public string benefits { get; set; }
 
-        [Column("is_active")]
         public bool is_active { get; set; } = true;
 
         // Navigation properties

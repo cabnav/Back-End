@@ -1,10 +1,10 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using EVCharging.BE.DAL.Models.EVChargingManagement.Models; 
 
 namespace EVCharging.BE.DAL.Models
 {
-    [Table("WalletTransaction")]
     public class WalletTransaction
     {
         [Key]

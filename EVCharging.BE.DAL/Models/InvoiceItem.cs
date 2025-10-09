@@ -4,19 +4,15 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVCharging.BE.DAL.Models
 {
-    [Table("InvoiceItem")]
     public class InvoiceItem
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("item_id")]
         public int item_id { get; set; }
 
         [Required]
-        [Column("invoice_id")]
         public int invoice_id { get; set; }
 
-        [Column("session_id")]
         public int? session_id { get; set; }
 
         [StringLength(255)]

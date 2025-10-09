@@ -10,7 +10,6 @@ namespace EVCharging.BE.DAL.Models
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("station_id")]
         public int station_id { get; set; }
 
         [Required]
@@ -25,15 +24,14 @@ namespace EVCharging.BE.DAL.Models
         public double longitude { get; set; }
 
         [StringLength(100)]
-        public string operator { get; set; }
+        [Column("operator")]
+        public string operator_name { get; set; } // Renamed from 'operator' to 'operator_name'
 
         [StringLength(20)]
         public string status { get; set; } = "active"; // active, maintenance, inactive
 
-        [Column("total_points")]
         public int total_points { get; set; } = 0;
 
-        [Column("available_points")]
         public int available_points { get; set; } = 0;
 
         // Navigation properties

@@ -6,26 +6,20 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVCharging.BE.DAL.Models
 {
-    [Table("Reservation")]
     public class Reservation
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("reservation_id")]
         public int reservation_id { get; set; }
 
         [Required]
-        [Column("driver_id")]
         public int driver_id { get; set; }
 
         [Required]
-        [Column("point_id")]
         public int point_id { get; set; }
 
-        [Column("start_time")]
         public DateTime start_time { get; set; }
 
-        [Column("end_time")]
         public DateTime end_time { get; set; }
 
         [StringLength(20)]

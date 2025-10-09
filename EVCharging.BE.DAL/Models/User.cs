@@ -17,12 +17,10 @@ namespace EVCharging.BE.DAL.Models
 
     namespace EVChargingManagement.Models
     {
-        [Table("User")]
         public class User
         {
             [Key]
             [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-            [Column("user_id")]
             public int user_id { get; set; }
 
             [Required]
@@ -54,7 +52,6 @@ namespace EVCharging.BE.DAL.Models
             [StringLength(50)]
             public string membership_tier { get; set; } // standard, vip, corporate
 
-            [Column("created_at")]
             public DateTime created_at { get; set; } = DateTime.UtcNow;
 
             // Navigation properties

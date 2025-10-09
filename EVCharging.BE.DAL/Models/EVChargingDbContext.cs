@@ -1,9 +1,8 @@
 ﻿using EVCharging.BE.DAL.Models;
 using EVCharging.BE.DAL.Models.EVChargingManagement.Models;
-using EVChargingManagement.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace EVChargingManagement.Data
+namespace EVCharging.BE.DAL.Models
 {
     public class EVChargingDbContext : DbContext
     {

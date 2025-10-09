@@ -6,20 +6,16 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace EVCharging.BE.DAL.Models
 {
-    [Table("IncidentReport")]
     public class IncidentReport
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Column("report_id")]
         public int report_id { get; set; }
 
         [Required]
-        [Column("reporter_id")]
         public int reporter_id { get; set; }
 
         [Required]
-        [Column("point_id")]
         public int point_id { get; set; }
 
         [Required]
@@ -34,13 +30,10 @@ namespace EVCharging.BE.DAL.Models
         [StringLength(20)]
         public string status { get; set; } = "pending"; // pending, in_progress, resolved
 
-        [Column("reported_at")]
         public DateTime reported_at { get; set; } = DateTime.UtcNow;
 
-        [Column("resolved_at")]
         public DateTime? resolved_at { get; set; }
 
-        [Column("resolved_by")]
         public int? resolved_by { get; set; }
 
         // Navigation properties
