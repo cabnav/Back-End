@@ -7,6 +7,12 @@ namespace EVCharging.BE.API.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
+<<<<<<< HEAD
         
 }
+=======
+        FallbackEndpointRouteBuilderExtensions builderExtensions
+         
+    }
+>>>>>>> 9c6f265d2e3ccd56a576e6038ec4c041164a43d7
 }
