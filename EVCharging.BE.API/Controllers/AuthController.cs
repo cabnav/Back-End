@@ -2,7 +2,7 @@
 {
     public class AuthController
     {
-        
+        FallbackEndpointRouteBuilderExtensions builderExtensions
          
     }
 }
