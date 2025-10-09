@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EVCharging.BE.DAL", "EVChar
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EVCharging.BE.Services", "EVCharging.BE.Services\EVCharging.BE.Services.csproj", "{C06F638F-9C86-4D0C-8F69-F182D75AB928}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EVCharging.BE.Common", "EVCharging.BE.Common\EVCharging.BE.Common.csproj", "{399423B5-AA4A-4713-8C55-76FE01E1D4D7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{C06F638F-9C86-4D0C-8F69-F182D75AB928}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C06F638F-9C86-4D0C-8F69-F182D75AB928}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C06F638F-9C86-4D0C-8F69-F182D75AB928}.Release|Any CPU.Build.0 = Release|Any CPU
+		{399423B5-AA4A-4713-8C55-76FE01E1D4D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{399423B5-AA4A-4713-8C55-76FE01E1D4D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{399423B5-AA4A-4713-8C55-76FE01E1D4D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{399423B5-AA4A-4713-8C55-76FE01E1D4D7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
