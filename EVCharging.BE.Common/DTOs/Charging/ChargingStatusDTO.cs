@@ -17,3 +17,4 @@ namespace EVCharging.BE.Common.DTOs.Charging
         public DateTime StartTime { get; set; }
         public string Status { get; set; }
     }
+}
