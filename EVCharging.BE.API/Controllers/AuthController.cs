@@ -1,8 +1,12 @@
-﻿namespace EVCharging.BE.API.Controllers
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace EVCharging.BE.API.Controllers
 {
-    public class AuthController
+    [Route("api/[controller]")]
+    [ApiController]
+    public class AuthController : ControllerBase
     {
-        // Controller code here
-         
-    }
+        
+}
 }
