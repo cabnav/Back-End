@@ -6,5 +6,6 @@ namespace EVCharging.BE.API.Controllers
     [ApiController]
     public class AnalyticsController
     {
+        gugjh
     }
 }
