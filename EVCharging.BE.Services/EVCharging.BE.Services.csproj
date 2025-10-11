@@ -26,6 +26,7 @@
 		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj">
 		  <Private>True</Private>
 		</ProjectReference>
+		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
 	</ItemGroup>
 
 </Project>
