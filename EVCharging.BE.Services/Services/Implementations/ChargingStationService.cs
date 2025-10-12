@@ -1,9 +1,8 @@
 ﻿using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
-using EVCharging.BE.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace EVCharging.BE.Services.Implementations
+namespace EVCharging.BE.Services.Services.Implementations
 {
     public class ChargingStationService : IChargingStationService
     {

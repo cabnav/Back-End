@@ -1,10 +1,10 @@
 ﻿using EVCharging.BE.DAL;
-using EVCharging.BE.Services.Interfaces;
-using EVCharging.BE.Services.Implementations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using EVCharging.BE.Services.Services.Implementations;
+using EVCharging.BE.Services.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 

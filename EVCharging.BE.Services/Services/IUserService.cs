@@ -1,6 +1,6 @@
 ﻿using EVCharging.BE.DAL.Entities;
 
-namespace EVCharging.BE.Services.Interfaces
+namespace EVCharging.BE.Services.Services
 {
     public interface IUserService
     {
@@ -11,3 +11,4 @@ namespace EVCharging.BE.Services.Interfaces
         Task<bool> DeleteAsync(int id);
     }
 }
+

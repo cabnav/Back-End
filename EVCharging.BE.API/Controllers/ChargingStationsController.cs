@@ -1,4 +1,4 @@
-﻿using EVCharging.BE.Services.Interfaces;
+﻿using EVCharging.BE.Services.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVCharging.BE.API.Controllers

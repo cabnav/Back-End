@@ -1,6 +1,6 @@
 ﻿using EVCharging.BE.DAL.Entities;
 
-namespace EVCharging.BE.Services.Interfaces
+namespace EVCharging.BE.Services.Services
 {
     public interface IChargingStationService
     {
