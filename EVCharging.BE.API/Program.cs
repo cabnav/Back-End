@@ -28,6 +28,7 @@ builder.Services.AddDbContext<EvchargingManagementContext>(options =>
 // ------------------------------
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
 // ------------------------------
 // 4️⃣ Configure JWT Authentication
@@ -48,7 +49,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"])),
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured"))),
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
     };
