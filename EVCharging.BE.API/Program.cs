@@ -5,6 +5,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using EVCharging.BE.Services.Services.Implementations;
 using EVCharging.BE.Services.Services;
+using EVCharging.BE.API.Services;
+using EVCharging.BE.API.Hubs;
 using System.Text.Json.Serialization; // ✅ Thêm dòng này
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,7 +24,42 @@ builder.Services.AddControllers()
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // Cấu hình thông tin API
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "EV Charging API",
+        Version = "v1"
+    });
+
+    // ⚙️ Thêm cấu hình bảo mật cho JWT Bearer
+    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Nhập token theo định dạng: Bearer {your JWT token}"
+    });
+
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            new string[] {}
+        }
+    });
+});
+
 
 // ------------------------------
 // 2️⃣ Configure database
@@ -36,6 +73,10 @@ builder.Services.AddDbContext<EvchargingManagementContext>(options =>
 // ------------------------------
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IChargingService, ChargingService>();
+builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>(); // ✅ Service DriverProfile
 
 // ------------------------------
@@ -57,6 +98,7 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured"))),
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"])
         ),
@@ -66,6 +108,12 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization();
+
+// ------------------------------
+// 5️⃣ Configure SignalR
+// ------------------------------
+builder.Services.AddSignalR();
+builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 // ------------------------------
 // 5️⃣ Build app
@@ -94,5 +142,9 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Map SignalR Hub
+app.MapHub<ChargingSessionHub>("/chargingHub");
+
 app.MapControllers();
 app.Run();
