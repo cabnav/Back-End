@@ -7,13 +7,21 @@ using EVCharging.BE.Services.Services.Implementations;
 using EVCharging.BE.Services.Services;
 using EVCharging.BE.API.Services;
 using EVCharging.BE.API.Hubs;
+using System.Text.Json.Serialization; // ✅ Thêm dòng này
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ------------------------------
 // 1️⃣ Add services
 // ------------------------------
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    // ✅ Fix lỗi vòng lặp JSON khi serialize (DriverProfile <-> User)
+    .AddJsonOptions(opt =>
+    {
+        opt.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        opt.JsonSerializerOptions.WriteIndented = true;
+    });
+
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -69,6 +77,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChargingService, ChargingService>();
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
+builder.Services.AddScoped<IDriverProfileService, DriverProfileService>(); // ✅ Service DriverProfile
 
 // ------------------------------
 // 4️⃣ Configure JWT Authentication
@@ -90,6 +99,9 @@ builder.Services.AddAuthentication(options =>
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured"))),
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"])
+        ),
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
     };

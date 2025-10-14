@@ -1,10 +1,11 @@
-﻿using EVCharging.BE.Services.Services;
+﻿using EVCharging.BE.Services.DTOs;
+using EVCharging.BE.Services.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVCharging.BE.API.Controllers
 {
     [ApiController]
-    [Route("api/charging-stations")]
+    [Route("api/[controller]")]
     public class ChargingStationsController : ControllerBase
     {
         private readonly IChargingStationService _service;
@@ -25,8 +26,30 @@ namespace EVCharging.BE.API.Controllers
         public async Task<IActionResult> GetById(int id)
         {
             var station = await _service.GetByIdAsync(id);
-            if (station == null) return NotFound(new { message = "Charging station not found" });
+            if (station == null) return NotFound();
             return Ok(station);
+        }
+
+        [HttpGet("nearby")]
+        public async Task<IActionResult> GetNearby(double lat, double lon, double radiusKm = 5)
+        {
+            var result = await _service.GetNearbyStationsAsync(lat, lon, radiusKm);
+            return Ok(result);
+        }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> Search([FromQuery] StationSearchDTO filter)
+        {
+            var result = await _service.SearchStationsAsync(filter);
+            return Ok(result);
+        }
+
+        [HttpGet("{stationId}/status")]
+        public async Task<IActionResult> GetStationStatus(int stationId)
+        {
+            var status = await _service.GetStationStatusAsync(stationId);
+            if (status == null) return NotFound();
+            return Ok(status);
         }
     }
 }
