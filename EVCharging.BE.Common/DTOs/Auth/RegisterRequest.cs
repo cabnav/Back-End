@@ -12,12 +12,12 @@ namespace EVCharging.BE.Common.DTOs.Auth
         public string Email { get; set; }
         public string Password { get; set; }
         public string Phone { get; set; }
-        public string Role { get; set; } = "driver";
+        public string? Role { get; set; } = "driver";
 
         // Driver specific
-        public string LicenseNumber { get; set; }
-        public string VehicleModel { get; set; }
-        public string VehiclePlate { get; set; }
+        public string? LicenseNumber { get; set; }
+        public string? VehicleModel { get; set; }
+        public string? VehiclePlate { get; set; }
         public int? BatteryCapacity { get; set; }
     }
 }

@@ -31,6 +31,10 @@ public partial class ChargingSession
 
     public string? Status { get; set; }
 
+    public string? Notes { get; set; }
+
+    public string? Reason { get; set; }
+
     public virtual DriverProfile Driver { get; set; } = null!;
 
     public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
