@@ -25,6 +25,6 @@ public partial class DriverProfile
 
     public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
 
-    public User? User { get; set; }  // cho phép null test xong đổi thành dòng này // public virtual User User { get; set; } = null!;
+   public virtual User User { get; set; } = null!;
                                      
 }

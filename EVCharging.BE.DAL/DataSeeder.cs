@@ -74,7 +74,10 @@ namespace EVCharging.BE.DAL
                 context.ChargingStations.AddRange(stations);
             }
 
+           
+
             context.SaveChanges();
+
         }
     }
 }
