@@ -13,5 +13,7 @@ namespace EVCharging.BE.Common.DTOs.Reservations
         public int PointId { get; set; }
         public DateTime StartTime { get; set; }
         public int DurationMinutes { get; set; } = 60; // Default 1 hour
+        public DateTime? EndTime => StartTime.AddMinutes(DurationMinutes);// tính tự động
+
     }
 }

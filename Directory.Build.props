@@ -1,0 +1,8 @@
+﻿<Project>
+	<PropertyGroup>
+		<Nullable>disable</Nullable>
+		<!-- Tắt nullable -->
+		<TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+		<!-- Không coi cảnh báo là lỗi -->
+	</PropertyGroup>
+</Project>

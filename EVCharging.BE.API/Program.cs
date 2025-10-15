@@ -1,37 +1,62 @@
 ﻿using EVCharging.BE.DAL;
+using EVCharging.BE.Services.Services;                 // Interfaces + Implementations đều nằm dưới namespace này của bạn
+using EVCharging.BE.Services.Services.Implementations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
-using EVCharging.BE.Services.Services.Implementations;
-using EVCharging.BE.Services.Services;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ------------------------------
-// 1️⃣ Add services
-// ------------------------------
-builder.Services.AddControllers();
-builder.Services.AddOpenApi();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+// ---------- Controllers + JSON ----------
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+        o.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
 
-// ------------------------------
-// 2️⃣ Configure database
-// ------------------------------
+// ---------- Swagger ----------
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "EVCharging API", Version = "v1" });
+
+    // JWT bearer in Swagger
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "Enter JWT Bearer token",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+    };
+    c.AddSecurityDefinition("Bearer", securityScheme);
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement { { securityScheme, Array.Empty<string>() } });
+});
+
+// ---------- Database ----------
 builder.Services.AddDbContext<EvchargingManagementContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); }
+    )
 );
 
-// ------------------------------
-// 3️⃣ Register custom services (DI)
-// ------------------------------
+// ---------- DI registrations ----------
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
+builder.Services.AddScoped<IReservationService, ReservationService>();
+builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
+builder.Services.AddSingleton<IQRCodeService, QRCodeService>();
 
-// ------------------------------
-// 4️⃣ Configure JWT Authentication
-// ------------------------------
+// ---------- AuthN/AuthZ ----------
+var jwtSecret = builder.Configuration["JWT:Secret"] ?? "dev-secret-change-me";
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -41,40 +66,36 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = false;
-    options.TokenValidationParameters = new TokenValidationParameters()
+    options.RequireHttpsMetadata = false; // bật true ở production
+    options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"])),
+        ValidAudience = builder.Configuration["JWT:ValidAudience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
 });
-
 builder.Services.AddAuthorization();
 
-// ------------------------------
-// 5️⃣ Build app
-// ------------------------------
 var app = builder.Build();
 
-// ------------------------------
-// 6️⃣ Seed sample data (auto create test records)
-// ------------------------------
+// ---------- Seed data (chỉ dùng khi demo) ----------
+/*
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
-    db.Database.EnsureDeleted();  // ❌ Xóa database cũ
-    db.Database.EnsureCreated();  // ✅ Tạo lại database mới
-    DataSeeder.Seed(db);          // Chạy lại seed data
+    // ⚠️ CHỈ bật 3 dòng dưới khi DEMO - vì sẽ xóa sạch DB
+    // db.Database.EnsureDeleted();
+    // db.Database.EnsureCreated();
+    // DataSeeder.Seed(db);
 }
+*/
 
-// ------------------------------
-// 7️⃣ Configure middleware
-// ------------------------------
+// ---------- Middlewares ----------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -83,5 +104,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.MapControllers();
 app.Run();

@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+	  <Nullable>disable</Nullable>  <!-- Tắt Nullable Reference Types -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -17,5 +18,10 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
 	</ItemGroup>
+	
+	<ItemGroup>
+		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
+	</ItemGroup>
+
 
 </Project>
