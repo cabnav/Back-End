@@ -98,9 +98,9 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured"))),
         IssuerSigningKey = new SymmetricSecurityKey(
-            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"])
+            Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]
+                ?? throw new InvalidOperationException("JWT Secret is not configured"))
         ),
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
@@ -124,12 +124,12 @@ var app = builder.Build();
 // 6️⃣ Seed sample data (auto create test records)
 // ------------------------------
 using (var scope = app.Services.CreateScope())
-{
+/*{
     var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
     db.Database.EnsureDeleted();  // ❌ Xóa database cũ
     db.Database.EnsureCreated();  // ✅ Tạo lại database mới
     DataSeeder.Seed(db);          // Chạy lại seed data
-}
+}*/
 
 // ------------------------------
 // 7️⃣ Configure middleware

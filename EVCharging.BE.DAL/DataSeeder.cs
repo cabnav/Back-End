@@ -72,9 +72,13 @@ namespace EVCharging.BE.DAL
                 };
 
                 context.ChargingStations.AddRange(stations);
+
             }
 
+<<<<<<< Updated upstream
            
+=======
+>>>>>>> Stashed changes
 
             context.SaveChanges();
 
