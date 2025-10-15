@@ -46,8 +46,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\EVCharging.BE.Services\EVCharging.BE.Services.csproj" />
-		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj" />
-		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
 	</ItemGroup>
 
 
