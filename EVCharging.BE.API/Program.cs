@@ -1,7 +1,10 @@
 ﻿using EVCharging.BE.DAL;
+using EVCharging.BE.Services.Services;                 // Interfaces + Implementations đều nằm dưới namespace này của bạn
+using EVCharging.BE.Services.Services.Implementations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 using System.Text;
 using EVCharging.BE.Services.Services.Implementations;
 using EVCharging.BE.Services.Services;
@@ -61,16 +64,30 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 
-// ------------------------------
-// 2️⃣ Configure database
-// ------------------------------
+    // JWT bearer in Swagger
+    var securityScheme = new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Description = "Enter JWT Bearer token",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+    };
+    c.AddSecurityDefinition("Bearer", securityScheme);
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement { { securityScheme, Array.Empty<string>() } });
+});
+
+// ---------- Database ----------
 builder.Services.AddDbContext<EvchargingManagementContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); }
+    )
 );
 
-// ------------------------------
-// 3️⃣ Register custom services (DI)
-// ------------------------------
+// ---------- DI registrations ----------
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -79,9 +96,8 @@ builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>(); // ✅ Service DriverProfile
 
-// ------------------------------
-// 4️⃣ Configure JWT Authentication
-// ------------------------------
+// ---------- AuthN/AuthZ ----------
+var jwtSecret = builder.Configuration["JWT:Secret"] ?? "dev-secret-change-me";
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -91,12 +107,11 @@ builder.Services.AddAuthentication(options =>
 .AddJwtBearer(options =>
 {
     options.SaveToken = true;
-    options.RequireHttpsMetadata = false;
-    options.TokenValidationParameters = new TokenValidationParameters()
+    options.RequireHttpsMetadata = false; // bật true ở production
+    options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]
@@ -104,9 +119,9 @@ builder.Services.AddAuthentication(options =>
         ),
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
 });
-
 builder.Services.AddAuthorization();
 
 // ------------------------------
@@ -120,9 +135,8 @@ builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationServi
 // ------------------------------
 var app = builder.Build();
 
-// ------------------------------
-// 6️⃣ Seed sample data (auto create test records)
-// ------------------------------
+// ---------- Seed data (chỉ dùng khi demo) ----------
+/*
 using (var scope = app.Services.CreateScope())
 /*{
     var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
@@ -131,9 +145,7 @@ using (var scope = app.Services.CreateScope())
     DataSeeder.Seed(db);          // Chạy lại seed data
 }*/
 
-// ------------------------------
-// 7️⃣ Configure middleware
-// ------------------------------
+// ---------- Middlewares ----------
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

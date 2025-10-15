@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
+	  <Nullable>disable</Nullable> <!-- Tắt Nullable Reference Types -->
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -42,5 +43,12 @@
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </Content>
 	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\EVCharging.BE.Services\EVCharging.BE.Services.csproj" />
+		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj" />
+		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
+	</ItemGroup>
+
 
 </Project>
