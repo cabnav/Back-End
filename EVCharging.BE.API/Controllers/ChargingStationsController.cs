@@ -34,7 +34,7 @@ namespace EVCharging.BE.API.Controllers
         public async Task<IActionResult> GetNearby(double lat, double lon, double radiusKm = 5)
         {
             var result = await _service.GetNearbyStationsAsync(lat, lon, radiusKm);
-            return Ok(result);
+            return Ok(result);  
         }
 
         [HttpGet("search")]
@@ -51,5 +51,12 @@ namespace EVCharging.BE.API.Controllers
             if (status == null) return NotFound();
             return Ok(status);
         }
+        [HttpGet("debug")]
+        public async Task<IActionResult> DebugStations()
+        {
+            var list = await _service.GetAllAsync();
+            return Ok(list.Select(s => new { s.StationId, s.Name, s.Latitude, s.Longitude }));
+        }
+
     }
 }

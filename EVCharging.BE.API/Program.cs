@@ -64,7 +64,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 
-    // JWT bearer in Swagger
+    // JWT bearer in Swagger    
     var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
