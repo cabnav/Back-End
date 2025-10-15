@@ -68,7 +68,8 @@ namespace EVCharging.BE.DAL
                         Status = "maintenance",
                         TotalPoints = 6,
                         AvailablePoints = 0
-                    }
+                    },
+                    
                 };
 
                 context.ChargingStations.AddRange(stations);
