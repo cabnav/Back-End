@@ -102,8 +102,6 @@ builder.Services.AddAuthentication(options =>
             Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]
                 ?? throw new InvalidOperationException("JWT Secret is not configured"))
         ),
-       
-        
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
     };
