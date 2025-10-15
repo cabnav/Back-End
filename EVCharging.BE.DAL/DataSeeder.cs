@@ -68,7 +68,18 @@ namespace EVCharging.BE.DAL
                         Status = "maintenance",
                         TotalPoints = 6,
                         AvailablePoints = 0
-                    }
+                    },
+                    new ChargingStation
+                    {
+                        Name = "EV Station Binh Thanh",
+                        Address = "45 Dien Bien Phu, Binh Thanh, HCMC",
+                        Latitude = 10.8043,
+                        Longitude = 106.7136,
+                        Operator = "VinCharge",
+                        Status = "active",
+                        TotalPoints = 10,
+                        AvailablePoints = 9
+                    },
                 };
 
                 context.ChargingStations.AddRange(stations);
