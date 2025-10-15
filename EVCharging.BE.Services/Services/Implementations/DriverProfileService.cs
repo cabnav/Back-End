@@ -1,69 +1,97 @@
-﻿using EVCharging.BE.DAL;
+﻿using EVCharging.BE.Common.DTOs.DriverProfiles;
+using EVCharging.BE.Common.DTOs.Users;
+using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
-using EVCharging.BE.Services.Services;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 
 namespace EVCharging.BE.Services.Services.Implementations
 {
     public class DriverProfileService : IDriverProfileService
     {
-        private readonly EvchargingManagementContext _context;
+        private readonly EvchargingManagementContext _db;
+        public DriverProfileService(EvchargingManagementContext db) { _db = db; }
 
-        public DriverProfileService(EvchargingManagementContext context)
+        private static DriverProfileDTO Map(DriverProfile d) => new DriverProfileDTO
         {
-            _context = context;
+            DriverId = d.DriverId,
+            LicenseNumber = d.LicenseNumber ?? "",
+            VehicleModel = d.VehicleModel ?? "",
+            VehiclePlate = d.VehiclePlate ?? "",
+            BatteryCapacity = d.BatteryCapacity
+        };
+
+        public async Task<IEnumerable<DriverProfileDTO>> GetAllAsync(int page = 1, int pageSize = 50)
+        {
+            if (page < 1) page = 1;
+            if (pageSize <= 0 || pageSize > 200) pageSize = 50;
+
+            var list = await _db.DriverProfiles
+                                .AsNoTracking()
+                                .OrderBy(x => x.DriverId)
+                                .Skip((page - 1) * pageSize).Take(pageSize)
+                                .ToListAsync();
+            return list.Select(Map);
         }
 
-        public async Task<IEnumerable<DriverProfile>> GetAllAsync()
+        public async Task<DriverProfileDTO?> GetByIdAsync(int id)
         {
-            return await _context.DriverProfiles
-                .Include(d => d.User)
-                .Include(d => d.Corporate)
-                .ToListAsync();
+            var d = await _db.DriverProfiles.AsNoTracking()
+                                            .FirstOrDefaultAsync(x => x.DriverId == id);
+            return d == null ? null : Map(d);
         }
 
-        public async Task<DriverProfile?> GetByIdAsync(int id)
+        public async Task<DriverProfileDTO?> GetByUserIdAsync(int userId)
         {
-            return await _context.DriverProfiles
-                .Include(d => d.User)
-                .Include(d => d.Corporate)
-                .FirstOrDefaultAsync(d => d.DriverId == id);
+            var d = await _db.DriverProfiles.AsNoTracking()
+                                            .FirstOrDefaultAsync(x => x.UserId == userId);
+            return d == null ? null : Map(d);
         }
 
-        public async Task<DriverProfile> CreateAsync(DriverProfile driverProfile)
+        public async Task<DriverProfileDTO> CreateAsync(DriverProfileCreateRequest req)
         {
-            _context.DriverProfiles.Add(driverProfile);
-            await _context.SaveChangesAsync();
-            return driverProfile;
+            var user = await _db.Users.FindAsync(req.UserId)
+                       ?? throw new KeyNotFoundException("User không tồn tại");
+
+            var existed = await _db.DriverProfiles.AnyAsync(x => x.UserId == req.UserId);
+            if (existed) throw new InvalidOperationException("User đã có DriverProfile");
+
+            var entity = new DriverProfile
+            {
+                UserId = req.UserId,
+                LicenseNumber = req.LicenseNumber,
+                VehicleModel = req.VehicleModel,
+                VehiclePlate = req.VehiclePlate,
+                BatteryCapacity = req.BatteryCapacity,
+                CorporateId = req.CorporateId
+            };
+            _db.DriverProfiles.Add(entity);
+            await _db.SaveChangesAsync();
+
+            return Map(entity);
         }
 
-        // ✅ Đã fix theo model của bạn (không còn VehicleType)
-        public async Task<bool> UpdateAsync(int id, DriverProfile driverProfile)
+        public async Task<bool> UpdateAsync(int id, DriverProfileUpdateRequest req)
         {
-            var existing = await _context.DriverProfiles.FindAsync(id);
-            if (existing == null) return false;
+            var d = await _db.DriverProfiles.FindAsync(id);
+            if (d == null) return false;
 
-            existing.UserId = driverProfile.UserId;
-            existing.LicenseNumber = driverProfile.LicenseNumber;
-            existing.VehicleModel = driverProfile.VehicleModel;
-            existing.VehiclePlate = driverProfile.VehiclePlate;
-            existing.BatteryCapacity = driverProfile.BatteryCapacity;
-            existing.CorporateId = driverProfile.CorporateId;
+            if (!string.IsNullOrWhiteSpace(req.LicenseNumber)) d.LicenseNumber = req.LicenseNumber;
+            if (!string.IsNullOrWhiteSpace(req.VehicleModel)) d.VehicleModel = req.VehicleModel;
+            if (!string.IsNullOrWhiteSpace(req.VehiclePlate)) d.VehiclePlate = req.VehiclePlate;
+            if (req.BatteryCapacity.HasValue) d.BatteryCapacity = req.BatteryCapacity.Value;
+            if (req.CorporateId.HasValue) d.CorporateId = req.CorporateId.Value;
 
-            _context.DriverProfiles.Update(existing);
-            await _context.SaveChangesAsync();
+            await _db.SaveChangesAsync();
             return true;
         }
 
         public async Task<bool> DeleteAsync(int id)
         {
-            var driver = await _context.DriverProfiles.FindAsync(id);
-            if (driver == null) return false;
+            var d = await _db.DriverProfiles.FindAsync(id);
+            if (d == null) return false;
 
-            _context.DriverProfiles.Remove(driver);
-            await _context.SaveChangesAsync();
+            _db.DriverProfiles.Remove(d);
+            await _db.SaveChangesAsync();
             return true;
         }
     }
