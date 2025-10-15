@@ -1,0 +1,92 @@
+### EV Charging Station Management System - Authentication API Tests
+
+### 1. Register a new user (Driver)
+POST https://localhost:7035/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "email": "john.doe@example.com",
+  "password": "password123",
+  "phone": "+1234567890",
+  "role": "driver",
+  "licenseNumber": "DL123456789",
+  "vehicleModel": "Tesla Model 3",
+  "vehiclePlate": "ABC-123",
+  "batteryCapacity": 75
+}
+
+### 2. Register a new user (Admin)
+POST https://localhost:7035/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Admin User",
+  "email": "admin@example.com",
+  "password": "admin123",
+  "phone": "+1234567891",
+  "role": "admin"
+}
+
+### 3. Register a new user (CS Staff)
+POST https://localhost:7035/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Station Staff",
+  "email": "staff@example.com",
+  "password": "staff123",
+  "phone": "+1234567892",
+  "role": "cs_staff"
+}
+
+### 4. Login with driver credentials
+POST https://localhost:7035/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "password123"
+}
+
+### 5. Login with admin credentials
+POST https://localhost:7035/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "admin123"
+}
+
+### 6. Validate token (replace YOUR_TOKEN_HERE with actual token from login response)
+POST https://localhost:7035/api/auth/validate
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 7. Get user profile (replace YOUR_TOKEN_HERE with actual token from login response)
+GET https://localhost:7035/api/auth/profile
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 8. Logout (replace YOUR_TOKEN_HERE with actual token from login response)
+POST https://localhost:7035/api/auth/logout
+Authorization: Bearer YOUR_TOKEN_HERE
+
+### 9. Test invalid login
+POST https://localhost:7035/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "john.doe@example.com",
+  "password": "wrongpassword"
+}
+
+### 10. Test registration with existing email
+POST https://localhost:7035/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Another User",
+  "email": "john.doe@example.com",
+  "password": "password456",
+  "phone": "+1234567893",
+  "role": "driver"
+}
