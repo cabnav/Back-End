@@ -91,7 +91,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IChargingService, ChargingService>();
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
-builder.Services.AddScoped<IDriverProfileService, DriverProfileService>(); // ✅ Service DriverProfile
+builder.Services.AddScoped<IDriverProfileService, DriverProfileService>(); 
 
 // ---------- AuthN/AuthZ ----------
 var jwtSecret = builder.Configuration["JWT:Secret"] ?? "dev-secret-change-me";
@@ -133,14 +133,14 @@ builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationServi
 var app = builder.Build();
 
 // ---------- Seed data (chỉ dùng khi demo) ----------
-/*
+
 using (var scope = app.Services.CreateScope())
-/*{
+{
     var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
     db.Database.EnsureDeleted();  // ❌ Xóa database cũ
     db.Database.EnsureCreated();  // ✅ Tạo lại database mới
     DataSeeder.Seed(db);          // Chạy lại seed data
-}*/
+}
 
 // ---------- Middlewares ----------
 if (app.Environment.IsDevelopment())

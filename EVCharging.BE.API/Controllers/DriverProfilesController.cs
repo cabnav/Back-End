@@ -1,7 +1,6 @@
-﻿using EVCharging.BE.DAL.Entities;
-using Microsoft.AspNetCore.Mvc;
+﻿using EVCharging.BE.Common.DTOs.DriverProfiles;
 using EVCharging.BE.Services.Services;
-
+using Microsoft.AspNetCore.Mvc;
 
 namespace EVCharging.BE.API.Controllers
 {
@@ -9,63 +8,56 @@ namespace EVCharging.BE.API.Controllers
     [Route("api/[controller]")]
     public class DriverProfilesController : ControllerBase
     {
-        private readonly IDriverProfileService _driverProfileService;
+        private readonly IDriverProfileService _svc;
+        public DriverProfilesController(IDriverProfileService svc) { _svc = svc; }
 
-        public DriverProfilesController(IDriverProfileService driverProfileService)
-        {
-            _driverProfileService = driverProfileService;
-        }
-
-        // GET: api/driverprofiles
+        // GET: api/DriverProfiles?page=&pageSize=
         [HttpGet]
-        public async Task<IActionResult> GetAll()
-        {
-            var profiles = await _driverProfileService.GetAllAsync();
-            return Ok(profiles);
-        }
+        public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+            => Ok(await _svc.GetAllAsync(page, pageSize));
 
-        // GET: api/driverprofiles/5
-        [HttpGet("{id}")]
+        // GET: api/DriverProfiles/{id}
+        [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var profile = await _driverProfileService.GetByIdAsync(id);
-            if (profile == null)
-                return NotFound(new { message = "Driver profile not found" });
-
-            return Ok(profile);
+            var dto = await _svc.GetByIdAsync(id);
+            return dto == null ? NotFound(new { message = "Driver profile not found" }) : Ok(dto);
         }
 
-        // POST: api/driverprofiles
+        // GET: api/DriverProfiles/me?userId=1
+        // (Sau này lấy userId từ JWT)
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyDriverProfile([FromQuery] int userId)
+        {
+            var dto = await _svc.GetByUserIdAsync(userId);
+            return dto == null ? NotFound(new { message = "Driver profile not found" }) : Ok(dto);
+        }
+
+        // POST: api/DriverProfiles
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] DriverProfile driverProfile)
+        public async Task<IActionResult> CreateDriverProfile([FromBody] DriverProfileCreateRequest req)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var created = await _driverProfileService.CreateAsync(driverProfile);
-            return CreatedAtAction(nameof(GetById), new { id = created.DriverId }, created);
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var dto = await _svc.CreateAsync(req);
+            return CreatedAtAction(nameof(GetById), new { id = dto.DriverId }, dto);
         }
 
-        // PUT: api/driverprofiles/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> Update(int id, [FromBody] DriverProfile driverProfile)
+        // PUT: api/DriverProfiles/{id}
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateDriverProfile(int id, [FromBody] DriverProfileUpdateRequest req)
         {
-            var success = await _driverProfileService.UpdateAsync(id, driverProfile);
-            if (!success)
-                return NotFound(new { message = "Driver profile not found" });
-
-            return Ok(new { message = "Updated successfully" });
+            var ok = await _svc.UpdateAsync(id, req);
+            return ok ? Ok(new { message = "Updated successfully" })
+                      : NotFound(new { message = "Driver profile not found" });
         }
 
-        // DELETE: api/driverprofiles/5
-        [HttpDelete("{id}")]
+        // DELETE: api/DriverProfiles/{id}
+        [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
-            var success = await _driverProfileService.DeleteAsync(id);
-            if (!success)
-                return NotFound(new { message = "Driver profile not found" });
-
-            return Ok(new { message = "Deleted successfully" });
+            var ok = await _svc.DeleteAsync(id);
+            return ok ? Ok(new { message = "Deleted successfully" })
+                      : NotFound(new { message = "Driver profile not found" });
         }
     }
 }

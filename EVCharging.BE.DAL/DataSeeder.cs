@@ -69,14 +69,36 @@ namespace EVCharging.BE.DAL
                         TotalPoints = 6,
                         AvailablePoints = 0
                     },
-                    
                 };
 
                 context.ChargingStations.AddRange(stations);
-
             }
-            context.SaveChanges();
 
+            // ✅ Nếu chưa có DriverProfile nào -> seed 1 profile cho user driver
+            if (!context.DriverProfiles.Any())
+            {
+                // Lấy user driver "a@example.com" từ Local trước (vừa Add) rồi mới tới DB
+                var driverUser =
+                    context.Users.Local.FirstOrDefault(u => u.Email == "a@example.com")
+                    ?? context.Users.FirstOrDefault(u => u.Email == "a@example.com")
+                    ?? context.Users.Local.FirstOrDefault(u => u.Role == "driver")
+                    ?? context.Users.FirstOrDefault(u => u.Role == "driver");
+
+                if (driverUser != null)
+                {
+                    // Gán qua navigation để EF tự set FK kể cả khi user chưa SaveChanges
+                    context.DriverProfiles.Add(new DriverProfile
+                    {
+                        User = driverUser,
+                        LicenseNumber = "B123456",
+                        VehicleModel = "VinFast VF e34",
+                        VehiclePlate = "51H-123.45",
+                        BatteryCapacity = 42
+                    });
+                }
+            }
+
+            context.SaveChanges();
         }
     }
 }
