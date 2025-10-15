@@ -98,10 +98,16 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidAudience = builder.Configuration["JWT:ValidAudience"],
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
+<<<<<<< Updated upstream
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]
                 ?? throw new InvalidOperationException("JWT Secret is not configured"))
         ),
+=======
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured"))),
+        
+        
+>>>>>>> Stashed changes
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
     };
