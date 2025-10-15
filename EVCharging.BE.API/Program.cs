@@ -75,9 +75,6 @@ builder.Services.AddSwaggerGen(options =>
         BearerFormat = "JWT",
         Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
     };
-    c.AddSecurityDefinition("Bearer", securityScheme);
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement { { securityScheme, Array.Empty<string>() } });
-});
 
 // ---------- Database ----------
 builder.Services.AddDbContext<EvchargingManagementContext>(options =>

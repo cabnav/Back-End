@@ -16,4 +16,6 @@ public partial class BillingPlan
     public string? PaymentTerms { get; set; }
 
     public decimal? CreditLimit { get; set; }
+
+    public virtual ICollection<UserBilling> UserBillings { get; set; } = new List<UserBilling>();
 }

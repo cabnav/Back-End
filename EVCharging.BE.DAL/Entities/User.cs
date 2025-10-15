@@ -45,5 +45,7 @@ public partial class User
 
     public virtual ICollection<UsageAnalytic> UsageAnalytics { get; set; } = new List<UsageAnalytic>();
 
+    public virtual ICollection<UserBilling> UserBillings { get; set; } = new List<UserBilling>();
+
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

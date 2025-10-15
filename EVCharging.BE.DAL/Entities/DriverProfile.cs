@@ -25,6 +25,5 @@ public partial class DriverProfile
 
     public virtual ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
 
-   public virtual User User { get; set; } = null!;
-                                     
+    public virtual User User { get; set; } = null!;
 }
