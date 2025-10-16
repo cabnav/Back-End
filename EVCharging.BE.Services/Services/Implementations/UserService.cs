@@ -51,11 +51,12 @@ namespace EVCharging.BE.Services.Services.Implementations
         }
 
         // ==========================
-        //      ✅ THÊM MỚI
+        //      ✅ MỞ RỘNG: Ví
         // ==========================
 
         /// <summary>
         /// Nạp tiền vào ví người dùng, tạo 1 bản ghi WalletTransaction và trả về DTO.
+        /// (Không dùng transaction thủ công để tương thích execution strategy)
         /// </summary>
         public async Task<WalletTransactionDTO> WalletTopUpAsync(int userId, decimal amount, string? description)
         {
@@ -64,8 +65,7 @@ namespace EVCharging.BE.Services.Services.Implementations
             var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == userId)
                        ?? throw new KeyNotFoundException("User không tồn tại");
 
-            await using var tx = await _db.Database.BeginTransactionAsync();
-
+            // decimal? -> decimal
             user.WalletBalance = (user.WalletBalance ?? 0m) + amount;
 
             var now = DateTime.UtcNow;
@@ -81,8 +81,9 @@ namespace EVCharging.BE.Services.Services.Implementations
             };
 
             _db.WalletTransactions.Add(txRow);
+
+            // ✅ Để EF tự bao transaction (tương thích EnableRetryOnFailure)
             await _db.SaveChangesAsync();
-            await tx.CommitAsync();
 
             return new WalletTransactionDTO
             {
@@ -126,8 +127,7 @@ namespace EVCharging.BE.Services.Services.Implementations
         }
 
         /// <summary>
-        /// Cập nhật hồ sơ User và DriverProfile (nếu có).
-        /// Chỉ ghi đè các field có giá trị.
+        /// Cập nhật hồ sơ User và DriverProfile (nếu có). Chỉ ghi đè các field có giá trị.
         /// </summary>
         public async Task<bool> UpdateUserProfileAsync(int userId, UserUpdateRequest req)
         {
