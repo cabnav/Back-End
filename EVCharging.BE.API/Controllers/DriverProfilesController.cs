@@ -33,17 +33,17 @@ namespace EVCharging.BE.API.Controllers
             return dto == null ? NotFound(new { message = "Driver profile not found" }) : Ok(dto);
         }
 
-        // POST: api/DriverProfiles
-        [HttpPost]
-        public async Task<IActionResult> CreateDriverProfile([FromBody] DriverProfileCreateRequest req)
-        {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
-            var dto = await _svc.CreateAsync(req);
-            return CreatedAtAction(nameof(GetById), new { id = dto.DriverId }, dto);
-        }
+        //// POST: api/DriverProfiles
+        //[HttpPost]
+        //public async Task<IActionResult> CreateDriverProfile([FromBody] DriverProfileCreateRequest req)
+        //{
+        //    if (!ModelState.IsValid) return BadRequest(ModelState);
+        //    var dto = await _svc.CreateAsync(req);
+        //    return CreatedAtAction(nameof(GetById), new { id = dto.DriverId }, dto);
+        //}
 
-        // PUT: api/DriverProfiles/{id}
-        [HttpPut("{id:int}")]
+        // PUT: api/DriverProfiles/update{id}
+        [HttpPut("{id:int}/update")]
         public async Task<IActionResult> UpdateDriverProfile(int id, [FromBody] DriverProfileUpdateRequest req)
         {
             var ok = await _svc.UpdateAsync(id, req);
