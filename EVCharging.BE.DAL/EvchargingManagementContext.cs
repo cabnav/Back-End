@@ -37,6 +37,8 @@ public partial class EvchargingManagementContext : DbContext
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
+    public virtual DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
     public virtual DbSet<Payment> Payments { get; set; }
 
     public virtual DbSet<PricingPlan> PricingPlans { get; set; }
@@ -59,7 +61,7 @@ public partial class EvchargingManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-                   optionsBuilder.UseSqlServer(GetConnectionString());
+        optionsBuilder.UseSqlServer(GetConnectionString());
     }
     private string GetConnectionString()
     {
@@ -87,7 +89,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.CreditLimit)
                 .HasDefaultValue(0.00m)
-                .HasColumnType("decimal(10, 2)")
+.HasColumnType("decimal(10, 2)")
                 .HasColumnName("credit_limit");
             entity.Property(e => e.PaymentTerms)
                 .HasMaxLength(20)
@@ -223,8 +225,8 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.CorporateId).HasColumnName("corporate_id");
             entity.Property(e => e.AdminUserId).HasColumnName("admin_user_id");
             entity.Property(e => e.BillingType)
-                .HasMaxLength(20)
-                .HasColumnName("billing_type");
+                            .HasMaxLength(20)
+                            .HasColumnName("billing_type");
             entity.Property(e => e.CompanyName)
                 .HasMaxLength(200)
                 .HasColumnName("company_name");
@@ -350,7 +352,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("invoice_number");
             entity.Property(e => e.PaidAt).HasColumnName("paid_at");
             entity.Property(e => e.Status)
-                .HasMaxLength(20)
+.HasMaxLength(20)
                 .HasDefaultValue("draft")
                 .HasColumnName("status");
             entity.Property(e => e.TotalAmount)
@@ -418,7 +420,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.Message).HasColumnName("message");
             entity.Property(e => e.RelatedId).HasColumnName("related_id");
             entity.Property(e => e.Title)
-                .HasMaxLength(200)
+.HasMaxLength(200)
                 .HasColumnName("title");
             entity.Property(e => e.Type)
                 .HasMaxLength(50)
@@ -487,9 +489,9 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.DiscountRate)
-                .HasDefaultValue(0.00m)
-                .HasColumnType("decimal(5, 2)")
-                .HasColumnName("discount_rate");
+                            .HasDefaultValue(0.00m)
+                            .HasColumnType("decimal(5, 2)")
+                            .HasColumnName("discount_rate");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
@@ -619,7 +621,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
             entity.HasOne(d => d.Corporate).WithMany(p => p.Subscriptions)
-                .HasForeignKey(d => d.CorporateId)
+.HasForeignKey(d => d.CorporateId)
                 .HasConstraintName("FK__Subscript__corpo__6383C8BA");
 
             entity.HasOne(d => d.Plan).WithMany(p => p.Subscriptions)
@@ -683,7 +685,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_type");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
-                .HasColumnName("created_at");
+.HasColumnName("created_at");
             entity.Property(e => e.Email)
                 .HasMaxLength(255)
                 .HasColumnName("email");
@@ -737,6 +739,36 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__WalletTra__user___07C12930");
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK_PasswordResetToken");
+
+            entity.ToTable("PasswordResetToken");
+
+            entity.HasIndex(e => e.Token, "UX_PasswordResetToken_Token").IsUnique();
+
+            entity.HasIndex(e => new { e.UserId, e.IsRevoked, e.UsedAt, e.ExpiresAt, e.CreatedAt }, "IX_PasswordResetToken_User_Active");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Token)
+                .HasMaxLength(200)
+.HasColumnName("token");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("GETDATE()")
+                .HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.UsedAt).HasColumnName("used_at");
+            entity.Property(e => e.IsRevoked)
+                .HasDefaultValue(false)
+                .HasColumnName("is_revoked");
+
+            entity.HasOne(d => d.User).WithMany()
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_PasswordResetToken_User");
         });
 
         OnModelCreatingPartial(modelBuilder);
