@@ -72,6 +72,8 @@ namespace EVCharging.BE.DAL
                 };
 
                 context.ChargingStations.AddRange(stations);
+                // Chú ý: Chỉ lưu trạm sạc tại đây để lấy StationId trước khi thêm ChargingPoint
+                context.SaveChanges();
             }
 
             // ✅ Nếu chưa có DriverProfile nào -> seed 1 profile cho user driver
@@ -98,6 +100,190 @@ namespace EVCharging.BE.DAL
                 }
             }
 
+            // ✅ Nếu chưa có ChargingPoint nào -> seed các điểm sạc cho các trạm
+            if (!context.ChargingPoints.Any())
+            {
+                // Sau khi chắc chắn rằng các trạm đã có trong DB (StationId đã được insert), truy vấn lại các trạm
+                var station1 = context.ChargingStations.FirstOrDefault(s => s.Name == "EV Station District 1");
+                var station2 = context.ChargingStations.FirstOrDefault(s => s.Name == "EV Station District 7");
+
+                var chargingPoints = new System.Collections.Generic.List<ChargingPoint>();
+
+                // Tạo 8 điểm sạc cho Station 1 (District 1)
+                if (station1 != null)
+                {
+                    chargingPoints.AddRange(new[]
+                    {
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 50,
+                            PricePerKwh = 3500,
+                            Status = "available",
+                            QrCode = "QR_D1_001",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-30))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 50,
+                            PricePerKwh = 3500,
+                            Status = "available",
+                            QrCode = "QR_D1_002",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-25))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CHAdeMO",
+                            PowerOutput = 50,
+                            PricePerKwh = 3500,
+                            Status = "available",
+                            QrCode = "QR_D1_003",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-20))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "Type2",
+                            PowerOutput = 22,
+                            PricePerKwh = 3000,
+                            Status = "available",
+                            QrCode = "QR_D1_004",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-15))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 150,
+                            PricePerKwh = 4500,
+                            Status = "available",
+                            QrCode = "QR_D1_005",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-10))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 50,
+                            PricePerKwh = 3500,
+                            Status = "occupied",
+                            QrCode = "QR_D1_006",
+                            CurrentPower = 45.5,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-5))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "Type2",
+                            PowerOutput = 22,
+                            PricePerKwh = 3000,
+                            Status = "maintenance",
+                            QrCode = "QR_D1_007",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-1))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station1.StationId,
+                            ConnectorType = "CHAdeMO",
+                            PowerOutput = 50,
+                            PricePerKwh = 3500,
+                            Status = "available",
+                            QrCode = "QR_D1_008",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-3))
+                        }
+                    });
+                }
+
+                // Tạo 6 điểm sạc cho Station 2 (District 7)
+                if (station2 != null)
+                {
+                    chargingPoints.AddRange(new[]
+                    {
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 50,
+                            PricePerKwh = 3200,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_001",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-2))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 50,
+                            PricePerKwh = 3200,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_002",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-1))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "Type2",
+                            PowerOutput = 22,
+                            PricePerKwh = 2800,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_003",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-1))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "CHAdeMO",
+                            PowerOutput = 50,
+                            PricePerKwh = 3200,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_004",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-2))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "CCS2",
+                            PowerOutput = 150,
+                            PricePerKwh = 4200,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_005",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-1))
+                        },
+                        new ChargingPoint
+                        {
+                            StationId = station2.StationId,
+                            ConnectorType = "Type2",
+                            PowerOutput = 22,
+                            PricePerKwh = 2800,
+                            Status = "maintenance",
+                            QrCode = "QR_D7_006",
+                            CurrentPower = 0,
+                            LastMaintenance = DateOnly.FromDateTime(DateTime.Now.AddDays(-2))
+                        }
+                    });
+                }
+
+                // Chỉ add nếu các trạm đã tồn tại (đã có StationId)
+                context.ChargingPoints.AddRange(chargingPoints);
+            }
+
+            // Đảm bảo mọi thay đổi đã lưu vào DB
             context.SaveChanges();
         }
     }

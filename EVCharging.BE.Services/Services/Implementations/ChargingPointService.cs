@@ -31,10 +31,22 @@ namespace EVCharging.BE.Services.Services.Implementations
         {
             return await _db.ChargingPoints
                 .Where(p => p.Status == "Available")
-                .Select(p => ToDTO(p))
+                .Select(p => new ChargingPointDTO
+                {
+                    PointId = p.PointId,
+                    StationId = p.StationId,
+                    ConnectorType = p.ConnectorType ?? string.Empty,
+                    PowerOutput = p.PowerOutput ?? 0,
+                    PricePerKwh = p.PricePerKwh,
+                    Status = p.Status ?? "Unknown",
+                    QrCode = p.QrCode ?? string.Empty,
+                    CurrentPower = (decimal)(p.CurrentPower ?? 0),
+                    LastMaintenance = p.LastMaintenance.HasValue
+                        ? p.LastMaintenance.Value.ToDateTime(TimeOnly.MinValue)
+                        : (DateTime?)null
+                })
                 .ToListAsync();
         }
-
         public async Task<IEnumerable<ChargingPointDTO>> GetByStationAsync(int stationId)
         {
             return await _db.ChargingPoints
