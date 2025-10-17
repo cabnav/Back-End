@@ -94,6 +94,8 @@ builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>();
 builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
+builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+
 
 // ---------- AuthN/AuthZ ----------
 var jwtSecret = builder.Configuration["JWT:Secret"] ?? "dev-secret-change-me";
