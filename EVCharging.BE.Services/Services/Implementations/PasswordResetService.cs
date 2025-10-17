@@ -15,11 +15,13 @@ namespace EVCharging.BE.Services.Services.Implementations
     {
         private readonly EvchargingManagementContext _db;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
 
-        public PasswordResetService(EvchargingManagementContext db, IConfiguration configuration)
+        public PasswordResetService(EvchargingManagementContext db, IConfiguration configuration, IEmailService emailService)
         {
             _db = db;
             _configuration = configuration;
+            _emailService = emailService;
         }
 
         /// <summary>
@@ -59,13 +61,23 @@ namespace EVCharging.BE.Services.Services.Implementations
                 _db.PasswordResetTokens.Add(passwordResetToken);
                 await _db.SaveChangesAsync();
 
-                // TODO: Gửi email chứa token (trong production)
-                // await _emailService.SendPasswordResetEmailAsync(user.Email, token);
+                // Gửi email chứa token
+                try
+                {
+                    var baseUrl = _configuration["AppSettings:BaseUrl"] ?? "https://localhost:7035";
+                    var resetUrl = $"{baseUrl}/reset-password?token={token}";
+                    await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name ?? user.Email, token, resetUrl);
+                }
+                catch (Exception emailEx)
+                {
+                    Console.WriteLine($"Error sending password reset email: {emailEx.Message}");
+                    // Không throw exception để không làm fail việc tạo token
+                }
 
                 return new CreatePasswordResetTokenResponse
                 {
                     Success = true,
-                    Message = "Token đặt lại mật khẩu đã được tạo thành công",
+                    Message = "Email đặt lại mật khẩu đã được gửi thành công",
                     Token = _configuration["Environment"] == "Development" ? token : null, // Chỉ hiển thị token trong development
                     ExpiresAt = expiresAt
                 };
@@ -140,6 +152,17 @@ namespace EVCharging.BE.Services.Services.Implementations
                 tokenEntity.UsedAt = DateTime.UtcNow;
 
                 await _db.SaveChangesAsync();
+
+                // Gửi email thông báo thành công
+                try
+                {
+                    await _emailService.SendPasswordResetSuccessEmailAsync(tokenEntity.User.Email, tokenEntity.User.Name ?? tokenEntity.User.Email);
+                }
+                catch (Exception emailEx)
+                {
+                    Console.WriteLine($"Error sending password reset success email: {emailEx.Message}");
+                    // Không throw exception để không làm fail việc reset password
+                }
 
                 return new ResetPasswordResponse
                 {

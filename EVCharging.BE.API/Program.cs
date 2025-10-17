@@ -95,6 +95,7 @@ builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>();
 builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
 builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 
 // ---------- AuthN/AuthZ ----------
