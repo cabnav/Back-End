@@ -62,7 +62,7 @@ namespace EVCharging.BE.Services.Services.Implementations
 
             var dailyRevenue = await _db.Payments
                 .Where(p => p.CreatedAt >= startDate && p.CreatedAt <= endDate)
-                .GroupBy(p => p.CreatedAt.Date)
+                .GroupBy(p => p.CreatedAt.Value.Date)
                 .Select(g => new
                 {
                     Date = g.Key,
@@ -112,9 +112,18 @@ namespace EVCharging.BE.Services.Services.Implementations
                 {
                     u.UserId,
                     u.Name,
-                    SessionsHandled = _db.ChargingSessions.Count(s => s.StaffId == u.UserId),
+                    SessionsHandled = _db.ChargingSessions
+                        .Where(s => _db.StationStaffs
+                            .Any(st => st.StaffId == u.UserId && 
+                                      st.StationId == s.Point.StationId))
+                        .Count(),
                     RevenueHandled = _db.Payments
-                        .Where(p => p.StaffId == u.UserId)
+                        .Where(p => p.SessionId.HasValue && 
+                                   _db.ChargingSessions
+                                       .Any(s => s.SessionId == p.SessionId &&
+                                               _db.StationStaffs
+                                                   .Any(st => st.StaffId == u.UserId && 
+                                                           st.StationId == s.Point.StationId)))
                         .Sum(p => (decimal?)p.Amount) ?? 0
                 })
                 .ToListAsync();
