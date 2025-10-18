@@ -12,7 +12,7 @@ namespace EVCharging.BE.Services.Services.Implementations
             _db = db;
         }
 
-        // ✅ 1. System Stats tổng quan
+        // ✅ 1. Thống kê tổng quan hệ thống
         public async Task<object> GetSystemStatsAsync()
         {
             var totalUsers = await _db.Users.CountAsync();
@@ -31,7 +31,7 @@ namespace EVCharging.BE.Services.Services.Implementations
             };
         }
 
-        // ✅ 2. Hiệu suất từng trạm sạc
+        // ✅ 2. Hiệu suất trạm sạc
         public async Task<object> GetStationPerformanceAsync()
         {
             var data = await _db.ChargingStations
@@ -46,23 +46,24 @@ namespace EVCharging.BE.Services.Services.Implementations
                     UtilizationRate = s.ChargingPoints.Count == 0
                         ? 0
                         : Math.Round(
-                            (double)s.ChargingPoints.Count(p => p.Status == "Busy") /
-                            s.ChargingPoints.Count * 100, 1)
+                            (double)s.ChargingPoints.Count(p => p.Status == "Busy") / s.ChargingPoints.Count * 100, 1)
                 })
                 .ToListAsync();
 
             return data;
         }
 
-        // ✅ 3. Doanh thu & báo cáo tài chính
+        // ✅ 3. Báo cáo doanh thu
         public async Task<object> GetRevenueAnalyticsAsync(DateTime? from = null, DateTime? to = null)
         {
             var startDate = from ?? DateTime.Now.AddDays(-30);
             var endDate = to ?? DateTime.Now;
 
             var dailyRevenue = await _db.Payments
-                .Where(p => p.CreatedAt >= startDate && p.CreatedAt <= endDate)
-                .GroupBy(p => p.CreatedAt.Date)
+                .Where(p => p.CreatedAt.HasValue &&
+                            p.CreatedAt.Value >= startDate &&
+                            p.CreatedAt.Value <= endDate)
+                .GroupBy(p => p.CreatedAt.Value.Date)
                 .Select(g => new
                 {
                     Date = g.Key,
@@ -81,7 +82,7 @@ namespace EVCharging.BE.Services.Services.Implementations
             };
         }
 
-        // ✅ 4. Thống kê xu hướng sử dụng (usage pattern)
+        // ✅ 4. Thống kê xu hướng sử dụng
         public async Task<object> GetUsagePatternAsync()
         {
             var usageByHour = await _db.ChargingSessions
@@ -103,7 +104,7 @@ namespace EVCharging.BE.Services.Services.Implementations
             };
         }
 
-        // ✅ 5. Đánh giá hiệu suất nhân viên
+        // ✅ 5. Hiệu suất nhân viên
         public async Task<object> GetStaffPerformanceAsync()
         {
             var staffData = await _db.Users

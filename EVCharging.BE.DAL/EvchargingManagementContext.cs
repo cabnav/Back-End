@@ -770,6 +770,18 @@ public partial class EvchargingManagementContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("FK_PasswordResetToken_User");
         });
+        // === Liên kết StaffId cho ChargingSession và Payment ===
+        modelBuilder.Entity<ChargingSession>()
+            .HasOne<User>() // Nhân viên thực hiện phiên sạc
+            .WithMany()
+            .HasForeignKey(s => s.StaffId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        modelBuilder.Entity<Payment>()
+            .HasOne<User>() // Nhân viên xử lý thanh toán
+            .WithMany()
+            .HasForeignKey(p => p.StaffId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         OnModelCreatingPartial(modelBuilder);
     }

@@ -44,4 +44,7 @@ public partial class ChargingSession
     public virtual ChargingPoint Point { get; set; } = null!;
 
     public virtual ICollection<SessionLog> SessionLogs { get; set; } = new List<SessionLog>();
+    public int? StaffId { get; set; }
+    public virtual User? Staff { get; set; }
+
 }

@@ -28,4 +28,7 @@ public partial class Payment
     public virtual ChargingSession? Session { get; set; }
 
     public virtual User User { get; set; } = null!;
+    public int? StaffId { get; set; }  // Nhân viên xử lý thanh toán
+    public virtual User? Staff { get; set; }
+
 }
