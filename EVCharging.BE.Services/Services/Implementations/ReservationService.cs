@@ -8,7 +8,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Transactions;
 
 namespace EVCharging.BE.Services.Services
 {
@@ -49,43 +48,49 @@ namespace EVCharging.BE.Services.Services
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
 
-            // Transaction scope (giao dịch) để chống race condition (đặt đồng thời)
-            var txOptions = new TransactionOptions
+            // Sử dụng EF Core execution strategy thay vì TransactionScope
+            var strategy = _db.Database.CreateExecutionStrategy();
+            var entity = await strategy.ExecuteAsync(async () =>
             {
-                IsolationLevel = System.Transactions.IsolationLevel.Serializable,
-                Timeout = TransactionManager.DefaultTimeout
-            };
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                
+                try
+                {
+                    // Re-check overlap inside transaction (kiểm tra trùng lần nữa trong giao dịch)
+                    var overlap = await _db.Reservations
+                        .Where(r => r.PointId == request.PointId && (r.Status == "booked" || r.Status == "completed"))
+                        .AnyAsync(r => !(endUtc <= r.StartTime || startUtc >= r.EndTime));
 
-            using var scope = new TransactionScope(TransactionScopeOption.Required, txOptions, TransactionScopeAsyncFlowOption.Enabled);
+                    if (overlap)
+                        throw new InvalidOperationException("Time slot not available (khung giờ đã có người đặt).");
 
-            // Re-check overlap inside transaction (kiểm tra trùng lần nữa trong giao dịch)
-            var overlap = await _db.Reservations
-                .Where(r => r.PointId == request.PointId && (r.Status == "booked" || r.Status == "completed"))
-                .AnyAsync(r => !(endUtc <= r.StartTime || startUtc >= r.EndTime));
+                    // Tạo mã đặt chỗ (reservation code) phục vụ QR/check-in
+                    var reservationCode = $"RSV-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
 
-            if (overlap)
-                throw new InvalidOperationException("Time slot not available (khung giờ đã có người đặt).");
+                    var reservation = new Reservation
+                    {
+                        DriverId = driverId,
+                        PointId = request.PointId,
+                        StartTime = startUtc,
+                        EndTime = endUtc,
+                        Status = "booked",
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        ReservationCode = reservationCode
+                    };
 
-            // Tạo mã đặt chỗ (reservation code) phục vụ QR/check-in
-            var reservationCode = $"RSV-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
-
-            var entity = new Reservation
-            {
-                DriverId = driverId,
-                PointId = request.PointId,
-                StartTime = startUtc,
-                EndTime = endUtc,
-                Status = "booked",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                // Thuộc tính này bạn đã thêm trong partial class:
-                ReservationCode = reservationCode
-            };
-
-            _db.Reservations.Add(entity);
-            await _db.SaveChangesAsync();
-
-            scope.Complete();
+                    _db.Reservations.Add(reservation);
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    
+                    return reservation;
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
+            });
 
             // Load navigation to map DTO (nạp quan hệ để ánh xạ DTO)
             await _db.Entry(entity).Reference(r => r.Point).LoadAsync();
