@@ -1,4 +1,4 @@
-﻿using EVCharging.BE.Common.DTOs.DriverProfiles;
+using EVCharging.BE.Common.DTOs.DriverProfiles;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
@@ -52,8 +52,9 @@ namespace EVCharging.BE.Services.Services.Implementations
             var user = await _db.Users.FindAsync(req.UserId)
                        ?? throw new KeyNotFoundException("User không tồn tại");
 
-            var existed = await _db.DriverProfiles.AnyAsync(x => x.UserId == req.UserId);
-            if (existed) throw new InvalidOperationException("User đã có DriverProfile");
+            var driverProfile = await _db.DriverProfiles.FirstOrDefaultAsync(x => x.UserId == req.UserId);
+            if (driverProfile != null)
+                throw new InvalidOperationException("User đã có DriverProfile");
 
             var entity = new DriverProfile
             {
