@@ -97,6 +97,11 @@ builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
 builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+// ✅ Reservation Services
+builder.Services.AddScoped<IReservationService, ReservationService>();
+builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
+builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+
 
 // ---------- AuthN/AuthZ ----------
 var jwtSecret = builder.Configuration["JWT:Secret"] ?? "dev-secret-change-me";
@@ -115,6 +120,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuer = true,
         ValidateAudience = true,
         ValidIssuer = builder.Configuration["JWT:ValidIssuer"],
+        ValidAudience = builder.Configuration["JWT:ValidAudience"],
         IssuerSigningKey = new SymmetricSecurityKey(
             Encoding.UTF8.GetBytes(builder.Configuration["JWT:Secret"]
                 ?? throw new InvalidOperationException("JWT Secret is not configured"))
