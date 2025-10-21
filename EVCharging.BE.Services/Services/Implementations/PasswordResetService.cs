@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace EVCharging.BE.Services.Services.Implementations
+namespace EVCharging.BE.Services.Services.Implementation
 {
     /// <summary>
     /// Service quản lý đặt lại mật khẩu

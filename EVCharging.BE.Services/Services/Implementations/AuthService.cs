@@ -10,7 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 
-namespace EVCharging.BE.Services.Services.Implementations
+namespace EVCharging.BE.Services.Services.Implementation
 {
     public class AuthService : IAuthService
     {

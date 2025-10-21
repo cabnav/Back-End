@@ -6,11 +6,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using EVCharging.BE.Services.Services.Implementations;
 using EVCharging.BE.Services.Services;
 using EVCharging.BE.API.Services;
 using EVCharging.BE.API.Hubs;
-using System.Text.Json.Serialization; // ✅ Thêm dòng này
+using System.Text.Json.Serialization;
+using EVCharging.BE.Services.Services.Implementation; // ✅ Thêm dòng này
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -101,6 +101,11 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+
+// ✅ Payment Services
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IVNPayService, VNPayService>();
+builder.Services.AddScoped<IMoMoService, MoMoService>();
 
 
 // ---------- AuthN/AuthZ ----------

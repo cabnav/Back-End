@@ -1,0 +1,210 @@
+### EV Charging Payment System - API Testing
+### Base URL: https://localhost:7000/api
+
+# ====== AUTHENTICATION ======
+### Login để lấy JWT token
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "driver@example.com",
+  "password": "password123"
+}
+
+### Register user mới
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test Driver",
+  "email": "testdriver@example.com",
+  "password": "password123"
+}
+
+# ====== PAYMENT OPERATIONS ======
+
+### 1. Tạo payment mới (Wallet)
+POST {{baseUrl}}/payments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "amount": 50000,
+  "paymentMethod": "wallet",
+  "description": "Payment for charging session"
+}
+
+### 2. Tạo VNPay payment
+POST {{baseUrl}}/payments/vnpay
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "amount": 100000,
+  "description": "VNPay payment for charging",
+  "returnUrl": "https://yourapp.com/payment/success"
+}
+
+### 3. Tạo MoMo payment
+POST {{baseUrl}}/payments/momo
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "amount": 75000,
+  "description": "MoMo payment for charging",
+  "returnUrl": "https://yourapp.com/payment/success"
+}
+
+### 4. Thanh toán bằng ví
+POST {{baseUrl}}/payments/wallet
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "amount": 30000,
+  "description": "Wallet payment for charging"
+}
+
+# ====== PAYMENT QUERIES ======
+
+### 5. Lấy thông tin payment theo ID
+GET {{baseUrl}}/payments/1
+Authorization: Bearer {{token}}
+
+### 6. Lấy danh sách payments của user
+GET {{baseUrl}}/payments/my-payments?page=1&pageSize=10
+Authorization: Bearer {{token}}
+
+### 7. Lấy payments theo session
+GET {{baseUrl}}/payments/by-session/1
+Authorization: Bearer {{token}}
+
+### 8. Kiểm tra số dư ví
+GET {{baseUrl}}/payments/wallet/balance
+Authorization: Bearer {{token}}
+
+# ====== REFUND OPERATIONS ======
+
+### 9. Tạo yêu cầu hoàn tiền
+POST {{baseUrl}}/payments/refund
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "paymentId": 1,
+  "amount": 25000,
+  "reason": "Session cancelled by user"
+}
+
+### 10. Lấy danh sách refunds theo payment
+GET {{baseUrl}}/payments/1/refunds
+Authorization: Bearer {{token}}
+
+# ====== INVOICE OPERATIONS ======
+
+### 11. Tạo hóa đơn điện tử
+POST {{baseUrl}}/payments/1/invoice
+Authorization: Bearer {{token}}
+
+# ====== PAYMENT GATEWAY CALLBACKS ======
+
+### 12. VNPay callback (simulated)
+POST {{baseUrl}}/payments/callback/vnpay
+Content-Type: application/json
+
+{
+  "TransactionId": "TXN123456789",
+  "PaymentId": "1",
+  "Status": "00",
+  "Amount": 100000,
+  "Signature": "abc123def456",
+  "Message": "Success"
+}
+
+### 13. MoMo callback (simulated)
+POST {{baseUrl}}/payments/callback/momo
+Content-Type: application/json
+
+{
+  "TransactionId": "MOMO123456789",
+  "PaymentId": "1",
+  "Status": "00",
+  "Amount": 75000,
+  "Signature": "momo123def456",
+  "Message": "Success"
+}
+
+# ====== ADMIN ANALYTICS ======
+
+### 14. Lấy payment analytics (Admin only)
+GET {{baseUrl}}/payments/analytics?from=2023-01-01&to=2023-12-31
+Authorization: Bearer {{adminToken}}
+
+### 15. Lấy tổng doanh thu (Admin only)
+GET {{baseUrl}}/payments/revenue?from=2023-01-01&to=2023-12-31
+Authorization: Bearer {{adminToken}}
+
+### 16. Lấy thống kê phương thức thanh toán (Admin only)
+GET {{baseUrl}}/payments/payment-methods-stats?from=2023-01-01&to=2023-12-31
+Authorization: Bearer {{adminToken}}
+
+# ====== PAYMENT STATUS MANAGEMENT ======
+
+### 17. Cập nhật trạng thái payment (Admin/Staff only)
+PUT {{baseUrl}}/payments/1/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "completed",
+  "transactionId": "TXN123456789"
+}
+
+# ====== WALLET OPERATIONS ======
+
+### 18. Nạp tiền vào ví
+POST {{baseUrl}}/users/1/wallet/topup
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "amount": 100000,
+  "description": "Top up wallet"
+}
+
+### 19. Lấy lịch sử giao dịch ví
+GET {{baseUrl}}/users/1/wallet/transactions?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+# ====== ERROR TESTING ======
+
+### 20. Test invalid payment request
+POST {{baseUrl}}/payments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 999,
+  "amount": -1000,
+  "paymentMethod": "invalid_method"
+}
+
+### 21. Test insufficient wallet balance
+POST {{baseUrl}}/payments/wallet
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1,
+  "amount": 999999999,
+  "description": "Test insufficient balance"
+}
+
+### 22. Test unauthorized access
+GET {{baseUrl}}/payments/analytics
+Authorization: Bearer {{token}}
