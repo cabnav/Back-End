@@ -1,5 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Auth;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

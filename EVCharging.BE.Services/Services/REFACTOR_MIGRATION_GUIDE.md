@@ -120,10 +120,10 @@ IEmailService.cs → Notification/IEmailService.cs
 ISignalRNotificationService.cs → Notification/ISignalRNotificationService.cs
 ```
 
-#### **Common Domain** (Cần di chuyển)
+#### **Common Domain** ✅ (Đã hoàn thành)
 ```
-ILocationService.cs → Common/ILocationService.cs
-ISearchService.cs → Common/ISearchService.cs
+✅ ILocationService.cs → Common/ILocationService.cs (đã tạo)
+✅ ISearchService.cs → Common/ISearchService.cs (đã tạo)
 ```
 
 ### **Step 2: Move Implementation Files**
@@ -175,10 +175,10 @@ Implementation/EmailService.cs → Notification/Implementations/EmailService.cs
 Implementation/SignalRNotificationService.cs → Notification/Implementations/SignalRNotificationService.cs
 ```
 
-#### **Common Domain** (Cần di chuyển)
+#### **Common Domain** ✅ (Đã hoàn thành)
 ```
-Implementation/LocationService.cs → Common/Implementations/LocationService.cs
-Implementation/SearchService.cs → Common/Implementations/SearchService.cs
+✅ LocationService.cs → Common/Implementations/LocationService.cs (đã move)
+✅ SearchService.cs → Common/Implementations/SearchService.cs (đã có)
 ```
 
 ## 🔧 **NAMESPACE UPDATES**

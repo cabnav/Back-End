@@ -1,16 +1,27 @@
-﻿using EVCharging.BE.DAL;
-using EVCharging.BE.Services.Services;                 // Interfaces + Implementations đều nằm dưới namespace này của bạn
-using EVCharging.BE.Services.Services.Implementations;
+﻿using EVCharging.BE.API.Hubs;
+using EVCharging.BE.DAL;
+using EVCharging.BE.Services.Services.Admin;
+using EVCharging.BE.Services.Services.Admin.Implementations;
+using EVCharging.BE.Services.Services.Auth;
+using EVCharging.BE.Services.Services.Auth.Implementations;
+using EVCharging.BE.Services.Services.Charging;
+using EVCharging.BE.Services.Services.Charging.Implementations;
+using EVCharging.BE.Services.Services.Common;
+using EVCharging.BE.Services.Services.Common.Implementations;
+using EVCharging.BE.Services.Services.Notification;
+using EVCharging.BE.Services.Services.Notification.Implementations;
+using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Payment.Implementations;
+using EVCharging.BE.Services.Services.Reservations;
+using EVCharging.BE.Services.Services.Reservations.Implementations;
+using EVCharging.BE.Services.Services.Users;
+using EVCharging.BE.Services.Services.Users.Implementations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
-using EVCharging.BE.Services.Services;
-using EVCharging.BE.API.Services;
-using EVCharging.BE.API.Hubs;
 using System.Text.Json.Serialization;
-using EVCharging.BE.Services.Services.Implementation; // ✅ Thêm dòng này
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -64,17 +75,17 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 
-    // JWT bearer in Swagger    
-    var securityScheme = new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Description = "Enter JWT Bearer token",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-    };
+// JWT bearer in Swagger    
+var securityScheme = new OpenApiSecurityScheme
+{
+    Name = "Authorization",
+    Description = "Enter JWT Bearer token",
+    In = ParameterLocation.Header,
+    Type = SecuritySchemeType.Http,
+    Scheme = "bearer",
+    BearerFormat = "JWT",
+    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+};
 
 // ---------- Database ----------
 builder.Services.AddDbContext<EvchargingManagementContext>(options =>
@@ -85,27 +96,42 @@ builder.Services.AddDbContext<EvchargingManagementContext>(options =>
 );
 
 // ---------- DI registrations ----------
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
-builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
+// Auth Services
 builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IChargingService, ChargingService>();
-builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
-builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
+builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+
+// User Services  
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>();
 builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
-builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
 
-// ✅ Reservation Services
+// Charging Services
+builder.Services.AddScoped<IChargingService, ChargingService>();
+builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
+builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
+builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
+builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+
+// Reservation Services
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
 
-// ✅ Payment Services
+// Payment Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
 builder.Services.AddScoped<IMoMoService, MoMoService>();
+
+// Notification Services
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
+
+// Admin Services
+builder.Services.AddScoped<IAdminService, AdminService>();
+
+// Common Services
+builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 
 
 // ---------- AuthN/AuthZ ----------
@@ -141,7 +167,6 @@ builder.Services.AddAuthorization();
 // 5️⃣ Configure SignalR
 // ------------------------------
 builder.Services.AddSignalR();
-builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
 
 // ------------------------------
 // 5️⃣ Build app
