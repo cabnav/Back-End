@@ -1,5 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Corporates;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Users;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVCharging.BE.API.Controllers

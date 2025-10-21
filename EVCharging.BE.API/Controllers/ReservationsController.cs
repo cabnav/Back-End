@@ -1,5 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Reservations;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Reservations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;

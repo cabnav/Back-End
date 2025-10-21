@@ -1,0 +1,23 @@
+# Global code owners
+* @your-username
+
+# API Layer
+/EVCharging.BE.API/ @your-username
+
+# Services Layer
+/EVCharging.BE.Services/ @your-username
+
+# Data Access Layer
+/EVCharging.BE.DAL/ @your-username
+
+# Common Layer
+/EVCharging.BE.Common/ @your-username
+
+# Documentation
+*.md @your-username
+.github/ @your-username
+
+# Configuration files
+*.yml @your-username
+*.yaml @your-username
+*.json @your-username

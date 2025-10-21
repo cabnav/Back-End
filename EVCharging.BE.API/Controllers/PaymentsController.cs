@@ -1,8 +1,10 @@
 ﻿using EVCharging.BE.Common.DTOs.Payments;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using UserEntity = EVCharging.BE.DAL.Entities.User;
 
 namespace EVCharging.BE.API.Controllers
 {
@@ -40,11 +42,11 @@ namespace EVCharging.BE.API.Controllers
                 }
 
                 // Lấy userId từ JWT token
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 request.UserId = userId;
 
                 var result = await _paymentService.CreatePaymentAsync(request);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -67,7 +69,7 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 var payment = await _paymentService.GetPaymentByIdAsync(id);
 
                 if (payment == null || string.IsNullOrEmpty(payment.ErrorMessage))
@@ -76,7 +78,7 @@ namespace EVCharging.BE.API.Controllers
                 }
 
                 // Kiểm tra quyền truy cập
-                if (payment.UserId != userId && !User.IsInRole("Admin"))
+                if (payment.UserId != userId && !this.User.IsInRole("Admin"))
                 {
                     return Forbid("You don't have permission to view this payment");
                 }
@@ -98,7 +100,7 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 var payments = await _paymentService.GetPaymentsByUserAsync(userId, page, pageSize);
                 return Ok(payments);
             }
@@ -137,11 +139,11 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 request.UserId = userId;
 
                 var result = await _paymentService.ProcessVNPayPaymentAsync(request);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -164,11 +166,11 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 request.UserId = userId;
 
                 var result = await _paymentService.ProcessMoMoPaymentAsync(request);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -212,12 +214,12 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
                 request.UserId = userId;
                 request.PaymentMethod = "wallet";
 
                 var result = await _paymentService.ProcessWalletPaymentAsync(request);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -240,15 +242,15 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
-                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var user = await _userService.GetByIdAsync(userId);
-                
-                if (user == null)
+                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var userEntity = await _userService.GetByIdAsync(userId);
+
+                if (userEntity == null)
                 {
                     return NotFound(new { message = "User not found" });
                 }
 
-                return Ok(new { balance = user.WalletBalance ?? 0 });
+                return Ok(new { balance = userEntity.WalletBalance ?? 0 });
             }
             catch (Exception ex)
             {
@@ -268,7 +270,7 @@ namespace EVCharging.BE.API.Controllers
             try
             {
                 var result = await _paymentService.ProcessRefundAsync(request);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -312,7 +314,7 @@ namespace EVCharging.BE.API.Controllers
             try
             {
                 var result = await _paymentService.GenerateInvoiceAsync(paymentId);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
@@ -407,7 +409,7 @@ namespace EVCharging.BE.API.Controllers
             try
             {
                 var result = await _paymentService.UpdatePaymentStatusAsync(id, request.Status, request.TransactionId);
-                
+
                 if (!string.IsNullOrEmpty(result.ErrorMessage))
                 {
                     return BadRequest(new { message = result.ErrorMessage });
