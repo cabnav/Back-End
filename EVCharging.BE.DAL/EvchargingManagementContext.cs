@@ -61,7 +61,14 @@ public partial class EvchargingManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseSqlServer(GetConnectionString());
+        // QUAN TRỌNG: Tuyệt đối không chạm vào options nếu đã được cấu hình qua DI.
+        // Điều này tránh lỗi khi DbContext pooling được bật/EF9 freeze options.
+        if (!optionsBuilder.IsConfigured)
+        {
+            // Chỉ dùng Fallback khi không chạy qua DI (ví dụ chạy tool migration độc lập)
+            // đặt chuỗi kết nối fallback nếu bạn thật sự cần.
+            // optionsBuilder.UseSqlServer("Server=.\\SQLEXPRESS;Database=EVChargingManagement;Trusted_Connection=True;TrustServerCertificate=True");
+        }
     }
     private string GetConnectionString()
     {
@@ -71,7 +78,7 @@ public partial class EvchargingManagementContext : DbContext
                     .Build();
         var strConn = config["ConnectionStrings:DefaultConnection"];
 
-        return strConn;
+        return strConn ?? throw new InvalidOperationException("Connection string not found");
     }
 
 
