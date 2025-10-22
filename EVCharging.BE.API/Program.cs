@@ -4,6 +4,7 @@ using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Admin.Implementations;
 using EVCharging.BE.Services.Services.Auth;
 using EVCharging.BE.Services.Services.Auth.Implementations;
+using EVCharging.BE.Services.Services.Background;
 using EVCharging.BE.Services.Services.Charging;
 using EVCharging.BE.Services.Services.Charging.Implementations;
 using EVCharging.BE.Services.Services.Common;
@@ -22,6 +23,10 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 using System.Text.Json.Serialization;
+using EVCharging.BE.Services.Services;
+
+
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +40,18 @@ builder.Services.AddControllers()
         opt.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         opt.JsonSerializerOptions.WriteIndented = true;
     });
+
+// Database configuration - using factory for both regular services and background services
+builder.Services.AddDbContextFactory<EvchargingManagementContext>(options =>
+{
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); });
+});
+
+// Also register as regular DbContext for services that need it
+builder.Services.AddScoped<EvchargingManagementContext>(provider =>
+    provider.GetRequiredService<IDbContextFactory<EvchargingManagementContext>>().CreateDbContext());
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -88,12 +105,7 @@ var securityScheme = new OpenApiSecurityScheme
 };
 
 // ---------- Database ----------
-builder.Services.AddDbContext<EvchargingManagementContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); }
-    )
-);
+// DbContext is already configured above with factory pattern
 
 // ---------- DI registrations ----------
 // Auth Services
@@ -117,6 +129,12 @@ builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+// Bind options cho background jobs
+builder.Services.Configure<ReservationBackgroundOptions>(
+    builder.Configuration.GetSection("ReservationBackground"));
+builder.Services.AddHostedService<ReservationExpiryWorker>();
+builder.Services.AddHostedService<ReservationReminderWorker>();
+
 
 // Payment Services
 builder.Services.AddScoped<IPaymentService, PaymentService>();

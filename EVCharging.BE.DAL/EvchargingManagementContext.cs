@@ -62,7 +62,6 @@ public partial class EvchargingManagementContext : DbContext
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
          optionsBuilder.UseSqlServer(GetConnectionString());
-
     }
     private string GetConnectionString()
     {
@@ -74,7 +73,6 @@ public partial class EvchargingManagementContext : DbContext
 
         return strConn ?? throw new InvalidOperationException("Connection string not found");
     }
-
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
