@@ -51,7 +51,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             return await _db.ChargingPoints
                 .Where(p => p.StationId == stationId)
-                .Select(p => ToDTO(p))
+                .Select(p => new ChargingPointDTO
+                {
+                    PointId = p.PointId,
+                    StationId = p.StationId,
+                    ConnectorType = p.ConnectorType ?? string.Empty,
+                    PowerOutput = p.PowerOutput ?? 0,
+                    PricePerKwh = p.PricePerKwh,
+                    Status = p.Status ?? "Unknown",
+                    QrCode = p.QrCode ?? string.Empty,
+                    CurrentPower = (decimal)(p.CurrentPower ?? 0),
+                    LastMaintenance = p.LastMaintenance.HasValue
+                        ? p.LastMaintenance.Value.ToDateTime(TimeOnly.MinValue)
+                        : null
+                })
                 .ToListAsync();
         }
 
