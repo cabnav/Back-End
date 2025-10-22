@@ -11,8 +11,6 @@ public partial class ChargingStation
 
     public string Address { get; set; } = null!;
 
-    public string? City { get; set; }
-
     public double? Latitude { get; set; }
 
     public double? Longitude { get; set; }

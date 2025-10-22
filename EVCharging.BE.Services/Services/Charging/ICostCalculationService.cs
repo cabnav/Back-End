@@ -19,6 +19,8 @@ namespace EVCharging.BE.Services.Services.Charging
         
         // Real-time Updates
         Task UpdatePricingAsync(int chargingPointId, decimal newPrice);
+        Task<PriceUpdateResponse> UpdatePricingWithValidationAsync(int chargingPointId, PriceUpdateRequest request, string updatedBy);
         Task NotifyPriceChangeAsync(int chargingPointId, decimal oldPrice, decimal newPrice);
+        Task<bool> ValidatePriceAsync(decimal price);
     }
 }

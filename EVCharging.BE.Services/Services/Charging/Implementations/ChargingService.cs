@@ -493,8 +493,6 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     AppliedDiscount = session.AppliedDiscount ?? 0,
                     FinalCost = session.FinalCost ?? 0,
                     Status = session.Status ?? "unknown",
-                    Notes = session.Notes,
-                    Reason = session.Reason,
                 ChargingPoint = new ChargingPointDTO
                 {
                     PointId = session.Point?.PointId ?? 0,

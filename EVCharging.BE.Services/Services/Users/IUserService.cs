@@ -1,5 +1,6 @@
 ﻿using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.Common.DTOs.Users;
+using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 
 namespace EVCharging.BE.Services.Services.Users

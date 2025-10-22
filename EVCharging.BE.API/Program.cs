@@ -123,6 +123,7 @@ builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 
 // Reservation Services
 builder.Services.AddScoped<IReservationService, ReservationService>();

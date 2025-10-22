@@ -222,17 +222,88 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         /// <summary>
+        /// Cập nhật giá với validation và thông báo
+        /// </summary>
+        public async Task<PriceUpdateResponse> UpdatePricingWithValidationAsync(int chargingPointId, PriceUpdateRequest request, string updatedBy)
+        {
+            try
+            {
+                // Validate price
+                if (!await ValidatePriceAsync(request.NewPrice))
+                {
+                    throw new ArgumentException("Invalid price: must be between 0.01 and 100,000 VND per kWh");
+                }
+
+                var chargingPoint = await _db.ChargingPoints.FindAsync(chargingPointId);
+                if (chargingPoint == null)
+                {
+                    throw new ArgumentException($"Charging point {chargingPointId} not found");
+                }
+
+                var oldPrice = chargingPoint.PricePerKwh;
+                var priceChange = request.NewPrice - oldPrice;
+                var priceChangePercentage = oldPrice > 0 ? (priceChange / oldPrice) * 100 : 0;
+
+                // Update price
+                chargingPoint.PricePerKwh = request.NewPrice;
+                await _db.SaveChangesAsync();
+
+                // Notify users if requested
+                if (request.NotifyUsers)
+                {
+                    await NotifyPriceChangeAsync(chargingPointId, oldPrice, request.NewPrice);
+                }
+
+                return new PriceUpdateResponse
+                {
+                    ChargingPointId = chargingPointId,
+                    OldPrice = oldPrice,
+                    NewPrice = request.NewPrice,
+                    PriceChange = priceChange,
+                    PriceChangePercentage = priceChangePercentage,
+                    Reason = request.Reason,
+                    UpdatedAt = DateTime.UtcNow,
+                    UpdatedBy = updatedBy,
+                    NotifyUsers = request.NotifyUsers,
+                    Message = $"Price updated successfully from {oldPrice:N0} to {request.NewPrice:N0} VND/kWh"
+                };
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Error updating pricing: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// Validate price range
+        /// </summary>
+        public async Task<bool> ValidatePriceAsync(decimal price)
+        {
+            // Price must be between 0.01 and 100,000 VND per kWh
+            return price >= 0.01m && price <= 100000m;
+        }
+
+        /// <summary>
         /// Thông báo thay đổi giá
         /// </summary>
         public async Task NotifyPriceChangeAsync(int chargingPointId, decimal oldPrice, decimal newPrice)
         {
             try
             {
-                // Có thể gửi notification qua SignalR hoặc email
-                Console.WriteLine($"Price changed for charging point {chargingPointId}: {oldPrice} -> {newPrice}");
+                // Log price change
+                Console.WriteLine($"Price changed for charging point {chargingPointId}: {oldPrice:N0} -> {newPrice:N0} VND/kWh");
                 
-                // TODO: Implement real-time notification
-                // await _hubContext.Clients.All.SendAsync("PriceChanged", new { chargingPointId, oldPrice, newPrice });
+                // TODO: Implement real-time notification via SignalR
+                // await _hubContext.Clients.All.SendAsync("PriceChanged", new { 
+                //     chargingPointId, 
+                //     oldPrice, 
+                //     newPrice,
+                //     changePercentage = oldPrice > 0 ? ((newPrice - oldPrice) / oldPrice) * 100 : 0,
+                //     timestamp = DateTime.UtcNow
+                // });
+                
+                // TODO: Send push notifications to users
+                // await _notificationService.SendPriceChangeNotificationAsync(chargingPointId, oldPrice, newPrice);
             }
             catch (Exception ex)
             {

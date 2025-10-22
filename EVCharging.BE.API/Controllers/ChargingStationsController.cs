@@ -30,12 +30,6 @@ namespace EVCharging.BE.API.Controllers
             return Ok(station);
         }
 
-        [HttpGet("nearby")]
-        public async Task<IActionResult> GetNearby(double lat, double lon, double radiusKm = 5)
-        {
-            var result = await _service.GetNearbyStationsAsync(lat, lon, radiusKm);
-            return Ok(result);  
-        }
 
         [HttpGet("search")]
         public async Task<IActionResult> Search([FromQuery] StationSearchDTO filter)

@@ -1,4 +1,4 @@
-﻿using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System;
@@ -61,8 +61,7 @@ public partial class EvchargingManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-        optionsBuilder.UseSqlServer(GetConnectionString());
-
+         optionsBuilder.UseSqlServer(GetConnectionString());
     }
     private string GetConnectionString()
     {
@@ -79,7 +78,7 @@ public partial class EvchargingManagementContext : DbContext
     {
         modelBuilder.Entity<BillingPlan>(entity =>
         {
-            entity.HasKey(e => e.PlanId).HasName("PK__BillingP__BE9F8F1DF705AFAA");
+            entity.HasKey(e => e.PlanId).HasName("PK__BillingP__BE9F8F1DFDA822EB");
 
             entity.ToTable("BillingPlan");
 
@@ -89,7 +88,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.CreditLimit)
                 .HasDefaultValue(0.00m)
-.HasColumnType("decimal(10, 2)")
+                .HasColumnType("decimal(10, 2)")
                 .HasColumnName("credit_limit");
             entity.Property(e => e.PaymentTerms)
                 .HasMaxLength(20)
@@ -105,11 +104,11 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<ChargingPoint>(entity =>
         {
-            entity.HasKey(e => e.PointId).HasName("PK__Charging__0241361278E8E343");
+            entity.HasKey(e => e.PointId).HasName("PK__Charging__02413612F1EF47B5");
 
             entity.ToTable("ChargingPoint");
 
-            entity.HasIndex(e => e.QrCode, "UQ__Charging__E2FB8889AB2F26BA").IsUnique();
+            entity.HasIndex(e => e.QrCode, "UQ__Charging__E2FB8889E9BFE7F2").IsUnique();
 
             entity.Property(e => e.PointId).HasColumnName("point_id");
             entity.Property(e => e.ConnectorType)
@@ -140,7 +139,7 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<ChargingSession>(entity =>
         {
-            entity.HasKey(e => e.SessionId).HasName("PK__Charging__69B13FDCD27EB038");
+            entity.HasKey(e => e.SessionId).HasName("PK__Charging__69B13FDC6F53D945");
 
             entity.ToTable("ChargingSession");
 
@@ -178,17 +177,17 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.Driver).WithMany(p => p.ChargingSessions)
                 .HasForeignKey(d => d.DriverId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__ChargingS__drive__787EE5A0");
+                .HasConstraintName("FK__ChargingS__drive__797309D9");
 
             entity.HasOne(d => d.Point).WithMany(p => p.ChargingSessions)
                 .HasForeignKey(d => d.PointId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__ChargingS__point__797309D9");
+                .HasConstraintName("FK__ChargingS__point__7A672E12");
         });
 
         modelBuilder.Entity<ChargingStation>(entity =>
         {
-            entity.HasKey(e => e.StationId).HasName("PK__Charging__44B370E9E6D6BED2");
+            entity.HasKey(e => e.StationId).HasName("PK__Charging__44B370E9E0E1F22D");
 
             entity.ToTable("ChargingStation");
 
@@ -218,15 +217,15 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<CorporateAccount>(entity =>
         {
-            entity.HasKey(e => e.CorporateId).HasName("PK__Corporat__869F887FBE85D258");
+            entity.HasKey(e => e.CorporateId).HasName("PK__Corporat__869F887F42E4CD77");
 
             entity.ToTable("CorporateAccount");
 
             entity.Property(e => e.CorporateId).HasColumnName("corporate_id");
             entity.Property(e => e.AdminUserId).HasColumnName("admin_user_id");
             entity.Property(e => e.BillingType)
-                            .HasMaxLength(20)
-                            .HasColumnName("billing_type");
+                .HasMaxLength(20)
+                .HasColumnName("billing_type");
             entity.Property(e => e.CompanyName)
                 .HasMaxLength(200)
                 .HasColumnName("company_name");
@@ -259,11 +258,11 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<DriverProfile>(entity =>
         {
-            entity.HasKey(e => e.DriverId).HasName("PK__DriverPr__A411C5BDF3DEAD50");
+            entity.HasKey(e => e.DriverId).HasName("PK__DriverPr__A411C5BD9DC02133");
 
             entity.ToTable("DriverProfile");
 
-            entity.HasIndex(e => e.UserId, "UQ__DriverPr__B9BE370E9658F869").IsUnique();
+            entity.HasIndex(e => e.UserId, "UQ__DriverPr__B9BE370E426023A1").IsUnique();
 
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
             entity.Property(e => e.BatteryCapacity).HasColumnName("battery_capacity");
@@ -291,7 +290,7 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<IncidentReport>(entity =>
         {
-            entity.HasKey(e => e.ReportId).HasName("PK__Incident__779B7C58C49F8DD7");
+            entity.HasKey(e => e.ReportId).HasName("PK__Incident__779B7C587B0806AC");
 
             entity.ToTable("IncidentReport");
 
@@ -319,25 +318,25 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.Point).WithMany(p => p.IncidentReports)
                 .HasForeignKey(d => d.PointId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__IncidentR__point__160F4887");
+                .HasConstraintName("FK__IncidentR__point__17036CC0");
 
             entity.HasOne(d => d.Reporter).WithMany(p => p.IncidentReportReporters)
                 .HasForeignKey(d => d.ReporterId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__IncidentR__repor__151B244E");
+                .HasConstraintName("FK__IncidentR__repor__160F4887");
 
             entity.HasOne(d => d.ResolvedByNavigation).WithMany(p => p.IncidentReportResolvedByNavigations)
                 .HasForeignKey(d => d.ResolvedBy)
-                .HasConstraintName("FK__IncidentR__resol__17036CC0");
+                .HasConstraintName("FK__IncidentR__resol__17F790F9");
         });
 
         modelBuilder.Entity<Invoice>(entity =>
         {
-            entity.HasKey(e => e.InvoiceId).HasName("PK__Invoice__F58DFD4908A88F94");
+            entity.HasKey(e => e.InvoiceId).HasName("PK__Invoice__F58DFD49E7AC3C93");
 
             entity.ToTable("Invoice");
 
-            entity.HasIndex(e => e.InvoiceNumber, "UQ__Invoice__8081A63A881D93DE").IsUnique();
+            entity.HasIndex(e => e.InvoiceNumber, "UQ__Invoice__8081A63A529B5635").IsUnique();
 
             entity.Property(e => e.InvoiceId).HasColumnName("invoice_id");
             entity.Property(e => e.BillingPeriodEnd).HasColumnName("billing_period_end");
@@ -352,7 +351,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("invoice_number");
             entity.Property(e => e.PaidAt).HasColumnName("paid_at");
             entity.Property(e => e.Status)
-.HasMaxLength(20)
+                .HasMaxLength(20)
                 .HasDefaultValue("draft")
                 .HasColumnName("status");
             entity.Property(e => e.TotalAmount)
@@ -362,16 +361,16 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.HasOne(d => d.Corporate).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.CorporateId)
-                .HasConstraintName("FK__Invoice__corpora__2BFE89A6");
+                .HasConstraintName("FK__Invoice__corpora__2CF2ADDF");
 
             entity.HasOne(d => d.User).WithMany(p => p.Invoices)
                 .HasForeignKey(d => d.UserId)
-                .HasConstraintName("FK__Invoice__user_id__2B0A656D");
+                .HasConstraintName("FK__Invoice__user_id__2BFE89A6");
         });
 
         modelBuilder.Entity<InvoiceItem>(entity =>
         {
-            entity.HasKey(e => e.ItemId).HasName("PK__InvoiceI__52020FDD4B832DAF");
+            entity.HasKey(e => e.ItemId).HasName("PK__InvoiceI__52020FDD50AB81E4");
 
             entity.ToTable("InvoiceItem");
 
@@ -397,16 +396,16 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.Invoice).WithMany(p => p.InvoiceItems)
                 .HasForeignKey(d => d.InvoiceId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__InvoiceIt__invoi__32AB8735");
+                .HasConstraintName("FK__InvoiceIt__invoi__339FAB6E");
 
             entity.HasOne(d => d.Session).WithMany(p => p.InvoiceItems)
                 .HasForeignKey(d => d.SessionId)
-                .HasConstraintName("FK__InvoiceIt__sessi__339FAB6E");
+                .HasConstraintName("FK__InvoiceIt__sessi__3493CFA7");
         });
 
         modelBuilder.Entity<Notification>(entity =>
         {
-            entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__E059842F71C53EB3");
+            entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__E059842F219A7F52");
 
             entity.ToTable("Notification");
 
@@ -420,7 +419,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.Message).HasColumnName("message");
             entity.Property(e => e.RelatedId).HasColumnName("related_id");
             entity.Property(e => e.Title)
-.HasMaxLength(200)
+                .HasMaxLength(200)
                 .HasColumnName("title");
             entity.Property(e => e.Type)
                 .HasMaxLength(50)
@@ -430,16 +429,44 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.User).WithMany(p => p.Notifications)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Notificat__user___245D67DE");
+                .HasConstraintName("FK__Notificat__user___25518C17");
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__Password__3213E83F40A32012");
+
+            entity.ToTable("PasswordResetToken");
+
+            entity.HasIndex(e => new { e.UserId, e.IsRevoked, e.UsedAt, e.ExpiresAt, e.CreatedAt }, "IX_PasswordResetToken_User_Active").IsDescending(false, false, false, false, true);
+
+            entity.HasIndex(e => e.Token, "UX_PasswordResetToken_Token").IsUnique();
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsRevoked).HasColumnName("is_revoked");
+            entity.Property(e => e.Token)
+                .HasMaxLength(200)
+                .HasColumnName("token");
+            entity.Property(e => e.UsedAt).HasColumnName("used_at");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.User).WithMany(p => p.PasswordResetTokens)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK__PasswordR__user___51300E55");
         });
 
         modelBuilder.Entity<Payment>(entity =>
         {
-            entity.HasKey(e => e.PaymentId).HasName("PK__Payment__ED1FC9EA6D5A351A");
+            entity.HasKey(e => e.PaymentId).HasName("PK__Payment__ED1FC9EA7EF50D15");
 
             entity.ToTable("Payment");
 
-            entity.HasIndex(e => e.InvoiceNumber, "UQ__Payment__8081A63AE43A58CA").IsUnique();
+            entity.HasIndex(e => e.InvoiceNumber, "UQ__Payment__8081A63AF18A8201").IsUnique();
 
             entity.Property(e => e.PaymentId).HasColumnName("payment_id");
             entity.Property(e => e.Amount)
@@ -464,21 +491,21 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.HasOne(d => d.Reservation).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.ReservationId)
-                .HasConstraintName("FK__Payment__reserva__02FC7413");
+                .HasConstraintName("FK__Payment__reserva__03F0984C");
 
             entity.HasOne(d => d.Session).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.SessionId)
-                .HasConstraintName("FK__Payment__session__02084FDA");
+                .HasConstraintName("FK__Payment__session__02FC7413");
 
             entity.HasOne(d => d.User).WithMany(p => p.Payments)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Payment__user_id__01142BA1");
+                .HasConstraintName("FK__Payment__user_id__02084FDA");
         });
 
         modelBuilder.Entity<PricingPlan>(entity =>
         {
-            entity.HasKey(e => e.PlanId).HasName("PK__PricingP__BE9F8F1D582B80A7");
+            entity.HasKey(e => e.PlanId).HasName("PK__PricingP__BE9F8F1D52A78A4F");
 
             entity.ToTable("PricingPlan");
 
@@ -489,9 +516,9 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.DiscountRate)
-                            .HasDefaultValue(0.00m)
-                            .HasColumnType("decimal(5, 2)")
-                            .HasColumnName("discount_rate");
+                .HasDefaultValue(0.00m)
+                .HasColumnType("decimal(5, 2)")
+                .HasColumnName("discount_rate");
             entity.Property(e => e.IsActive)
                 .HasDefaultValue(true)
                 .HasColumnName("is_active");
@@ -511,9 +538,11 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<Reservation>(entity =>
         {
-            entity.HasKey(e => e.ReservationId).HasName("PK__Reservat__31384C29EDC5BD48");
+            entity.HasKey(e => e.ReservationId).HasName("PK__Reservat__31384C2915AD554F");
 
             entity.ToTable("Reservation");
+
+            entity.HasIndex(e => e.ReservationCode, "UX_Reservation_Code").IsUnique();
 
             entity.Property(e => e.ReservationId).HasColumnName("reservation_id");
             entity.Property(e => e.CreatedAt)
@@ -522,6 +551,10 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
             entity.Property(e => e.EndTime).HasColumnName("end_time");
             entity.Property(e => e.PointId).HasColumnName("point_id");
+            entity.Property(e => e.ReservationCode)
+                .HasMaxLength(16)
+                .IsUnicode(false)
+                .HasColumnName("reservation_code");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
@@ -544,7 +577,7 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<SessionLog>(entity =>
         {
-            entity.HasKey(e => e.LogId).HasName("PK__SessionL__9E2397E02B25203E");
+            entity.HasKey(e => e.LogId).HasName("PK__SessionL__9E2397E0CC0B2A50");
 
             entity.ToTable("SessionLog");
 
@@ -570,12 +603,12 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.Session).WithMany(p => p.SessionLogs)
                 .HasForeignKey(d => d.SessionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__SessionLo__sessi__1EA48E88");
+                .HasConstraintName("FK__SessionLo__sessi__1F98B2C1");
         });
 
         modelBuilder.Entity<StationStaff>(entity =>
         {
-            entity.HasKey(e => e.AssignmentId).HasName("PK__StationS__DA8918140FDA21AB");
+            entity.HasKey(e => e.AssignmentId).HasName("PK__StationS__DA891814445759F8");
 
             entity.ToTable("StationStaff");
 
@@ -592,17 +625,17 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.Staff).WithMany(p => p.StationStaffs)
                 .HasForeignKey(d => d.StaffId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__StationSt__staff__0C85DE4D");
+                .HasConstraintName("FK__StationSt__staff__0D7A0286");
 
             entity.HasOne(d => d.Station).WithMany(p => p.StationStaffs)
                 .HasForeignKey(d => d.StationId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__StationSt__stati__0D7A0286");
+                .HasConstraintName("FK__StationSt__stati__0E6E26BF");
         });
 
         modelBuilder.Entity<Subscription>(entity =>
         {
-            entity.HasKey(e => e.SubscriptionId).HasName("PK__Subscrip__863A7EC1FDFD192C");
+            entity.HasKey(e => e.SubscriptionId).HasName("PK__Subscrip__863A7EC1DF31C38A");
 
             entity.ToTable("Subscription");
 
@@ -621,7 +654,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.UserId).HasColumnName("user_id");
 
             entity.HasOne(d => d.Corporate).WithMany(p => p.Subscriptions)
-.HasForeignKey(d => d.CorporateId)
+                .HasForeignKey(d => d.CorporateId)
                 .HasConstraintName("FK__Subscript__corpo__6383C8BA");
 
             entity.HasOne(d => d.Plan).WithMany(p => p.Subscriptions)
@@ -636,7 +669,7 @@ public partial class EvchargingManagementContext : DbContext
 
         modelBuilder.Entity<UsageAnalytic>(entity =>
         {
-            entity.HasKey(e => e.AnalyticsId).HasName("PK__UsageAna__D5DC3DE1D0777B60");
+            entity.HasKey(e => e.AnalyticsId).HasName("PK__UsageAna__D5DC3DE1C84F22DF");
 
             entity.Property(e => e.AnalyticsId).HasColumnName("analytics_id");
             entity.Property(e => e.AnalysisMonth).HasColumnName("analysis_month");
@@ -658,26 +691,26 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.HasOne(d => d.FavoriteStation).WithMany(p => p.UsageAnalyticFavoriteStations)
                 .HasForeignKey(d => d.FavoriteStationId)
-                .HasConstraintName("FK__UsageAnal__favor__3C34F16F");
+                .HasConstraintName("FK__UsageAnal__favor__3D2915A8");
 
             entity.HasOne(d => d.Station).WithMany(p => p.UsageAnalyticStations)
                 .HasForeignKey(d => d.StationId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__UsageAnal__stati__3B40CD36");
+                .HasConstraintName("FK__UsageAnal__stati__3C34F16F");
 
             entity.HasOne(d => d.User).WithMany(p => p.UsageAnalytics)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__UsageAnal__user___3A4CA8FD");
+                .HasConstraintName("FK__UsageAnal__user___3B40CD36");
         });
 
         modelBuilder.Entity<User>(entity =>
         {
-            entity.HasKey(e => e.UserId).HasName("PK__User__B9BE370F42C3DD18");
+            entity.HasKey(e => e.UserId).HasName("PK__User__B9BE370FA9C91955");
 
             entity.ToTable("User");
 
-            entity.HasIndex(e => e.Email, "UQ__User__AB6E6164DB60277F").IsUnique();
+            entity.HasIndex(e => e.Email, "UQ__User__AB6E6164C07B48E9").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.BillingType)
@@ -685,7 +718,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_type");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("(getdate())")
-.HasColumnName("created_at");
+                .HasColumnName("created_at");
             entity.Property(e => e.Email)
                 .HasMaxLength(255)
                 .HasColumnName("email");
@@ -710,9 +743,49 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("wallet_balance");
         });
 
+        modelBuilder.Entity<UserBilling>(entity =>
+        {
+            entity.HasKey(e => e.UserBillingId).HasName("PK__UserBill__917651D4DE03E456");
+
+            entity.ToTable("UserBilling");
+
+            entity.HasIndex(e => new { e.UserId, e.PlanId }, "UQ__UserBill__7257CFFF228F102F").IsUnique();
+
+            entity.Property(e => e.UserBillingId).HasColumnName("user_billing_id");
+            entity.Property(e => e.CreditUsed)
+                .HasDefaultValue(0.00m)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("credit_used");
+            entity.Property(e => e.CurrentBalance)
+                .HasDefaultValue(0.00m)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("current_balance");
+            entity.Property(e => e.EndDate).HasColumnName("end_date");
+            entity.Property(e => e.NextBillingDate).HasColumnName("next_billing_date");
+            entity.Property(e => e.PlanId).HasColumnName("plan_id");
+            entity.Property(e => e.StartDate)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("start_date");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+
+            entity.HasOne(d => d.Plan).WithMany(p => p.UserBillings)
+                .HasForeignKey(d => d.PlanId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK__UserBilli__plan___4C6B5938");
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserBillings)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK__UserBilli__user___4B7734FF");
+        });
+
         modelBuilder.Entity<WalletTransaction>(entity =>
         {
-            entity.HasKey(e => e.TransactionId).HasName("PK__WalletTr__85C600AF4953D99E");
+            entity.HasKey(e => e.TransactionId).HasName("PK__WalletTr__85C600AFC1276641");
 
             entity.ToTable("WalletTransaction");
 
@@ -738,37 +811,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasOne(d => d.User).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__WalletTra__user___07C12930");
-        });
-
-        modelBuilder.Entity<PasswordResetToken>(entity =>
-        {
-            entity.HasKey(e => e.Id).HasName("PK_PasswordResetToken");
-
-            entity.ToTable("PasswordResetToken");
-
-            entity.HasIndex(e => e.Token, "UX_PasswordResetToken_Token").IsUnique();
-
-            entity.HasIndex(e => new { e.UserId, e.IsRevoked, e.UsedAt, e.ExpiresAt, e.CreatedAt }, "IX_PasswordResetToken_User_Active");
-
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.Token)
-                .HasMaxLength(200)
-.HasColumnName("token");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("GETDATE()")
-                .HasColumnName("created_at");
-            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
-            entity.Property(e => e.UsedAt).HasColumnName("used_at");
-            entity.Property(e => e.IsRevoked)
-                .HasDefaultValue(false)
-                .HasColumnName("is_revoked");
-
-            entity.HasOne(d => d.User).WithMany()
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.Cascade)
-                .HasConstraintName("FK_PasswordResetToken_User");
+                .HasConstraintName("FK__WalletTra__user___08B54D69");
         });
 
         OnModelCreatingPartial(modelBuilder);
