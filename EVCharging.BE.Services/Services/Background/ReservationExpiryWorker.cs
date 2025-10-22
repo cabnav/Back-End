@@ -17,16 +17,16 @@ namespace EVCharging.BE.Services.Services.Background
     public class ReservationExpiryWorker : BackgroundService
     {
         private readonly ILogger<ReservationExpiryWorker> _logger;
-        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly IDbContextFactory<EvchargingManagementContext> _dbFactory;
         private readonly ReservationBackgroundOptions _opt;
 
         public ReservationExpiryWorker(
             ILogger<ReservationExpiryWorker> logger,
-            IServiceScopeFactory scopeFactory,
+            IDbContextFactory<EvchargingManagementContext> dbFactory,
             IOptions<ReservationBackgroundOptions> opt)
         {
             _logger = logger;
-            _scopeFactory = scopeFactory;
+            _dbFactory = dbFactory;
             _opt = opt.Value;
         }
 
@@ -38,8 +38,7 @@ namespace EVCharging.BE.Services.Services.Background
             {
                 try
                 {
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+                    await using var db = await _dbFactory.CreateDbContextAsync(stoppingToken);
 
                     var now = DateTime.UtcNow;
                     var graceBorder = now.AddMinutes(-_opt.ExpireGraceMinutes);

@@ -92,7 +92,7 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                     Role = request.Role,
                     WalletBalance = 0,
                     BillingType = "postpaid",
-                    MembershipTier = "basic",
+                    MembershipTier = "standard",
                     CreatedAt = DateTime.UtcNow
                 };
 
