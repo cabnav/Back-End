@@ -1,5 +1,5 @@
 ﻿using EVCharging.BE.API.Hubs;
-using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.DAL;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Admin.Implementations;
 using EVCharging.BE.Services.Services.Auth;

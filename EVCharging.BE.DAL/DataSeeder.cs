@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 
 namespace EVCharging.BE.DAL

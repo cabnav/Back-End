@@ -1,3 +1,4 @@
+using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 
 namespace EVCharging.BE.Services.Services.Common

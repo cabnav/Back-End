@@ -1,5 +1,5 @@
 using EVCharging.BE.Common.DTOs.Charging;
-using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 

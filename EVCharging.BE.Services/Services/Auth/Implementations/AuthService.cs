@@ -80,7 +80,7 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 // Check if user already exists
                 var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
                 if (existingUser != null)
-                    return null;
+                    throw new InvalidOperationException("User with this email already exists");
 
                 // Create new user
                 var user = new User
@@ -92,19 +92,19 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                     Role = request.Role,
                     WalletBalance = 0,
                     BillingType = "postpaid",
-                    MembershipTier = "basic",
+                    MembershipTier = "standard",
                     CreatedAt = DateTime.UtcNow
                 };
 
                 // Add user to database
-                await _userService.CreateAsync(user);
+                var createdUser = await _userService.CreateAsync(user);
 
                 // If role is driver, create driver profile
                 if (request.Role == "driver")
                 {
                     var driverProfile = new DriverProfile
                     {
-                        UserId = user.UserId,
+                        UserId = createdUser.UserId,
                         LicenseNumber = request.LicenseNumber,
                         VehicleModel = request.VehicleModel,
                         VehiclePlate = request.VehiclePlate,
@@ -116,20 +116,20 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 }
 
                 // Generate JWT token
-                var token = await GenerateTokenAsync(user.UserId, user.Email, user.Role);
+                var token = await GenerateTokenAsync(createdUser.UserId, createdUser.Email, createdUser.Role);
 
                 // Create user DTO
                 var userDto = new UserDTO
                 {
-                    UserId = user.UserId,
-                    Name = user.Name,
-                    Email = user.Email,
-                    Phone = user.Phone,
-                    Role = user.Role,
-                    WalletBalance = user.WalletBalance,
-                    BillingType = user.BillingType,
-                    MembershipTier = user.MembershipTier,
-                    CreatedAt = user.CreatedAt
+                    UserId = createdUser.UserId,
+                    Name = createdUser.Name,
+                    Email = createdUser.Email,
+                    Phone = createdUser.Phone,
+                    Role = createdUser.Role,
+                    WalletBalance = createdUser.WalletBalance,
+                    BillingType = createdUser.BillingType,
+                    MembershipTier = createdUser.MembershipTier,
+                    CreatedAt = createdUser.CreatedAt
                 };
 
                 return new AuthResponse
