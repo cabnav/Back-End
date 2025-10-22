@@ -41,13 +41,17 @@ builder.Services.AddControllers()
         opt.JsonSerializerOptions.WriteIndented = true;
     });
 
-// Thêm factory cho BackgroundService (tạo DbContext mới mỗi vòng quét)
+// Database configuration - using factory for both regular services and background services
 builder.Services.AddDbContextFactory<EvchargingManagementContext>(options =>
 {
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); });
 });
+
+// Also register as regular DbContext for services that need it
+builder.Services.AddScoped<EvchargingManagementContext>(provider =>
+    provider.GetRequiredService<IDbContextFactory<EvchargingManagementContext>>().CreateDbContext());
 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
@@ -101,12 +105,7 @@ var securityScheme = new OpenApiSecurityScheme
 };
 
 // ---------- Database ----------
-builder.Services.AddDbContext<EvchargingManagementContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sql => { sql.EnableRetryOnFailure(3); sql.CommandTimeout(30); }
-    )
-);
+// DbContext is already configured above with factory pattern
 
 // ---------- DI registrations ----------
 // Auth Services
