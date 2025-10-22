@@ -11,6 +11,8 @@ public partial class Reservation
 
     public int PointId { get; set; }
 
+    public string ReservationCode { get; set; } = null!;
+
     public DateTime StartTime { get; set; }
 
     public DateTime EndTime { get; set; }

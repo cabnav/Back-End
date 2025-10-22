@@ -1,4 +1,4 @@
-﻿using EVCharging.BE.DAL;
+﻿using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.Services.Services.Admin.Implementations

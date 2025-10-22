@@ -1,5 +1,5 @@
 ﻿using EVCharging.BE.API.Hubs;
-using EVCharging.BE.DAL;
+using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Admin.Implementations;
 using EVCharging.BE.Services.Services.Auth;
@@ -111,6 +111,7 @@ builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
 builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 
 // Reservation Services
 builder.Services.AddScoped<IReservationService, ReservationService>();

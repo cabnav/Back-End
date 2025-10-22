@@ -1,44 +1,23 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System;
+using System.Collections.Generic;
 
-namespace EVCharging.BE.DAL.Entities
+namespace EVCharging.BE.DAL.Entities;
+
+public partial class PasswordResetToken
 {
-    /// <summary>
-    /// Entity cho bảng PasswordResetToken - lưu token đặt lại mật khẩu
-    /// </summary>
-    [Table("PasswordResetToken")]
-    public class PasswordResetToken
-    {
-        [Key]
-        [Column("id")]
-        public int Id { get; set; }
+    public int Id { get; set; }
 
-        [Required]
-        [Column("user_id")]
-        public int UserId { get; set; }
+    public int UserId { get; set; }
 
-        [Required]
-        [MaxLength(200)]
-        [Column("token")]
-        public string Token { get; set; } = string.Empty;
+    public string Token { get; set; } = null!;
 
-        [Required]
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
-        [Required]
-        [Column("expires_at")]
-        public DateTime ExpiresAt { get; set; }
+    public DateTime ExpiresAt { get; set; }
 
-        [Column("used_at")]
-        public DateTime? UsedAt { get; set; }
+    public DateTime? UsedAt { get; set; }
 
-        [Required]
-        [Column("is_revoked")]
-        public bool IsRevoked { get; set; } = false;
+    public bool IsRevoked { get; set; }
 
-        // Navigation property
-        [ForeignKey("UserId")]
-        public virtual User User { get; set; } = null!;
-    }
+    public virtual User User { get; set; } = null!;
 }
