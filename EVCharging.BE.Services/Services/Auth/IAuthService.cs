@@ -2,6 +2,7 @@ using EVCharging.BE.Common.DTOs.Auth;
 
 namespace EVCharging.BE.Services.Services.Auth
 {
+    
     public interface IAuthService
     {
         Task<AuthResponse?> LoginAsync(LoginRequest request);
@@ -10,4 +11,23 @@ namespace EVCharging.BE.Services.Services.Auth
         Task<bool> ValidateTokenAsync(string token);
         Task<string> GenerateTokenAsync(int userId, string email, string role);
     }
+
+    public class UserCheckResult
+    {
+        public bool Exists { get; set; }
+        public int? UserId { get; set; }
+        public string? Name { get; set; }
+        public string? Role { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
+
+    public class UserInfo
+    {
+        public int UserId { get; set; }
+        public string Name { get; set; }
+        public string Email { get; set; }
+        public string Role { get; set; }
+        public DateTime? CreatedAt { get; set; }
+    }
+
 }

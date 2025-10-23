@@ -10,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using EVCharging.BE.Services.Services.Users;
+using EVCharging.BE.Services.Services.Auth;
 
 namespace EVCharging.BE.Services.Services.Auth.Implementations
 {
