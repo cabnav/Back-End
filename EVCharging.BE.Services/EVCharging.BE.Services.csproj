@@ -22,7 +22,7 @@
 		<PackageReference Include="MimeKit" Version="4.14.0" />
 		<PackageReference Include="QRCoder" Version="1.7.0" />
 		<PackageReference Include="RestSharp" Version="112.1.0" />
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj">
