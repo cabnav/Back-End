@@ -56,9 +56,32 @@ namespace EVCharging.BE.API.Controllers
         {
             try
             {
+                // Check ModelState for validation errors from Data Annotations
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { message = "Validation failed", errors });
+                }
+
+                // Additional basic validation
                 if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Name))
                 {
                     return BadRequest(new { message = "Name, email, and password are required" });
+                }
+
+                // Check email format
+                if (!request.Email.Contains("@"))
+                {
+                    return BadRequest(new { message = "Email must contain @ symbol" });
+                }
+
+                // Check password length
+                if (request.Password.Length < 6)
+                {
+                    return BadRequest(new { message = "Password must be at least 6 characters" });
                 }
 
                 var result = await _authService.RegisterAsync(request);
@@ -68,6 +91,11 @@ namespace EVCharging.BE.API.Controllers
                 }
 
                 return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // Handle validation errors from service
+                return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {

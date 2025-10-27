@@ -8,6 +8,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using EVCharging.BE.Services.Services.Users;
 using EVCharging.BE.Services.Services.Auth;
@@ -78,6 +79,14 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
         {
             try
             {
+                // Validate email format
+                if (!IsValidEmail(request.Email))
+                    throw new InvalidOperationException("Email must contain @ symbol and be in valid format");
+
+                // Validate password length
+                if (string.IsNullOrEmpty(request.Password) || request.Password.Length < 6)
+                    throw new InvalidOperationException("Password must be at least 6 characters");
+
                 // Check if user already exists
                 var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
                 if (existingUser != null)
@@ -90,7 +99,7 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                     Email = request.Email,
                     Password = HashPassword(request.Password),
                     Phone = request.Phone,
-                    Role = request.Role,
+                    Role = request.Role ?? "driver",
                     WalletBalance = 0,
                     BillingType = "postpaid",
                     MembershipTier = "standard",
@@ -237,6 +246,27 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
         {
             var hashedInput = HashPassword(password);
             return hashedInput == hashedPassword;
+        }
+
+        private bool IsValidEmail(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email))
+                return false;
+
+            // Check if email contains @ symbol
+            if (!email.Contains("@"))
+                return false;
+
+            try
+            {
+                // Use regex to validate email format
+                var emailPattern = @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$";
+                return Regex.IsMatch(email, emailPattern, RegexOptions.IgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
         }
     }
 }
