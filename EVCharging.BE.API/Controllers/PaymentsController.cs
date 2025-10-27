@@ -13,7 +13,7 @@ namespace EVCharging.BE.API.Controllers
     /// </summary>
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Yêu cầu đăng nhập
+    [Authorize] // 
     public class PaymentsController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
