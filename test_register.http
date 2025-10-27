@@ -1,4 +1,4 @@
-### Test Register API
+### Test Register API - Valid Registration
 POST http://localhost:5000/api/auth/register
 Content-Type: application/json
 
@@ -13,6 +13,82 @@ Content-Type: application/json
   "vehiclePlate": "29A-12345",
   "batteryCapacity": 75
 }
+
+###
+
+### Test Register API - Invalid Email (No @ Symbol)
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "testexample.com",
+  "password": "password123",
+  "phone": "0123456789",
+  "role": "driver"
+}
+
+###
+
+### Test Register API - Invalid Email (Not Valid Format)
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@",
+  "password": "password123",
+  "phone": "0123456789",
+  "role": "driver"
+}
+
+###
+
+### Test Register API - Password Too Short (Less than 6 characters)
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User",
+  "email": "test@example.com",
+  "password": "12345",
+  "phone": "0123456789",
+  "role": "driver"
+}
+
+###
+
+### Test Register API - Password Exactly 6 Characters (Should Pass)
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Test User 2",
+  "email": "test2@example.com",
+  "password": "123456",
+  "phone": "0123456789",
+  "role": "driver"
+}
+
+###
+
+### Test Register API - Gmail Address
+POST http://localhost:5000/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Gmail User",
+  "email": "testuser@gmail.com",
+  "password": "password123",
+  "phone": "0123456789",
+  "role": "driver",
+  "licenseNumber": "B789012",
+  "vehicleModel": "BMW i4",
+  "vehiclePlate": "30B-67890",
+  "batteryCapacity": 80
+}
+
+###
 
 ### Test Login API
 POST http://localhost:5000/api/auth/login
