@@ -122,9 +122,6 @@ builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 
 // Payments
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IVNPayService, VNPayService>();
-builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
 // ➕ MockPay (QR giả lập)
 builder.Services.AddScoped<IMockPayService, MockPayService>();
