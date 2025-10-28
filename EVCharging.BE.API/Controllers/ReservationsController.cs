@@ -65,20 +65,23 @@ namespace EVCharging.BE.API.Controllers
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
             var result = await _reservationService.CreateReservationAsync(userId, request);
-            return CreatedAtAction(nameof(GetMyReservations), new { id = result.ReservationId }, result);
+            return CreatedAtAction(nameof(GetReservationByCode), new { reservationCode = result.ReservationCode }, result);
         }
 
+
         // -------------------------------
-        // 5️⃣ GET my reservations (danh sách đặt chỗ của tôi)
+        // 🔍 GET reservation by code (tra cứu đặt chỗ bằng mã)
         // -------------------------------
-        [HttpGet("me")]
-        public async Task<IActionResult> GetMyReservations([FromQuery] ReservationFilter filter)
+        [HttpGet("lookup/{reservationCode}")]
+        public async Task<IActionResult> GetReservationByCode(string reservationCode)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            filter.DriverId = userId;
-
-            var reservations = await _reservationService.GetReservationsAsync(filter);
-            return Ok(reservations);
+            var reservation = await _reservationService.GetReservationByCodeAsync(userId, reservationCode);
+            
+            if (reservation == null)
+                return NotFound(new { message = "Reservation not found or you don't have permission to view it." });
+                
+            return Ok(reservation);
         }
 
         // -------------------------------
@@ -87,35 +90,40 @@ namespace EVCharging.BE.API.Controllers
         [HttpGet("upcoming")]
         public async Task<IActionResult> GetUpcoming([FromQuery] int hours = 48)
         {
+            // Validation: hours phải > 0 và <= 8760 (1 năm)
+            if (hours <= 0)
+                return BadRequest(new { message = "Hours must be greater than 0." });
+            
+            if (hours > 8760) // 365 * 24 = 8760 hours = 1 year
+                return BadRequest(new { message = "Hours cannot exceed 8760 (1 year)." });
+
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
             var upcoming = await _reservationService.GetUpcomingReservationsAsync(userId, TimeSpan.FromHours(hours));
             return Ok(upcoming);
         }
 
         // -------------------------------
-        // 7️⃣ CANCEL reservation (huỷ đặt chỗ)
+        // 7️⃣ CANCEL reservation (huỷ đặt chỗ bằng mã)
         // -------------------------------
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Cancel(int id, [FromQuery] string? reason = null)
+        [HttpDelete("{reservationCode}")]
+        public async Task<IActionResult> Cancel(string reservationCode, [FromQuery] string? reason = null)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var ok = await _reservationService.CancelReservationAsync(userId, id, reason);
+            var ok = await _reservationService.CancelReservationByCodeAsync(userId, reservationCode, reason);
             return ok ? NoContent() : NotFound();
         }
 
         // -------------------------------
-        // 8️⃣ GENERATE QR Code (tạo mã QR)
+        // 8️⃣ GENERATE QR Code (tạo mã QR bằng reservation code)
         // -------------------------------
-        [HttpGet("{id:int}/qrcode")]
-        public async Task<IActionResult> GetQRCode(int id)
+        [HttpGet("{reservationCode}/qrcode")]
+        public async Task<IActionResult> GetQRCode(string reservationCode)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var filter = new ReservationFilter { DriverId = userId };
-            var reservations = await _reservationService.GetReservationsAsync(filter);
-
-            var reservation = reservations.FirstOrDefault(r => r.ReservationId == id);
+            var reservation = await _reservationService.GetReservationByCodeAsync(userId, reservationCode);
+            
             if (reservation == null)
-                return NotFound();
+                return NotFound(new { message = "Reservation not found or you don't have permission to view it." });
 
             // Payload: nội dung mã QR (thông tin đặt chỗ + điểm sạc)
             var payload = $"EVCHG|RES={reservation.ReservationCode}|P={reservation.PointId}|D={reservation.DriverId}";

@@ -18,5 +18,9 @@ namespace EVCharging.BE.Common.DTOs.Stations
         public decimal CurrentPower { get; set; }
         public DateTime? LastMaintenance { get; set; }
         public bool IsAvailable => Status == "available";
+
+        // 🔥 UX improvement: Thông tin trạm hữu ích cho người dùng
+        public string? StationName { get; set; }
+        public string? StationAddress { get; set; }
     }
 }
