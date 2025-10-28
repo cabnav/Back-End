@@ -158,8 +158,11 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         && !(endTime <= r.StartTime || startTime >= r.EndTime))
                     .AnyAsync();
 
-                // Kiểm tra xem có trong quá khứ không
-                var isInPast = startTime < DateTime.UtcNow;
+                // Kiểm tra xem có trong quá khứ không (chỉ block slot đã kết thúc + buffer 5 phút)
+                var now = DateTime.Now;
+                var bufferMinutes = 5;
+                var cutoffTime = now.AddMinutes(bufferMinutes);
+                var isInPast = endTime <= cutoffTime;
 
                 timeSlots.Add(new TimeSlotDTO
                 {

@@ -24,19 +24,14 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 throw new ArgumentException("Invalid time range (khoảng thời gian không hợp lệ).");
 
             // Không cho đặt trong quá khứ (no booking in the past)
-            // Cho phép đặt trong ngày hiện tại nhưng phải là giờ tương lai
-            var now = DateTime.UtcNow;
-            var today = now.Date;
-            var currentHour = now.Hour;
+            // Chỉ block những slot đã kết thúc hoàn toàn + buffer 5 phút để tránh edge case
+            var now = DateTime.Now;
+            var bufferMinutes = 5; // Buffer 5 phút để tránh book quá sát giờ hiện tại
+            var cutoffTime = now.AddMinutes(bufferMinutes);
             
-            if (startUtc.Date < today)
+            if (endUtc <= cutoffTime)
             {
-                throw new InvalidOperationException($"Cannot book in the past. Selected date: {startUtc:yyyy-MM-dd}, Current date: {today:yyyy-MM-dd}");
-            }
-            
-            if (startUtc.Date == today && startUtc.Hour <= currentHour)
-            {
-                throw new InvalidOperationException($"Cannot book in the past. Selected hour: {startUtc.Hour}, Current hour: {currentHour}. Please select a future hour.");
+                throw new InvalidOperationException($"Cannot book in the past. Selected time slot ends at {endUtc:yyyy-MM-dd HH:mm}, but current time is {now:yyyy-MM-dd HH:mm}. Please select a future time slot.");
             }
 
             // Kiểm tra point có tồn tại (check charging point existence)
