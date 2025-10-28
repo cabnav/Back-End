@@ -13,17 +13,50 @@ namespace EVCharging.BE.API.Controllers
     {
         private readonly IReservationService _reservationService;
         private readonly IQRCodeService _qrCodeService;
+        private readonly IStationSearchService _stationSearchService;
 
         public ReservationsController(
             IReservationService reservationService,
-            IQRCodeService qrCodeService)
+            IQRCodeService qrCodeService,
+            IStationSearchService stationSearchService)
         {
             _reservationService = reservationService;
             _qrCodeService = qrCodeService;
+            _stationSearchService = stationSearchService;
         }
 
         // -------------------------------
-        // 1️⃣ CREATE reservation (tạo đặt chỗ)
+        // 1️⃣ SEARCH compatible stations (tìm trạm sạc phù hợp)
+        // -------------------------------
+        [HttpPost("search-stations")]
+        public async Task<IActionResult> SearchStations([FromBody] StationSearchRequest request)
+        {
+            var stations = await _stationSearchService.SearchCompatibleStationsAsync(request);
+            return Ok(stations);
+        }
+
+        // -------------------------------
+        // 2️⃣ GET compatible points at station (lấy điểm sạc phù hợp tại trạm)
+        // -------------------------------
+        [HttpGet("stations/{stationId}/compatible-points")]
+        public async Task<IActionResult> GetCompatiblePoints(int stationId, [FromQuery] string connectorType)
+        {
+            var points = await _stationSearchService.GetCompatiblePointsAsync(stationId, connectorType);
+            return Ok(points);
+        }
+
+        // -------------------------------
+        // 3️⃣ GET available time slots (lấy khung giờ có sẵn)
+        // -------------------------------
+        [HttpGet("points/{pointId}/time-slots")]
+        public async Task<IActionResult> GetTimeSlots(int pointId, [FromQuery] DateTime date)
+        {
+            var timeSlots = await _stationSearchService.GetAvailableTimeSlotsAsync(pointId, date);
+            return Ok(timeSlots);
+        }
+
+        // -------------------------------
+        // 4️⃣ CREATE reservation (tạo đặt chỗ)
         // -------------------------------
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] ReservationRequest request)
@@ -36,7 +69,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
-        // 2️⃣ GET my reservations (danh sách đặt chỗ của tôi)
+        // 5️⃣ GET my reservations (danh sách đặt chỗ của tôi)
         // -------------------------------
         [HttpGet("me")]
         public async Task<IActionResult> GetMyReservations([FromQuery] ReservationFilter filter)
@@ -49,7 +82,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
-        // 3️⃣ GET upcoming (các đặt chỗ sắp tới)
+        // 6️⃣ GET upcoming (các đặt chỗ sắp tới)
         // -------------------------------
         [HttpGet("upcoming")]
         public async Task<IActionResult> GetUpcoming([FromQuery] int hours = 48)
@@ -60,7 +93,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
-        // 4️⃣ CANCEL reservation (huỷ đặt chỗ)
+        // 7️⃣ CANCEL reservation (huỷ đặt chỗ)
         // -------------------------------
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Cancel(int id, [FromQuery] string? reason = null)
@@ -71,7 +104,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
-        // 5️⃣ GENERATE QR Code (tạo mã QR)
+        // 8️⃣ GENERATE QR Code (tạo mã QR)
         // -------------------------------
         [HttpGet("{id:int}/qrcode")]
         public async Task<IActionResult> GetQRCode(int id)

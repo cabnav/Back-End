@@ -41,9 +41,21 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (driverId == 0)
                 throw new InvalidOperationException("Driver profile not found (không tìm thấy hồ sơ tài xế).");
 
-            // Tính EndTime (giờ kết thúc) từ StartTime + DurationMinutes
-            var startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-            var endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            // Sử dụng logic mới: Date + Hour thay vì StartTime + DurationMinutes
+            DateTime startUtc, endUtc;
+            
+            if (request.LegacyStartTime.HasValue)
+            {
+                // Tương thích ngược với API cũ
+                startUtc = DateTime.SpecifyKind(request.LegacyStartTime.Value, DateTimeKind.Utc);
+                endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            }
+            else
+            {
+                // Logic mới: sử dụng Date + Hour
+                startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
+                endUtc = DateTime.SpecifyKind(request.EndTime, DateTimeKind.Utc);
+            }
 
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
@@ -65,25 +77,42 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         throw new InvalidOperationException("Time slot not available (khung giờ đã có người đặt).");
 
                     // Tạo mã đặt chỗ (reservation code) phục vụ QR/check-in
-                    var reservationCode = $"RSV-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+                    // Code phải đúng format (CHECK constraint: CK_Reservation_Code_Format)
+                    // Thử format khác: chỉ số (ví dụ: 12345678)
+                    string reservationCode;
+                    var random = new Random();
 
-                    var reservation = new Reservation
+                    // Thử tối đa 5 lần để tránh trùng hoặc sai format
+                    for (int attempts = 0; attempts < 5; attempts++)
                     {
-                        DriverId = driverId,
-                        PointId = request.PointId,
-                        StartTime = startUtc,
-                        EndTime = endUtc,
-                        Status = "booked",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                        ReservationCode = reservationCode
-                    };
+                        // Format: chỉ số 8 chữ số
+                        reservationCode = random.Next(10000000, 99999999).ToString();
 
-                    _db.Reservations.Add(reservation);
-                    await _db.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    
-                    return reservation;
+                        // Đảm bảo code chưa tồn tại
+                        var exists = await _db.Reservations.AnyAsync(r => r.ReservationCode == reservationCode);
+                        if (!exists)
+                        {
+                            var reservation = new Reservation
+                            {
+                                DriverId = driverId,
+                                PointId = request.PointId,
+                                StartTime = startUtc,
+                                EndTime = endUtc,
+                                Status = "booked",
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow,
+                                ReservationCode = reservationCode
+                            };
+
+                            _db.Reservations.Add(reservation);
+                            await _db.SaveChangesAsync();
+                            await transaction.CommitAsync();
+
+                            return reservation;
+                        }
+                    }
+
+                    throw new InvalidOperationException("Could not generate valid reservation code (không thể sinh mã đặt chỗ hợp lệ).");
                 }
                 catch
                 {

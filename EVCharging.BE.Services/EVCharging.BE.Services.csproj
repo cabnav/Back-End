@@ -25,19 +25,8 @@
 		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
 	</ItemGroup>
 	<ItemGroup>
-		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj">
-		  <Private>True</Private>
-		</ProjectReference>
-		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
-	</ItemGroup>
-	
-	<ItemGroup>
 		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj" />
 		<ProjectReference Include="..\EVCharging.BE.Common\EVCharging.BE.Common.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<PackageReference Include="QRCoder" Version="1.7.0" />
 	</ItemGroup>
 
 
