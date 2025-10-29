@@ -146,8 +146,14 @@ namespace EVCharging.BE.API.Controllers
             if (reservation == null)
                 return NotFound(new { message = "Reservation not found or you don't have permission to view it." });
 
-            // Payload: nội dung mã QR (thông tin đặt chỗ + điểm sạc)
-            var payload = $"EVCHG|RES={reservation.ReservationCode}|P={reservation.PointId}|D={reservation.DriverId}";
+            // Payload: nội dung mã QR tối ưu cho business logic
+            // Format: multi-line format, mỗi trường một dòng để dễ đọc và parse
+            // - Dùng tên đầy đủ (không viết tắt) để rõ ràng
+            // - Mỗi trường xuống dòng để dễ debug và maintain
+            // - StartTime dùng ISO 8601 format (YYYY-MM-DDTHH:mm:ss) để dễ đọc hơn Unix timestamp
+            var startTimeIso = reservation.StartTime.ToString("yyyy-MM-ddTHH:mm:ss");
+            var stationId = reservation.ChargingPoint?.StationId ?? 0;
+            var payload = $"EVCHG\nReservationCode={reservation.ReservationCode}\nPointId={reservation.PointId}\nStationId={stationId}\nStartTime={startTimeIso}";
             var png = _qrCodeService.GenerateQRCode(payload);
 
             return File(png, "image/png");

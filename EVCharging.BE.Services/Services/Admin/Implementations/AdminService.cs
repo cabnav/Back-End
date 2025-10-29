@@ -41,7 +41,7 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     s.StationId,
                     s.Name,
                     TotalPoints = s.ChargingPoints.Count,
-                    Active = s.ChargingPoints.Count(p => p.Status == "Busy"),
+                    Active = s.ChargingPoints.Count(p => p.Status == "active"),
                     Available = s.ChargingPoints.Count(p => p.Status == "Available"),
                     UtilizationRate = s.ChargingPoints.Count == 0
                         ? 0
