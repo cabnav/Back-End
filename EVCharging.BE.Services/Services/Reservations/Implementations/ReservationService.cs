@@ -41,9 +41,21 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (driverId == 0)
                 throw new InvalidOperationException("Driver profile not found (không tìm thấy hồ sơ tài xế).");
 
-            // Tính EndTime (giờ kết thúc) từ StartTime + DurationMinutes
-            var startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-            var endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            // Sử dụng logic mới: Date + Hour thay vì StartTime + DurationMinutes
+            DateTime startUtc, endUtc;
+            
+            if (request.LegacyStartTime.HasValue)
+            {
+                // Tương thích ngược với API cũ
+                startUtc = DateTime.SpecifyKind(request.LegacyStartTime.Value, DateTimeKind.Utc);
+                endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            }
+            else
+            {
+                // Logic mới: sử dụng Date + Hour
+                startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
+                endUtc = DateTime.SpecifyKind(request.EndTime, DateTimeKind.Utc);
+            }
 
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
@@ -65,25 +77,49 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         throw new InvalidOperationException("Time slot not available (khung giờ đã có người đặt).");
 
                     // Tạo mã đặt chỗ (reservation code) phục vụ QR/check-in
-                    var reservationCode = $"RSV-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+                    // Code phải đúng format (CHECK constraint: CK_Reservation_Code_Format):
+                    // - Độ dài 8-12 ký tự
+                    // - Chỉ chữ cái HOA A-Z và số 2-9 (không có O,I,0,1 để tránh nhầm lẫn)
+                    string reservationCode;
+                    var random = new Random();
+                    var validChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 ký tự hợp lệ
 
-                    var reservation = new Reservation
+                    // Thử tối đa 5 lần để tránh trùng hoặc sai format
+                    for (int attempts = 0; attempts < 5; attempts++)
                     {
-                        DriverId = driverId,
-                        PointId = request.PointId,
-                        StartTime = startUtc,
-                        EndTime = endUtc,
-                        Status = "booked",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                        ReservationCode = reservationCode
-                    };
+                        // Sinh mã 8 ký tự từ bộ ký tự hợp lệ
+                        var chars = new char[8];
+                        for (int i = 0; i < 8; i++)
+                        {
+                            chars[i] = validChars[random.Next(validChars.Length)];
+                        }
+                        reservationCode = new string(chars);
 
-                    _db.Reservations.Add(reservation);
-                    await _db.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    
-                    return reservation;
+                        // Đảm bảo code chưa tồn tại
+                        var exists = await _db.Reservations.AnyAsync(r => r.ReservationCode == reservationCode);
+                        if (!exists)
+                        {
+                            var reservation = new Reservation
+                            {
+                                DriverId = driverId,
+                                PointId = request.PointId,
+                                StartTime = startUtc,
+                                EndTime = endUtc,
+                                Status = "booked",
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow,
+                                ReservationCode = reservationCode
+                            };
+
+                            _db.Reservations.Add(reservation);
+                            await _db.SaveChangesAsync();
+                            await transaction.CommitAsync();
+
+                            return reservation;
+                        }
+                    }
+
+                    throw new InvalidOperationException("Could not generate valid reservation code (không thể sinh mã đặt chỗ hợp lệ).");
                 }
                 catch
                 {
@@ -94,6 +130,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             // Load navigation to map DTO (nạp quan hệ để ánh xạ DTO)
             await _db.Entry(entity).Reference(r => r.Point).LoadAsync();
+            if (entity.Point != null)
+                await _db.Entry(entity.Point).Reference(p => p.Station).LoadAsync();  // 🔥 Load station info
             await _db.Entry(entity).Reference(r => r.Driver).LoadAsync();
             if (entity.Driver != null)
                 await _db.Entry(entity.Driver).Reference(d => d.User).LoadAsync();
@@ -108,6 +146,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         {
             var q = _db.Reservations
                 .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)  // 🔥 Include station cho UX
                 .Include(r => r.Driver).ThenInclude(d => d.User)
                 .AsQueryable();
 
@@ -152,11 +191,13 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             if (driverId == 0) return Enumerable.Empty<ReservationDTO>();
 
-            var now = DateTime.UtcNow;
+            // Sử dụng local time cho nhất quán với các service khác
+            var now = DateTime.Now;
             var to = now.Add(horizon);
 
             var list = await _db.Reservations
                 .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)  // 🔥 Include station cho UX
                 .Include(r => r.Driver).ThenInclude(d => d.User)
                 .Where(r => r.DriverId == driverId
                          && r.Status == "booked"
@@ -200,6 +241,65 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             return true;
         }
 
+        /// <summary>
+        /// Cancel reservation by code (huỷ đặt chỗ bằng mã)
+        /// </summary>
+        public async Task<bool> CancelReservationByCodeAsync(int userId, string reservationCode, string? reason = null)
+        {
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                throw new InvalidOperationException("Driver profile not found (không tìm thấy hồ sơ tài xế).");
+
+            var entity = await _db.Reservations
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+            
+            if (entity == null) return false;
+
+            if (entity.Status is "cancelled" or "completed" or "no_show")
+                throw new InvalidOperationException("Cannot cancel (không thể huỷ ở trạng thái hiện tại).");
+
+            // Optional policy: không cho huỷ nếu sắp bắt đầu trong X phút
+            // if (entity.StartTime <= DateTime.UtcNow.AddMinutes(10)) { ... }
+
+            entity.Status = "cancelled";
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        /// <summary>
+        /// Get reservation by code for specific user (tra cứu đặt chỗ bằng mã)
+        /// </summary>
+        public async Task<ReservationDTO?> GetReservationByCodeAsync(int userId, string reservationCode)
+        {
+            // Lấy driverId từ userId
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return null;
+
+            // Tìm reservation với code và driver ID
+            var reservation = await _db.Reservations
+                .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)
+                .Include(r => r.Driver)
+                    .ThenInclude(d => d.User)
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+
+            if (reservation == null)
+                return null;
+
+            return MapToDto(reservation);
+        }
+
         // -----------------------
         // Mapping helpers (hàm ánh xạ)
         // -----------------------
@@ -218,12 +318,18 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 ReservationCode = r.ReservationCode, // từ partial class
                 ChargingPoint = r.Point is null ? null : new ChargingPointDTO
                 {
-                    // Map tối thiểu (tuỳ DTO của bạn có gì thì map thêm)
                     PointId = r.Point.PointId,
                     StationId = r.Point.StationId,
                     ConnectorType = r.Point.ConnectorType,
+                    PowerOutput = r.Point.PowerOutput ?? 0,
                     PricePerKwh = r.Point.PricePerKwh,
-                    Status = r.Point.Status
+                    Status = r.Point.Status,
+                    QrCode = r.Point.QrCode ?? "",
+                    CurrentPower = (decimal)(r.Point.CurrentPower ?? 0.0),  // Convert double to decimal
+                    LastMaintenance = r.Point.LastMaintenance?.ToDateTime(TimeOnly.MinValue),  // Convert DateOnly to DateTime
+                    // 🔥 UX improvement: Thông tin trạm hữu ích cho người dùng  
+                    StationName = r.Point.Station?.Name,
+                    StationAddress = r.Point.Station?.Address
                 },
                 Driver = r.Driver?.User is null ? null : new UserDTO
                 {

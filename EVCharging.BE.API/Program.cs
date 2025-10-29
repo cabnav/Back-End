@@ -117,13 +117,12 @@ builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+builder.Services.AddScoped<IStationSearchService, StationSearchService>();
 builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.GetSection("ReservationBackground"));
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 
 // Payments
-builder.Services.AddScoped<IVNPayService, VNPayService>();
-builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
 // ➕ MockPay (QR giả lập)
 builder.Services.AddScoped<IMockPayService, MockPayService>();
@@ -173,9 +172,6 @@ builder.Services.AddAuthorization();
 // 6) SignalR
 // ------------------------------
 builder.Services.AddSignalR();
-
-// HttpClient factory (dùng cho MoMoService)
-builder.Services.AddHttpClient("momo", c => { c.Timeout = TimeSpan.FromSeconds(30); });
 
 // ------------------------------
 // 7) Build app

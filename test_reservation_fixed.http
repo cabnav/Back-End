@@ -1,0 +1,105 @@
+### Test API đặt chỗ mới - Logic tìm trạm sạc phù hợp và chọn khung giờ
+
+# Variables
+@host = https://localhost:7035
+@token = YOUR_JWT_TOKEN_HERE
+
+# 1. Đăng nhập để lấy token
+POST {{host}}/api/Auth/login
+Content-Type: application/json
+
+{
+  "email": "chinh22@gmail.com",
+  "password": "12345"
+}
+
+###
+
+# 2. Tìm kiếm trạm sạc phù hợp với xe
+# Người dùng tự chọn loại cổng sạc của xe mình (CCS, CHAdeMO, Type2, etc.)
+POST {{host}}/api/reservations/search-stations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "connectorType": "CCS",
+  "date": "2024-12-25T00:00:00Z",
+  "latitude": 10.762622,
+  "longitude": 106.660172,
+  "radiusKm": 10
+}
+
+###
+
+# 3. Lấy danh sách điểm sạc phù hợp tại một trạm cụ thể
+GET {{host}}/api/reservations/stations/1/compatible-points?connectorType=CCS
+Authorization: Bearer {{token}}
+
+###
+
+# 4. Lấy khung giờ có sẵn cho một điểm sạc cụ thể
+GET {{host}}/api/reservations/points/1/time-slots?date=2024-12-25T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# 5. Tạo đặt chỗ mới với logic mới (Date + Hour)
+POST {{host}}/api/reservations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pointId": 1,
+  "date": "2024-12-25T00:00:00Z",
+  "hour": 14
+}
+
+###
+
+# 6. Test với ngày hôm nay và giờ tương lai
+POST {{host}}/api/reservations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pointId": 1,
+  "date": "2024-01-15T00:00:00Z",
+  "hour": 15
+}
+
+###
+
+# 7. Test với giờ hiện tại + 2 tiếng
+POST {{host}}/api/reservations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pointId": 1,
+  "date": "2024-01-15T00:00:00Z",
+  "hour": 16
+}
+
+###
+
+# 8. Xem danh sách đặt chỗ của tôi
+GET {{host}}/api/reservations/me
+Authorization: Bearer {{token}}
+
+###
+
+# 9. Xem các đặt chỗ sắp tới
+GET {{host}}/api/reservations/upcoming
+Authorization: Bearer {{token}}
+
+###
+
+# 10. Huỷ đặt chỗ (nếu có)
+DELETE {{host}}/api/reservations/1
+Authorization: Bearer {{token}}
+
+###
+
+# 11. Tạo mã QR cho đặt chỗ
+GET {{host}}/api/reservations/1/qrcode
+Authorization: Bearer {{token}}
