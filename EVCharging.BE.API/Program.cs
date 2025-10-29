@@ -122,7 +122,6 @@ builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 
 // Payments
-builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
 builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
@@ -174,6 +173,9 @@ builder.Services.AddAuthorization();
 // 6) SignalR
 // ------------------------------
 builder.Services.AddSignalR();
+
+// HttpClient factory (dùng cho MoMoService)
+builder.Services.AddHttpClient("momo", c => { c.Timeout = TimeSpan.FromSeconds(30); });
 
 // ------------------------------
 // 7) Build app
