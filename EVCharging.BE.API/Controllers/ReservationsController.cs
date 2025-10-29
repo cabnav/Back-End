@@ -85,6 +85,27 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
+        // 📋 GET station reservations (xem đặt chỗ của trạm)
+        // -------------------------------
+        [HttpGet("stations/{stationId}/reservations")]
+        public async Task<IActionResult> GetStationReservations(int stationId, [FromQuery] int? pointId = null, [FromQuery] string? status = null, [FromQuery] DateTime? fromDate = null, [FromQuery] DateTime? toDate = null, [FromQuery] int page = 1, [FromQuery] int pageSize = 20)
+        {
+            var filter = new ReservationFilter
+            {
+                StationId = stationId,
+                PointId = pointId,
+                Status = status,
+                FromDate = fromDate,
+                ToDate = toDate,
+                Page = page,
+                PageSize = pageSize
+            };
+
+            var reservations = await _reservationService.GetReservationsAsync(filter);
+            return Ok(reservations);
+        }
+
+        // -------------------------------
         // 6️⃣ GET upcoming (các đặt chỗ sắp tới)
         // -------------------------------
         [HttpGet("upcoming")]
