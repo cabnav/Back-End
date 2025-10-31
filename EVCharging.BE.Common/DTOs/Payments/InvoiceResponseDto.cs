@@ -10,6 +10,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public int? UserId { get; set; }
         public decimal TotalAmount { get; set; }
         public string? Status { get; set; }
+        public string? PaymentMethod { get; set; } // wallet hoặc cash
         public DateTime? CreatedAt { get; set; }
         public DateTime? PaidAt { get; set; }
         public List<InvoiceItemDto> Items { get; set; } = new();
