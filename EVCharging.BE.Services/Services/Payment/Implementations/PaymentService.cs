@@ -2,6 +2,8 @@ using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
+using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
+
 
 namespace EVCharging.BE.Services.Services.Payment.Implementations
 {
@@ -107,7 +109,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             );
 
             // Tạo bản ghi Payment
-            var payment = new Payment
+            var payment = new PaymentEntity
             {
                 UserId = userId,
                 SessionId = sessionId,
@@ -214,7 +216,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             );
 
             // Tạo bản ghi Payment
-            var payment = new Payment
+            var payment = new PaymentEntity
             {
                 UserId = userId,
                 SessionId = sessionId,
