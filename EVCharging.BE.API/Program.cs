@@ -1,6 +1,7 @@
 ﻿using EVCharging.BE.API.Hubs;
 using EVCharging.BE.DAL;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Staff;
+using EVCharging.BE.Services.Services.Staff.Implementations;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Admin.Implementations;
 using EVCharging.BE.Services.Services.Auth;
@@ -122,6 +123,12 @@ builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.G
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 
+// Staff
+builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
+
+// Admin - Staff Management
+builder.Services.AddScoped<IAdminStaffService, AdminStaffService>();
+
 // Payments
 builder.Services.AddScoped<IWalletService, WalletService>();
 // ➕ MockPay (QR giả lập)
@@ -135,8 +142,10 @@ builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationServi
 builder.Services.AddScoped<IAdminService, AdminService>();
 
 // Common
-builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddHttpClient<ILocationService, LocationService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddScoped<IInteractiveMapService, InteractiveMapService>();
+
 
 // ------------------------------
 // 5) AuthN/AuthZ (JWT)
@@ -233,4 +242,4 @@ app.MapHub<ChargingSessionHub>("/chargingHub");
 // Controllers
 app.MapControllers();
 
-app.Run();
+    app.Run();
