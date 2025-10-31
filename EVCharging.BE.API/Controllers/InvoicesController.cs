@@ -1,9 +1,6 @@
-﻿using EVCharging.BE.Common.DTOs.Payments;
-using EVCharging.BE.DAL;
-using EVCharging.BE.DAL.Entities;
+﻿using EVCharging.BE.Services.Services.Payment;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace EVCharging.BE.API.Controllers
@@ -16,11 +13,11 @@ namespace EVCharging.BE.API.Controllers
     [Authorize]
     public class InvoicesController : ControllerBase
     {
-        private readonly EvchargingManagementContext _db;
+        private readonly IInvoiceService _invoiceService;
 
-        public InvoicesController(EvchargingManagementContext db)
+        public InvoicesController(IInvoiceService invoiceService)
         {
-            _db = db;
+            _invoiceService = invoiceService;
         }
 
         /// <summary>
@@ -40,27 +37,18 @@ namespace EVCharging.BE.API.Controllers
                     return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                var invoice = await _db.Invoices
-                    .Include(i => i.InvoiceItems)
-                        .ThenInclude(item => item.Session!)
-                            .ThenInclude(s => s.Point)
-                                .ThenInclude(p => p.Station)
-                    .Include(i => i.User)
-                    .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId);
+                var invoice = await _invoiceService.GetInvoiceByIdAsync(invoiceId, currentUserId);
 
                 if (invoice == null)
                 {
                     return NotFound(new { message = $"Không tìm thấy hóa đơn với ID: {invoiceId}" });
                 }
 
-                // Kiểm tra quyền - chỉ chủ sở hữu mới được xem hóa đơn
-                if (invoice.UserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Bạn không có quyền xem hóa đơn này." });
-                }
-
-                var invoiceResponse = await MapToInvoiceResponseDtoAsync(invoice);
-                return Ok(new { data = invoiceResponse });
+                return Ok(new { data = invoice });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -89,48 +77,19 @@ namespace EVCharging.BE.API.Controllers
                     return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                // Kiểm tra session có tồn tại và thuộc về user không
-                var session = await _db.ChargingSessions
-                    .Include(s => s.Driver)
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
-
-                if (session == null)
-                {
-                    return NotFound(new { message = $"Không tìm thấy phiên sạc với ID: {sessionId}" });
-                }
-
-                if (session.Driver?.UserId != currentUserId)
-                {
-                    return StatusCode(403, new { message = "Bạn không có quyền xem hóa đơn của phiên sạc này." });
-                }
-
-                // Lấy payment của session này để lấy invoice number
-                var payment = await _db.Payments
-                    .Where(p => p.SessionId == sessionId && p.PaymentStatus == "success")
-                    .OrderByDescending(p => p.CreatedAt)
-                    .FirstOrDefaultAsync();
-
-                if (payment == null || string.IsNullOrEmpty(payment.InvoiceNumber))
-                {
-                    return NotFound(new { message = $"Không tìm thấy hóa đơn cho phiên sạc {sessionId}. Phiên sạc này chưa được thanh toán." });
-                }
-
-                // Lấy invoice theo invoice number
-                var invoice = await _db.Invoices
-                    .Include(i => i.InvoiceItems)
-                        .ThenInclude(item => item.Session!)
-                            .ThenInclude(s => s.Point)
-                                .ThenInclude(p => p.Station)
-                    .Include(i => i.User)
-                    .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
+                // Gọi service để lấy hóa đơn
+                var invoice = await _invoiceService.GetInvoiceBySessionIdAsync(sessionId, currentUserId);
 
                 if (invoice == null)
                 {
-                    return NotFound(new { message = $"Không tìm thấy hóa đơn với số: {payment.InvoiceNumber}" });
+                    return NotFound(new { message = $"Không tìm thấy hóa đơn cho phiên sạc {sessionId}. Phiên sạc có thể chưa được thanh toán." });
                 }
 
-                var invoiceResponse = await MapToInvoiceResponseDtoAsync(invoice);
-                return Ok(new { data = invoiceResponse });
+                return Ok(new { data = invoice });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
             }
             catch (Exception ex)
             {
@@ -160,33 +119,15 @@ namespace EVCharging.BE.API.Controllers
                     return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                var invoices = await _db.Invoices
-                    .Include(i => i.InvoiceItems)
-                        .ThenInclude(item => item.Session!)
-                            .ThenInclude(s => s.Point)
-                                .ThenInclude(p => p.Station)
-                    .Where(i => i.UserId == currentUserId)
-                    .OrderByDescending(i => i.CreatedAt)
-                    .Skip(skip)
-                    .Take(take)
-                    .ToListAsync();
-
-                var total = await _db.Invoices
-                    .Where(i => i.UserId == currentUserId)
-                    .CountAsync();
-
-                var invoiceList = new List<InvoiceResponseDto>();
-                foreach (var invoice in invoices)
-                {
-                    invoiceList.Add(await MapToInvoiceResponseDtoAsync(invoice));
-                }
+                // Gọi service để lấy danh sách hóa đơn
+                var (items, total) = await _invoiceService.GetUserInvoicesAsync(currentUserId, skip, take);
 
                 return Ok(new
                 {
                     total = total,
                     skip = skip,
                     take = take,
-                    items = invoiceList
+                    items = items
                 });
             }
             catch (Exception ex)
@@ -224,33 +165,15 @@ namespace EVCharging.BE.API.Controllers
                     return StatusCode(403, new { message = "Bạn chỉ có thể xem hóa đơn của chính mình." });
                 }
 
-                var invoices = await _db.Invoices
-                    .Include(i => i.InvoiceItems)
-                        .ThenInclude(item => item.Session!)
-                            .ThenInclude(s => s.Point)
-                                .ThenInclude(p => p.Station)
-                    .Where(i => i.UserId == userId)
-                    .OrderByDescending(i => i.CreatedAt)
-                    .Skip(skip)
-                    .Take(take)
-                    .ToListAsync();
-
-                var total = await _db.Invoices
-                    .Where(i => i.UserId == userId)
-                    .CountAsync();
-
-                var invoiceList = new List<InvoiceResponseDto>();
-                foreach (var invoice in invoices)
-                {
-                    invoiceList.Add(await MapToInvoiceResponseDtoAsync(invoice));
-                }
+                // Gọi service để lấy danh sách hóa đơn
+                var (items, total) = await _invoiceService.GetUserInvoicesAsync(userId, skip, take);
 
                 return Ok(new
                 {
                     total = total,
                     skip = skip,
                     take = take,
-                    items = invoiceList
+                    items = items
                 });
             }
             catch (Exception ex)
@@ -261,55 +184,6 @@ namespace EVCharging.BE.API.Controllers
                     error = ex.Message 
                 });
             }
-        }
-
-        /// <summary>
-        /// Map Invoice entity sang InvoiceResponseDto
-        /// </summary>
-        private async Task<InvoiceResponseDto> MapToInvoiceResponseDtoAsync(Invoice invoice)
-        {
-            var firstItem = invoice.InvoiceItems.FirstOrDefault();
-            var session = firstItem?.Session;
-
-            // Lấy phương thức thanh toán từ bảng Payments
-            var payment = await _db.Payments
-                .Where(p => p.InvoiceNumber == invoice.InvoiceNumber && p.PaymentStatus == "success")
-                .OrderByDescending(p => p.CreatedAt)
-                .FirstOrDefaultAsync();
-
-            return new InvoiceResponseDto
-            {
-                InvoiceId = invoice.InvoiceId,
-                InvoiceNumber = invoice.InvoiceNumber,
-                UserId = invoice.UserId,
-                TotalAmount = invoice.TotalAmount,
-                Status = invoice.Status,
-                PaymentMethod = payment?.PaymentMethod, // wallet hoặc cash
-                CreatedAt = invoice.CreatedAt,
-                PaidAt = invoice.PaidAt,
-                Items = invoice.InvoiceItems.Select(item => new InvoiceItemDto
-                {
-                    ItemId = item.ItemId,
-                    SessionId = item.SessionId,
-                    Description = item.Description,
-                    Quantity = item.Quantity,
-                    UnitPrice = item.UnitPrice,
-                    Amount = item.Amount
-                }).ToList(),
-                SessionInfo = session != null ? new SessionInfoDto
-                {
-                    SessionId = session.SessionId,
-                    StationName = session.Point?.Station?.Name,
-                    StationAddress = session.Point?.Station?.Address,
-                    EnergyUsed = session.EnergyUsed,
-                    DurationMinutes = session.DurationMinutes,
-                    CostBeforeDiscount = session.CostBeforeDiscount,
-                    AppliedDiscount = session.AppliedDiscount,
-                    FinalCost = session.FinalCost,
-                    StartTime = session.StartTime,
-                    EndTime = session.EndTime
-                } : null
-            };
         }
     }
 }

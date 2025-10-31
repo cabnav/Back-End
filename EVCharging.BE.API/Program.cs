@@ -131,6 +131,8 @@ builder.Services.AddScoped<IAdminStaffService, AdminStaffService>();
 
 // Payments
 builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 // ➕ MockPay (QR giả lập)
 builder.Services.AddScoped<IMockPayService, MockPayService>();
 
