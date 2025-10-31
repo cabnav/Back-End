@@ -125,6 +125,9 @@ builder.Services.AddHostedService<ReservationReminderWorker>();
 // Staff
 builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
 
+// Admin - Staff Management
+builder.Services.AddScoped<IAdminStaffService, AdminStaffService>();
+
 // Payments
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
@@ -143,6 +146,8 @@ builder.Services.AddScoped<IAdminService, AdminService>();
 // Common
 builder.Services.AddHttpClient<ILocationService, LocationService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
+builder.Services.AddScoped<IInteractiveMapService, InteractiveMapService>();
+
 
 // ------------------------------
 // 5) AuthN/AuthZ (JWT)
