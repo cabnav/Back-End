@@ -110,6 +110,24 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/payments/user/1?skip=0&take=20
 Authorization: Bearer {{token}}
 
+# ====== INVOICE OPERATIONS ======
+
+### 8.1. Lấy hóa đơn theo InvoiceId
+GET {{baseUrl}}/invoices/1
+Authorization: Bearer {{token}}
+
+### 8.2. Lấy hóa đơn theo SessionId (Xuất hóa đơn sau khi thanh toán)
+GET {{baseUrl}}/invoices/session/1
+Authorization: Bearer {{token}}
+
+### 8.3. Lấy danh sách hóa đơn của người dùng hiện tại
+GET {{baseUrl}}/invoices/my-invoices?skip=0&take=20
+Authorization: Bearer {{token}}
+
+### 8.4. Lấy danh sách hóa đơn của một user
+GET {{baseUrl}}/invoices/user/1?skip=0&take=20
+Authorization: Bearer {{token}}
+
 ### 8. Kiểm tra số dư ví
 GET {{baseUrl}}/payments/wallet/balance
 Authorization: Bearer {{token}}
