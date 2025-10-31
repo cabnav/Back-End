@@ -33,15 +33,24 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                // Validate inputs
                 if (!await ValidateChargingPointAsync(request.ChargingPointId))
+                {
+                    Console.WriteLine("⚠️ Charging point validation failed");
                     return null;
+                }
 
                 if (!await ValidateDriverAsync(request.DriverId))
+                {
+                    Console.WriteLine("⚠️ Driver validation failed");
                     return null;
+                }
 
                 if (!await CanStartSessionAsync(request.ChargingPointId, request.DriverId))
+                {
+                    Console.WriteLine("⚠️ Cannot start session (maybe active session exists or point busy)");
                     return null;
+                }
+
 
                 // Get charging point and driver info
                 var chargingPoint = await _db.ChargingPoints
@@ -49,7 +58,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
 
                 var driver = await _db.DriverProfiles
-                    .Include(d => d.User)
+                    .Include(d => d.User)   
                     .FirstOrDefaultAsync(d => d.DriverId == request.DriverId);
 
                 if (chargingPoint == null || driver == null)
@@ -307,20 +316,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 };
 
                 _db.SessionLogs.Add(sessionLog);
-                await _db.SaveChangesAsync();
 
-                // Update session progress
+                // Update session energy usage if provided (trực tiếp, không gọi service khác để tránh vòng lặp)
                 if (request.SOCPercentage.HasValue || request.CurrentPower.HasValue)
                 {
-                    await _sessionMonitorService.UpdateSessionDataAsync(
-                        request.SessionId,
-                        request.SOCPercentage ?? 0,
-                        request.CurrentPower ?? 0,
-                        request.Voltage ?? 0,
-                        request.Temperature ?? 0
-                    );
+                    var session = await _db.ChargingSessions.FindAsync(request.SessionId);
+                    if (session != null && session.Status == "in_progress")
+                    {
+                        var timeElapsed = DateTime.UtcNow - session.StartTime;
+                        var energyUsed = (decimal)((double)(request.CurrentPower ?? 0) * timeElapsed.TotalHours);
+                        session.EnergyUsed = energyUsed;
+                    }
                 }
 
+                await _db.SaveChangesAsync();
                 return true;
             }
             catch (Exception ex)
@@ -371,17 +380,18 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (session == null || session.Status != "in_progress")
                     return false;
 
-                // Create session log
-                var logRequest = new SessionLogCreateRequest
+                // Tạo session log trực tiếp (không gọi CreateSessionLogAsync để tránh vòng lặp)
+                var sessionLog = new SessionLog
                 {
                     SessionId = sessionId,
-                    SOCPercentage = soc,
+                    SocPercentage = soc,
                     CurrentPower = power,
                     Voltage = voltage,
-                    Temperature = temperature
+                    Temperature = temperature,
+                    LogTime = DateTime.UtcNow
                 };
 
-                await CreateSessionLogAsync(logRequest);
+                _db.SessionLogs.Add(sessionLog);
 
                 // Update session energy usage (simplified calculation)
                 var timeElapsed = DateTime.UtcNow - session.StartTime;
@@ -521,8 +531,66 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     Temperature = log.Temperature,
                     LogTime = log.LogTime
                 }).ToList() ?? new List<SessionLogDTO>(),
+                
+                // Tính toán currentSOC, currentPower từ log mới nhất hoặc ước tính
+                CurrentSOC = CalculateCurrentSOC(session),
+                CurrentPower = CalculateCurrentPower(session),
+                Voltage = session.SessionLogs?.OrderByDescending(l => l.LogTime).FirstOrDefault()?.Voltage,
+                Temperature = session.SessionLogs?.OrderByDescending(l => l.LogTime).FirstOrDefault()?.Temperature,
+                
                 LastUpdated = DateTime.UtcNow
             };
+        }
+
+        /// <summary>
+        /// Tính currentSOC từ log mới nhất hoặc ước tính từ thời gian
+        /// </summary>
+        private int? CalculateCurrentSOC(ChargingSession session)
+        {
+            // Nếu có log, lấy từ log mới nhất
+            var latestLog = session.SessionLogs?.OrderByDescending(l => l.LogTime).FirstOrDefault();
+            if (latestLog?.SocPercentage.HasValue == true)
+            {
+                return latestLog.SocPercentage.Value;
+            }
+
+            // Nếu chưa có log, ước tính từ thời gian và công suất
+            if (session.Status == "in_progress" && session.Driver?.BatteryCapacity.HasValue == true && session.Point?.PowerOutput.HasValue == true)
+            {
+                var duration = DateTime.UtcNow - session.StartTime;
+                var batteryCapacity = (decimal)session.Driver.BatteryCapacity.Value;
+                var powerOutput = (decimal)session.Point.PowerOutput.Value;
+
+                // Tính năng lượng có thể sạc được (không vượt quá dung lượng còn lại)
+                var maxEnergyAvailable = batteryCapacity * (100 - session.InitialSoc) / 100;
+                var estimatedEnergy = (decimal)duration.TotalHours * powerOutput;
+                var actualEnergy = Math.Min(estimatedEnergy, maxEnergyAvailable);
+
+                // Tính % SOC tăng thêm
+                var socIncrease = (actualEnergy / batteryCapacity) * 100;
+                var estimatedSOC = session.InitialSoc + (int)socIncrease;
+
+                // Không vượt quá 100%
+                return Math.Min(estimatedSOC, 100);
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Tính currentPower từ log mới nhất hoặc dùng PowerOutput
+        /// </summary>
+        private decimal? CalculateCurrentPower(ChargingSession session)
+        {
+            // Nếu có log, lấy từ log mới nhất
+            var latestLog = session.SessionLogs?.OrderByDescending(l => l.LogTime).FirstOrDefault();
+            if (latestLog?.CurrentPower.HasValue == true)
+            {
+                return latestLog.CurrentPower.Value;
+            }
+
+            // Nếu chưa có log, dùng PowerOutput của điểm sạc
+            return session.Point?.PowerOutput;
         }
     }
 }

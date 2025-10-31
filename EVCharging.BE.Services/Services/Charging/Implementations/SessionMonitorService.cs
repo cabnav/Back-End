@@ -31,8 +31,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (_monitoringTimers.ContainsKey(sessionId))
                     return; // Already monitoring
 
-                // Create timer to check session every 30 seconds
-                var timer = new Timer(async _ => await MonitorSessionAsync(sessionId), null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+                // Create timer to check session every 1 minutes
+                var timer = new Timer(async _ => await MonitorSessionAsync(sessionId), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
                 _monitoringTimers[sessionId] = timer;
 
                 Console.WriteLine($"Started monitoring session {sessionId}");

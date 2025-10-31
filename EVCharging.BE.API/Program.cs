@@ -1,6 +1,7 @@
 ﻿using EVCharging.BE.API.Hubs;
 using EVCharging.BE.DAL;
-using EVCharging.BE.Services.Services;
+using EVCharging.BE.Services.Services.Staff;
+using EVCharging.BE.Services.Services.Staff.Implementations;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Admin.Implementations;
 using EVCharging.BE.Services.Services.Auth;
@@ -121,6 +122,9 @@ builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.G
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 
+// Staff
+builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
+
 // Payments
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IVNPayService, VNPayService>();
@@ -137,7 +141,7 @@ builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationServi
 builder.Services.AddScoped<IAdminService, AdminService>();
 
 // Common
-builder.Services.AddScoped<ILocationService, LocationService>();
+builder.Services.AddHttpClient<ILocationService, LocationService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 
 // ------------------------------
@@ -235,4 +239,4 @@ app.MapHub<ChargingSessionHub>("/chargingHub");
 // Controllers
 app.MapControllers();
 
-app.Run();
+    app.Run();
