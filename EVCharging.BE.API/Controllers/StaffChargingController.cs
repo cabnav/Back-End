@@ -11,7 +11,7 @@ namespace EVCharging.BE.API.Controllers
     /// </summary>
     [Route("api/staff/charging")]
     [ApiController]
-    [Authorize(Roles = "Staff")]
+    [Authorize(Policy = "StaffPolicy")]
     public class StaffChargingController : ControllerBase
     {
         private readonly IStaffChargingService _staffChargingService;
@@ -259,113 +259,21 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
-        /// <summary>
-        /// Lấy chi tiết phiên sạc cụ thể
-        /// GET /api/staff/charging/sessions/{sessionId}
-        /// </summary>
-        [HttpGet("sessions/{sessionId}")]
-        public async Task<IActionResult> GetSessionDetail(int sessionId)
-        {
-            try
-            {
-                var staffId = GetStaffIdFromToken();
-                if (staffId == 0)
-                    return Unauthorized(new { message = "Invalid staff token" });
-
-                var session = await _staffChargingService.GetSessionDetailAsync(staffId, sessionId);
-                if (session == null)
-                {
-                    return NotFound(new { 
-                        message = "Session not found or you don't have access to this session" 
-                    });
-                }
-
-                return Ok(new { 
-                    message = "Session details retrieved successfully", 
-                    data = session 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    message = "An error occurred while retrieving session details", 
-                    error = ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Kiểm tra staff có access vào station không
-        /// GET /api/staff/charging/verify-access/{stationId}
-        /// </summary>
-        [HttpGet("verify-access/{stationId}")]
-        public async Task<IActionResult> VerifyStationAccess(int stationId)
-        {
-            try
-            {
-                var staffId = GetStaffIdFromToken();
-                if (staffId == 0)
-                    return Unauthorized(new { message = "Invalid staff token" });
-
-                var hasAccess = await _staffChargingService.VerifyStaffAssignmentAsync(staffId, stationId);
-                
-                return Ok(new { 
-                    hasAccess = hasAccess,
-                    message = hasAccess 
-                        ? "Staff has access to this station" 
-                        : "Staff does not have access to this station or shift not active"
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    message = "An error occurred while verifying access", 
-                    error = ex.Message 
-                });
-            }
-        }
-
-        /// <summary>
-        /// Lấy danh sách stations được assigned
-        /// GET /api/staff/charging/my-stations
-        /// </summary>
-        [HttpGet("my-stations")]
-        public async Task<IActionResult> GetMyStations()
-        {
-            try
-            {
-                var staffId = GetStaffIdFromToken();
-                if (staffId == 0)
-                    return Unauthorized(new { message = "Invalid staff token" });
-
-                var stationIds = await _staffChargingService.GetAssignedStationsAsync(staffId);
-                
-                return Ok(new { 
-                    message = "Assigned stations retrieved successfully", 
-                    data = stationIds,
-                    count = stationIds.Count 
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    message = "An error occurred while retrieving assigned stations", 
-                    error = ex.Message 
-                });
-            }
-        }
-
         // ========== HELPER METHODS ==========
 
         /// <summary>
-        /// Lấy Staff ID từ JWT token
+        /// Lấy User ID từ JWT token
+        /// Note: Staff không có bảng riêng. Staff là User có role="Staff"
+        /// StationStaff.StaffId = User.UserId (foreign key)
         /// </summary>
         private int GetStaffIdFromToken()
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int staffId))
+            if (userIdClaim != null && int.TryParse(userIdClaim.Value, out int userId))
             {
-                return staffId;
+                // userId này sẽ được dùng như staffId trong StationStaff.StaffId
+                // Vì StationStaff.StaffId là foreign key đến User.UserId
+                return userId;
             }
             return 0;
         }

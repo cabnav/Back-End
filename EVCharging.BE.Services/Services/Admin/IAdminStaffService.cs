@@ -83,8 +83,16 @@ namespace EVCharging.BE.Services.Services.Admin
         /// <param name="userId">ID của user</param>
         /// <returns>True nếu là staff</returns>
         Task<bool> IsStaffAsync(int userId);
+
+        /// <summary>
+        /// Set user thành staff (update role = "Staff")
+        /// </summary>
+        /// <param name="userId">ID của user cần set thành staff</param>
+        /// <returns>True nếu thành công</returns>
+        Task<bool> SetUserAsStaffAsync(int userId);
     }
 }
+
 
 
 

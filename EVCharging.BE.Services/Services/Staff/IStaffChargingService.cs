@@ -12,16 +12,19 @@ namespace EVCharging.BE.Services.Services.Staff
         
         /// <summary>
         /// Kiểm tra staff có được assigned vào trạm này không
+        /// Note: staffId is actually userId (User.UserId) of a user with role="Staff"
+        /// StationStaff.StaffId is a foreign key to User.UserId (no separate Staff table)
         /// </summary>
-        /// <param name="staffId">ID của staff</param>
+        /// <param name="staffId">User ID của staff (User.UserId where role="Staff")</param>
         /// <param name="stationId">ID của trạm</param>
         /// <returns>True nếu staff được assigned và đang trong ca làm việc</returns>
         Task<bool> VerifyStaffAssignmentAsync(int staffId, int stationId);
 
         /// <summary>
         /// Lấy danh sách trạm mà staff đang được assigned (trong ca làm việc)
+        /// Note: staffId is actually userId (User.UserId) of a user with role="Staff"
         /// </summary>
-        /// <param name="staffId">ID của staff</param>
+        /// <param name="staffId">User ID của staff (User.UserId where role="Staff")</param>
         /// <returns>Danh sách station IDs</returns>
         Task<List<int>> GetAssignedStationsAsync(int staffId);
 
@@ -101,6 +104,8 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <param name="sessionId">ID phiên sạc liên quan</param>
         /// <param name="details">Chi tiết bổ sung</param>
         Task LogStaffActionAsync(int staffId, string action, int sessionId, string? details = null);
+        Task<int> GetStaffIdByUserIdAsync(int userId);
+
     }
 }
 
