@@ -363,6 +363,32 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
             }
         }
 
+        /// <summary>
+        /// Set user thành staff (update role = "Staff")
+        /// </summary>
+        public async Task<bool> SetUserAsStaffAsync(int userId)
+        {
+            try
+            {
+                var user = await _db.Users.FindAsync(userId);
+                if (user == null)
+                {
+                    throw new ArgumentException($"User with ID {userId} not found");
+                }
+
+                // Update role to Staff
+                user.Role = "staff";
+                await _db.SaveChangesAsync();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error setting user as staff: {ex.Message}");
+                throw;
+            }
+        }
+
         // ========== HELPER METHODS ==========
 
         private StaffAssignmentResponse MapToResponse(StationStaff assignment)

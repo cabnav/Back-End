@@ -11,7 +11,7 @@ namespace EVCharging.BE.API.Controllers
     /// </summary>
     [Route("api/admin/staff")]
     [ApiController]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = "AdminPolicy")]
     public class AdminStaffManagementController : ControllerBase
     {
         private readonly IAdminStaffService _adminStaffService;
@@ -254,6 +254,41 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
+        /// Set user thành staff (update role = "Staff")
+        /// POST /api/admin/staff/set-as-staff/{userId}
+        /// </summary>
+        [HttpPost("set-as-staff/{userId}")]
+        public async Task<IActionResult> SetUserAsStaff(int userId)
+        {
+            try
+            {
+                var result = await _adminStaffService.SetUserAsStaffAsync(userId);
+                if (!result)
+                {
+                    return BadRequest(new { message = "Failed to set user as staff" });
+                }
+
+                return Ok(new
+                {
+                    message = "User has been set as staff successfully",
+                    data = new { userId = userId, role = "staff" }
+                });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "An error occurred while setting user as staff",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
         /// Kiểm tra có thể assign staff không (validate conflict)
         /// GET /api/admin/staff/assignments/validate
         /// </summary>
@@ -289,6 +324,7 @@ namespace EVCharging.BE.API.Controllers
         }
     }
 }
+
 
 
 

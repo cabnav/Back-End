@@ -31,14 +31,26 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
 
         // ========== STATION ASSIGNMENT & VERIFICATION ==========
 
+        /// <summary>
+        /// Verify staff assignment
+        /// Note: staffId here is actually userId (User.UserId) of a user with role="Staff"
+        /// StationStaff.StaffId is a foreign key to User.UserId
+        /// </summary>
         public async Task<bool> VerifyStaffAssignmentAsync(int staffId, int stationId)
         {
             try
             {
+                // First verify user is actually a staff
+                var user = await _db.Users.FindAsync(staffId);
+                if (user == null || !user.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
                 var now = DateTime.UtcNow;
                 var assignment = await _db.StationStaffs
                     .FirstOrDefaultAsync(ss =>
-                        ss.StaffId == staffId &&
+                        ss.StaffId == staffId &&  // StaffId = UserId (foreign key)
                         ss.StationId == stationId &&
                         ss.Status == "active" &&
                         ss.ShiftStart <= now &&
@@ -53,14 +65,25 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        /// <summary>
+        /// Get assigned stations for a staff
+        /// Note: staffId is actually userId (User.UserId) of a user with role="Staff"
+        /// </summary>
         public async Task<List<int>> GetAssignedStationsAsync(int staffId)
         {
             try
             {
+                // Verify user is actually a staff
+                var user = await _db.Users.FindAsync(staffId);
+                if (user == null || !user.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new List<int>();
+                }
+
                 var now = DateTime.UtcNow;
                 var assignments = await _db.StationStaffs
                     .Where(ss =>
-                        ss.StaffId == staffId &&
+                        ss.StaffId == staffId &&  // StaffId = UserId (foreign key)
                         ss.Status == "active" &&
                         ss.ShiftStart <= now &&
                         ss.ShiftEnd >= now)
@@ -76,6 +99,10 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        /// <summary>
+        /// Get station info for staff
+        /// Note: staffId is actually userId (User.UserId) of a user with role="Staff"
+        /// </summary>
         public async Task<StationInfo?> GetMyStationInfoAsync(int staffId)
         {
             try
@@ -569,6 +596,31 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
         }
 
         // ========== LOGGING & AUDIT ==========
+
+        /// <summary>
+        /// Get staff ID by user ID
+        /// Note: Since there's no separate Staff table, staffId = userId for users with role="Staff"
+        /// This method verifies the user is a staff and returns the userId (which is used as staffId)
+        /// </summary>
+        public async Task<int> GetStaffIdByUserIdAsync(int userId)
+        {
+            try
+            {
+                var user = await _db.Users.FindAsync(userId);
+                if (user == null || !user.Role.Equals("Staff", StringComparison.OrdinalIgnoreCase))
+                {
+                    return 0; // Not a staff
+                }
+
+                // In this system, staffId = userId (no separate Staff table)
+                return userId;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting staff ID by user ID: {ex.Message}");
+                return 0;
+            }
+        }
 
         public async Task LogStaffActionAsync(int staffId, string action, int sessionId, string? details = null)
         {

@@ -15,18 +15,15 @@ namespace EVCharging.BE.API.Controllers
     public class ChargingSessionsController : ControllerBase
     {
         private readonly IChargingService _chargingService;
-        private readonly ICostCalculationService _costCalculationService;
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly ISignalRNotificationService _signalRService;
 
         public ChargingSessionsController(
             IChargingService chargingService,
-            ICostCalculationService costCalculationService,
             ISessionMonitorService sessionMonitorService,
             ISignalRNotificationService signalRService)
         {
             _chargingService = chargingService;
-            _costCalculationService = costCalculationService;
             _sessionMonitorService = sessionMonitorService;
             _signalRService = signalRService;
         }
@@ -95,34 +92,6 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
-        /// <summary>
-        /// Cập nhật trạng thái phiên sạc
-        /// </summary>
-        /// <param name="request">Thông tin cập nhật trạng thái</param>
-        /// <returns>Thông tin phiên sạc đã cập nhật</returns>
-        [HttpPut("status")]
-        public async Task<IActionResult> UpdateSessionStatus([FromBody] ChargingSessionStatusRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
-                }
-
-                var result = await _chargingService.UpdateSessionStatusAsync(request);
-                if (result == null)
-                {
-                    return BadRequest(new { message = "Failed to update session status. Session may not exist." });
-                }
-
-                return Ok(new { message = "Session status updated successfully", data = result });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while updating session status", error = ex.Message });
-            }
-        }
 
         /// <summary>
         /// Lấy thông tin phiên sạc theo ID
@@ -204,34 +173,6 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
-        /// <summary>
-        /// Tạo log cho phiên sạc
-        /// </summary>
-        /// <param name="request">Thông tin log</param>
-        /// <returns>Kết quả tạo log</returns>
-        [HttpPost("logs")]
-        public async Task<IActionResult> CreateSessionLog([FromBody] SessionLogCreateRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
-                }
-
-                var result = await _chargingService.CreateSessionLogAsync(request);
-                if (!result)
-                {
-                    return BadRequest(new { message = "Failed to create session log" });
-                }
-
-                return Ok(new { message = "Session log created successfully" });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while creating session log", error = ex.Message });
-            }
-        }
 
         /// <summary>
         /// Lấy logs của phiên sạc
@@ -252,72 +193,8 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
-        /// <summary>
-        /// Tính toán chi phí sạc
-        /// </summary>
-        /// <param name="request">Thông tin tính toán chi phí</param>
-        /// <returns>Kết quả tính toán chi phí</returns>
-        [HttpPost("calculate-cost")]
-        public async Task<IActionResult> CalculateCost([FromBody] CostCalculationRequest request)
-        {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
-                }
 
-                var result = await _costCalculationService.CalculateCostAsync(request);
-                return Ok(new { data = result });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while calculating cost", error = ex.Message });
-            }
-        }
 
-        /// <summary>
-        /// Lấy trạng thái real-time của phiên sạc
-        /// </summary>
-        /// <param name="sessionId">ID phiên sạc</param>
-        /// <returns>Trạng thái real-time</returns>
-        [HttpGet("{sessionId}/status")]
-        public async Task<IActionResult> GetSessionStatus(int sessionId)
-        {
-            try
-            {
-                var result = await _sessionMonitorService.GetSessionStatusAsync(sessionId);
-                if (result == null)
-                {
-                    return NotFound(new { message = "Session not found or not active" });
-                }
-
-                return Ok(new { data = result });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving session status", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy analytics của phiên sạc
-        /// </summary>
-        /// <param name="sessionId">ID phiên sạc</param>
-        /// <returns>Analytics data</returns>
-        [HttpGet("{sessionId}/analytics")]
-        public async Task<IActionResult> GetSessionAnalytics(int sessionId)
-        {
-            try
-            {
-                var result = await _sessionMonitorService.GetSessionAnalyticsAsync(sessionId);
-                return Ok(new { data = result });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving session analytics", error = ex.Message });
-            }
-        }
 
         /// <summary>
         /// Ước tính thời gian còn lại

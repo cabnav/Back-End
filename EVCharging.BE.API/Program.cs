@@ -177,7 +177,22 @@ builder.Services.AddAuthentication(options =>
         ClockSkew = TimeSpan.FromMinutes(1)
     };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    // Add case-insensitive role policy for Staff
+    options.AddPolicy("StaffPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("Staff") || 
+            context.User.IsInRole("staff") ||
+            context.User.IsInRole("STAFF")));
+    
+    // Add case-insensitive role policy for Admin
+    options.AddPolicy("AdminPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("Admin") || 
+            context.User.IsInRole("admin") ||
+            context.User.IsInRole("ADMIN")));
+});
 
 // ------------------------------
 // 6) SignalR
