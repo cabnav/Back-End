@@ -136,6 +136,9 @@ builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 // ➕ MockPay (QR giả lập)
 builder.Services.AddScoped<IMockPayService, MockPayService>();
+// ➕ MoMo Payment
+builder.Services.Configure<EVCharging.BE.Common.DTOs.Payments.MomoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Payment.IMomoService, EVCharging.BE.Services.Services.Payment.Implementations.MomoService>();
 
 // Notifications
 builder.Services.AddScoped<IEmailService, EmailService>();
