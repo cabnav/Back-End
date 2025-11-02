@@ -1,6 +1,8 @@
 using EVCharging.BE.Common.DTOs.Reservations;
 using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using EVCharging.BE.Services.Services.Background;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,10 +16,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
     public class StationSearchService : IStationSearchService
     {
         private readonly EvchargingManagementContext _db;
+        private readonly ReservationBackgroundOptions _opt;
 
-        public StationSearchService(EvchargingManagementContext db)
+        public StationSearchService(EvchargingManagementContext db, IOptions<ReservationBackgroundOptions> opt)
         {
             _db = db;
+            _opt = opt.Value;
         }
 
         /// <summary>
@@ -148,7 +152,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             // Tạo 24 khung giờ trong ngày
             for (int hour = 0; hour < 24; hour++)
             {
-                var startTime = date.Date.AddHours(hour);
+                // Chuẩn hóa về UTC để so sánh nhất quán
+                var dateUtc = date.Kind == DateTimeKind.Utc
+                    ? date
+                    : DateTime.SpecifyKind(date, DateTimeKind.Utc);
+
+                var startTime = dateUtc.Date.AddHours(hour);
                 var endTime = startTime.AddHours(1);
 
                 // Kiểm tra xem khung giờ này có bị đặt chỗ không
@@ -159,17 +168,20 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     .AnyAsync();
 
                 // Kiểm tra xem có trong quá khứ không (chỉ block slot đã kết thúc + buffer 5 phút)
-                var now = DateTime.Now;
+                var now = DateTime.UtcNow;
                 var bufferMinutes = 5;
                 var cutoffTime = now.AddMinutes(bufferMinutes);
                 var isInPast = endTime <= cutoffTime;
+
+                // Không cho đặt nếu đã quá BookingCutoff kể từ start (ví dụ 15 phút)
+                var tooLateToBook = now > startTime.AddMinutes(_opt.BookingCutoffMinutes);
 
                 timeSlots.Add(new TimeSlotDTO
                 {
                     Hour = hour,
                     StartTime = startTime,
                     EndTime = endTime,
-                    IsAvailable = !hasReservation && !isInPast,
+                    IsAvailable = !hasReservation && !isInPast && !tooLateToBook,
                     AvailablePointsCount = hasReservation ? 0 : 1 // Đơn giản hóa, mỗi điểm sạc chỉ có 1 cổng
                 });
             }

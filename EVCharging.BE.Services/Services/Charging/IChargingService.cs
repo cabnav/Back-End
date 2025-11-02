@@ -66,7 +66,7 @@ namespace EVCharging.BE.Services.Services.Charging
         /// <summary>
         /// Validate charging point availability
         /// </summary>
-        Task<bool> ValidateChargingPointAsync(int chargingPointId);
+        Task<bool> ValidateChargingPointAsync(int chargingPointId, DateTime? scheduledStartTime = null);
         
         /// <summary>
         /// Validate driver exists and has user account
@@ -76,6 +76,6 @@ namespace EVCharging.BE.Services.Services.Charging
         /// <summary>
         /// Kiểm tra có thể bắt đầu phiên sạc không (driver không có session active, point available)
         /// </summary>
-        Task<bool> CanStartSessionAsync(int chargingPointId, int driverId);
+        Task<bool> CanStartSessionAsync(int chargingPointId, int driverId, DateTime? scheduledStartTime = null);
     }
 }

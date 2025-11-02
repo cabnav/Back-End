@@ -21,5 +21,11 @@ namespace EVCharging.BE.Common.DTOs.Charging
         public string QrCode { get; set; } = string.Empty;
 
         public string? Notes { get; set; }
+
+        // Optional: cho phép set thời điểm bắt đầu (UTC) – dùng cho check-in theo reservation
+        public DateTime? StartAtUtc { get; set; }
+
+        // Optional: gắn mã reservation phục vụ trace/audit
+        public string? ReservationCode { get; set; }
     }
 }
