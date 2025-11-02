@@ -122,6 +122,7 @@ builder.Services.AddScoped<IStationSearchService, StationSearchService>();
 builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.GetSection("ReservationBackground"));
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
+builder.Services.AddHostedService<SessionAutoStopWorker>();
 
 // Staff
 builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();

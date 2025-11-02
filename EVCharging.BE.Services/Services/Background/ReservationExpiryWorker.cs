@@ -41,10 +41,11 @@ namespace EVCharging.BE.Services.Services.Background
                     await using var db = await _dbFactory.CreateDbContextAsync(stoppingToken);
 
                     var now = DateTime.UtcNow;
-                    var graceBorder = now.AddMinutes(-_opt.ExpireGraceMinutes);
 
+                    // 1) Auto-cancel NO-SHOW: quá StartTime + NoShowGraceMinutes mà chưa check-in
+                    var noShowBorder = now.AddMinutes(-_opt.NoShowGraceMinutes);
                     var toCancel = await db.Reservations
-                        .Where(r => r.Status == "booked" && r.EndTime < graceBorder)
+                        .Where(r => r.Status == "booked" && r.StartTime < noShowBorder)
                         .ToListAsync(stoppingToken);
 
                     if (toCancel.Count > 0)

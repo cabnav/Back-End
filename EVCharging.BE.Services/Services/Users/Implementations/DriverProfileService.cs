@@ -56,6 +56,10 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             if (driverProfile != null)
                 throw new InvalidOperationException("User đã có DriverProfile");
 
+            // Validate BatteryCapacity > 0
+            if (req.BatteryCapacity.HasValue && req.BatteryCapacity.Value <= 0)
+                throw new ArgumentException("BatteryCapacity must be greater than 0");
+
             var entity = new DriverProfile
             {
                 UserId = req.UserId,
@@ -75,6 +79,10 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
         {
             var d = await _db.DriverProfiles.FindAsync(id);
             if (d == null) return false;
+
+            // Validate BatteryCapacity > 0 nếu có value
+            if (req.BatteryCapacity.HasValue && req.BatteryCapacity.Value <= 0)
+                throw new ArgumentException("BatteryCapacity must be greater than 0");
 
             if (!string.IsNullOrWhiteSpace(req.LicenseNumber)) d.LicenseNumber = req.LicenseNumber;
             if (!string.IsNullOrWhiteSpace(req.VehicleModel)) d.VehicleModel = req.VehicleModel;

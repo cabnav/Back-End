@@ -136,6 +136,35 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (entity.Driver != null)
                 await _db.Entry(entity.Driver).Reference(d => d.User).LoadAsync();
 
+            // Gửi thông báo cho người dùng (English)
+            try
+            {
+                var userIdForNotification = entity.Driver?.User?.UserId;
+                if (userIdForNotification.HasValue)
+                {
+                    var startIso = entity.StartTime.ToString("o");
+                    var stationName = entity.Point?.Station?.Name ?? "charging station";
+                    var title = "Reservation confirmed";
+                    var message = $"Your charging reservation is confirmed at {stationName}. Please arrive on time. The latest allowed check-in is within 30 minutes from the start time ({startIso} UTC).";
+
+                    _db.Notifications.Add(new EVCharging.BE.DAL.Entities.Notification
+                    {
+                        UserId = userIdForNotification.Value,
+                        Title = title,
+                        Message = message,
+                        Type = "reservation_created",
+                        IsRead = false,
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    await _db.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+                // best effort; không chặn flow nếu thông báo lỗi
+            }
+
             return MapToDto(entity);
         }
 
@@ -152,6 +181,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             if (filter.DriverId.HasValue)
                 q = q.Where(r => r.DriverId == filter.DriverId.Value);
+
+            if (filter.PointId.HasValue)
+                q = q.Where(r => r.PointId == filter.PointId.Value);
 
             if (filter.StationId.HasValue)
                 q = q.Where(r => r.Point.StationId == filter.StationId.Value);
@@ -191,8 +223,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             if (driverId == 0) return Enumerable.Empty<ReservationDTO>();
 
-            // Sử dụng local time cho nhất quán với các service khác
-            var now = DateTime.Now;
+            // Dùng UTC để nhất quán toàn hệ thống
+            var now = DateTime.UtcNow;
             var to = now.Add(horizon);
 
             var list = await _db.Reservations
@@ -298,6 +330,31 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 return null;
 
             return MapToDto(reservation);
+        }
+
+        /// <summary>
+        /// Đánh dấu reservation đã check-in (driver sở hữu)
+        /// </summary>
+        public async Task<bool> MarkCheckedInAsync(int userId, string reservationCode)
+        {
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return false;
+
+            var entity = await _db.Reservations
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+
+            if (entity == null)
+                return false;
+
+            entity.Status = "checked_in";
+            entity.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return true;
         }
 
         // -----------------------
