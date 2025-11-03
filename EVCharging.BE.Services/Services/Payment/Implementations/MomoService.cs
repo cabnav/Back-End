@@ -7,6 +7,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
 namespace EVCharging.BE.Services.Services.Payment.Implementations
@@ -19,15 +20,18 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
         private readonly IOptions<MomoOptionModel> _options;
         private readonly EvchargingManagementContext _db;
         private readonly IInvoiceService _invoiceService;
+        private readonly IConfiguration _configuration;
 
         public MomoService(
             IOptions<MomoOptionModel> options,
             EvchargingManagementContext db,
-            IInvoiceService invoiceService)
+            IInvoiceService invoiceService,
+            IConfiguration configuration)
         {
             _options = options;
             _db = db;
             _invoiceService = invoiceService;
+            _configuration = configuration;
         }
 
         public async Task<MomoCreatePaymentResponseDto> CreatePaymentAsync(MomoCreatePaymentRequestDto model)
@@ -125,9 +129,13 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             var localMessage = collection.FirstOrDefault(s => s.Key == "localMessage").Value.ToString() ?? string.Empty;
             var partnerCode = collection.FirstOrDefault(s => s.Key == "partnerCode").Value.ToString() ?? string.Empty;
             var extraData = collection.FirstOrDefault(s => s.Key == "extraData").Value.ToString() ?? string.Empty;
+            var orderType = collection.FirstOrDefault(s => s.Key == "orderType").Value.ToString() ?? string.Empty;
+            var responseTime = collection.FirstOrDefault(s => s.Key == "responseTime").Value.ToString() ?? string.Empty;
+            var payType = collection.FirstOrDefault(s => s.Key == "payType").Value.ToString() ?? string.Empty;
             var receivedSignature = collection.FirstOrDefault(s => s.Key == "signature").Value.ToString() ?? string.Empty;
 
-            // Tạo raw data để tính signature
+            // Tạo raw data để tính signature theo đúng format MoMo yêu cầu
+            // Lưu ý: MoMo sử dụng giá trị từ URL query params (có thể đã được URL decode bởi ASP.NET)
             var rawData =
                 $"partnerCode={partnerCode}" +
                 $"&accessKey={_options.Value.AccessKey}" +
@@ -135,16 +143,23 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 $"&amount={amount}" +
                 $"&orderId={orderId}" +
                 $"&orderInfo={orderInfo}" +
-                $"&orderType=" +
+                $"&orderType={orderType}" +
                 $"&transId={transId}" +
                 $"&message={message}" +
                 $"&localMessage={localMessage}" +
-                $"&responseTime=" +
+                $"&responseTime={responseTime}" +
                 $"&errorCode={errorCode}" +
-                $"&payType=" +
+                $"&payType={payType}" +
                 $"&extraData={extraData}";
 
             var computedSignature = ComputeHmacSha256(rawData, secretKey);
+
+            // Log để debug
+            Console.WriteLine($"🔐 Verify Signature:");
+            Console.WriteLine($"Raw Data: {rawData}");
+            Console.WriteLine($"Computed Signature: {computedSignature}");
+            Console.WriteLine($"Received Signature: {receivedSignature}");
+            Console.WriteLine($"Match: {computedSignature.Equals(receivedSignature, StringComparison.OrdinalIgnoreCase)}");
 
             return computedSignature.Equals(receivedSignature, StringComparison.OrdinalIgnoreCase);
         }
@@ -164,17 +179,24 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             return hashString;
         }
 
-        public async Task<MomoCallbackResult> ProcessCallbackAsync(IQueryCollection collection)
+        public async Task<MomoCallbackResultDto> ProcessCallbackAsync(IQueryCollection collection)
         {
             try
             {
                 var result = PaymentExecuteAsync(collection);
 
+                // Log để debug - log tất cả query params để kiểm tra
+                Console.WriteLine($"MoMo Callback - OrderId: {result.OrderId}, ResultCode (PaymentStatus): {result.PaymentStatus}, ErrorCode: {result.ErrorCode}, Amount: {result.Amount}");
+                Console.WriteLine($"All Query Params: {string.Join(", ", collection.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+
                 // Verify signature
                 var isValid = VerifySignature(collection, _options.Value.SecretKey);
                 if (!isValid)
                 {
-                    return new MomoCallbackResult
+                    var receivedSig = collection.FirstOrDefault(s => s.Key == "signature").Value.ToString() ?? "none";
+                    Console.WriteLine($"⚠️ Signature verification FAILED for OrderId: {result.OrderId}, Received signature: {receivedSig}");
+
+                    return new MomoCallbackResultDto
                     {
                         Success = false,
                         ErrorMessage = "Invalid signature",
@@ -182,11 +204,13 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     };
                 }
 
+                Console.WriteLine($"✅ Signature verification PASSED for OrderId: {result.OrderId}");
+
                 // Parse orderId để lấy sessionId
                 var orderIdParts = result.OrderId.Split('_');
                 if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
                 {
-                    return new MomoCallbackResult
+                    return new MomoCallbackResultDto
                     {
                         Success = false,
                         ErrorMessage = "Invalid orderId format",
@@ -200,7 +224,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                 if (payment == null)
                 {
-                    return new MomoCallbackResult
+                    return new MomoCallbackResultDto
                     {
                         Success = false,
                         ErrorMessage = "Payment not found",
@@ -211,22 +235,37 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 // Kiểm tra đã xử lý chưa
                 if (payment.PaymentStatus == "success")
                 {
-                    return new MomoCallbackResult
+                    // Lấy FrontendUrl từ config
+                    var frontendUrl = _configuration["AppSettings:FrontendUrl"]
+                        ?? _configuration["AppSettings:BaseUrl"]
+                        ?? "http://localhost:5172";
+
+                    return new MomoCallbackResultDto
                     {
                         Success = true,
-                        RedirectUrl = $"/payment/success?orderId={result.OrderId}",
+                        RedirectUrl = $"{frontendUrl}/payment/success?orderId={result.OrderId}",
                         OrderId = result.OrderId
                     };
                 }
 
                 // Kiểm tra kết quả thanh toán
-                if (result.PaymentStatus == "0") // 0 = thành công
+                // MoMo trả về: 
+                // - resultCode = "0" (thành công) 
+                // - hoặc errorCode = "0" (không có lỗi = thành công)
+                // Nếu không có resultCode trong URL thì kiểm tra errorCode
+                var isSuccess = (!string.IsNullOrEmpty(result.PaymentStatus) && result.PaymentStatus == "0") ||
+                               (!string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode == "0");
+
+                if (isSuccess)
                 {
+                    Console.WriteLine($"💰 Callback: Payment SUCCESS - OrderId: {result.OrderId}, PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}, ResultCode: {result.PaymentStatus}, ErrorCode: {result.ErrorCode}");
+
                     // Cập nhật payment status
                     payment.PaymentStatus = "success";
                     payment.CreatedAt = DateTime.UtcNow;
 
                     await _db.SaveChangesAsync();
+                    Console.WriteLine($"✅ Callback: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
                     // Tạo invoice nếu chưa có
                     if (payment.SessionId.HasValue)
@@ -246,13 +285,19 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                             // Cập nhật InvoiceNumber trong Payment
                             payment.InvoiceNumber = invoice.InvoiceNumber;
                             await _db.SaveChangesAsync();
+                            Console.WriteLine($"✅ Callback: Invoice created - InvoiceNumber: {invoice.InvoiceNumber}, SessionId: {payment.SessionId}");
                         }
                     }
 
-                    return new MomoCallbackResult
+                    // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
+                    var frontendUrl = _configuration["AppSettings:FrontendUrl"]
+                        ?? _configuration["AppSettings:BaseUrl"]
+                        ?? "http://localhost:5172";
+
+                    return new MomoCallbackResultDto
                     {
                         Success = true,
-                        RedirectUrl = $"/payment/success?orderId={result.OrderId}",
+                        RedirectUrl = $"{frontendUrl}/payment/success?orderId={result.OrderId}",
                         OrderId = result.OrderId
                     };
                 }
@@ -262,10 +307,15 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     payment.PaymentStatus = "failed";
                     await _db.SaveChangesAsync();
 
-                    return new MomoCallbackResult
+                    // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
+                    var frontendUrl = _configuration["AppSettings:FrontendUrl"]
+                        ?? _configuration["AppSettings:BaseUrl"]
+                        ?? "http://localhost:5172";
+
+                    return new MomoCallbackResultDto
                     {
                         Success = false,
-                        RedirectUrl = $"/payment/failed?orderId={result.OrderId}&errorCode={result.ErrorCode}",
+                        RedirectUrl = $"{frontendUrl}/payment/failed?orderId={result.OrderId}&errorCode={result.ErrorCode}",
                         OrderId = result.OrderId,
                         ErrorCode = result.ErrorCode,
                         ErrorMessage = "Payment failed"
@@ -274,7 +324,10 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             }
             catch (Exception ex)
             {
-                return new MomoCallbackResult
+                Console.WriteLine($"Error in ProcessCallbackAsync: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+
+                return new MomoCallbackResultDto
                 {
                     Success = false,
                     ErrorMessage = $"Error processing callback: {ex.Message}",
@@ -283,17 +336,24 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             }
         }
 
-        public async Task<MomoNotifyResult> ProcessNotifyAsync(IQueryCollection collection)
+        public async Task<MomoNotifyResultDto> ProcessNotifyAsync(IQueryCollection collection)
         {
             try
             {
                 var result = PaymentExecuteAsync(collection);
 
+                // Log để debug - log tất cả query params để kiểm tra
+                Console.WriteLine($"MoMo Notify - OrderId: {result.OrderId}, ResultCode (PaymentStatus): {result.PaymentStatus}, ErrorCode: {result.ErrorCode}, Amount: {result.Amount}");
+                Console.WriteLine($"All Query Params: {string.Join(", ", collection.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");
+
                 // Verify signature
                 var isValid = VerifySignature(collection, _options.Value.SecretKey);
                 if (!isValid)
                 {
-                    return new MomoNotifyResult
+                    var receivedSig = collection.FirstOrDefault(s => s.Key == "signature").Value.ToString() ?? "none";
+                    Console.WriteLine($"⚠️ Notify: Signature verification FAILED for OrderId: {result.OrderId}, Received signature: {receivedSig}");
+
+                    return new MomoNotifyResultDto
                     {
                         Success = false,
                         Message = "Invalid signature",
@@ -301,11 +361,13 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     };
                 }
 
+                Console.WriteLine($"✅ Notify: Signature verification PASSED for OrderId: {result.OrderId}");
+
                 // Parse orderId để lấy sessionId
                 var orderIdParts = result.OrderId.Split('_');
                 if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
                 {
-                    return new MomoNotifyResult
+                    return new MomoNotifyResultDto
                     {
                         Success = false,
                         Message = "Invalid orderId format",
@@ -319,7 +381,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                 if (payment == null)
                 {
-                    return new MomoNotifyResult
+                    return new MomoNotifyResultDto
                     {
                         Success = false,
                         Message = "Payment not found",
@@ -330,7 +392,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 // Kiểm tra đã xử lý chưa
                 if (payment.PaymentStatus == "success")
                 {
-                    return new MomoNotifyResult
+                    return new MomoNotifyResultDto
                     {
                         Success = true,
                         Message = "Payment already processed",
@@ -340,13 +402,22 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 }
 
                 // Kiểm tra kết quả thanh toán
-                if (result.PaymentStatus == "0") // 0 = thành công
+                // MoMo trả về: 
+                // - resultCode = "0" (thành công) 
+                // - hoặc errorCode = "0" (không có lỗi = thành công)
+                var isSuccess = (!string.IsNullOrEmpty(result.PaymentStatus) && result.PaymentStatus == "0") ||
+                               (!string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode == "0");
+
+                if (isSuccess)
                 {
+                    Console.WriteLine($"💰 Notify: Payment SUCCESS - OrderId: {result.OrderId}, PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}, ResultCode: {result.PaymentStatus}, ErrorCode: {result.ErrorCode}");
+
                     // Cập nhật payment status
                     payment.PaymentStatus = "success";
                     payment.CreatedAt = DateTime.UtcNow;
 
                     await _db.SaveChangesAsync();
+                    Console.WriteLine($"✅ Notify: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
                     // Tạo invoice nếu chưa có
                     if (payment.SessionId.HasValue)
@@ -366,10 +437,11 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                             // Cập nhật InvoiceNumber trong Payment
                             payment.InvoiceNumber = invoice.InvoiceNumber;
                             await _db.SaveChangesAsync();
+                            Console.WriteLine($"✅ Notify: Invoice created - InvoiceNumber: {invoice.InvoiceNumber}, SessionId: {payment.SessionId}");
                         }
                     }
 
-                    return new MomoNotifyResult
+                    return new MomoNotifyResultDto
                     {
                         Success = true,
                         Message = "Processed successfully",
@@ -383,7 +455,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     payment.PaymentStatus = "failed";
                     await _db.SaveChangesAsync();
 
-                    return new MomoNotifyResult
+                    return new MomoNotifyResultDto
                     {
                         Success = false,
                         Message = "Payment failed",
@@ -394,7 +466,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             }
             catch (Exception ex)
             {
-                return new MomoNotifyResult
+                return new MomoNotifyResultDto
                 {
                     Success = false,
                     Message = $"Error processing notify: {ex.Message}",
