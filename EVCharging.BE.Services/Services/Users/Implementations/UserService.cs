@@ -45,10 +45,15 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             var user = await _db.Users.FindAsync(id);
             if (user == null) return false;
 
+            // Xóa tất cả DriverProfile liên quan trước
+            var relatedProfiles = _db.DriverProfiles.Where(dp => dp.UserId == id);
+            _db.DriverProfiles.RemoveRange(relatedProfiles);
+
             _db.Users.Remove(user);
             await _db.SaveChangesAsync();
             return true;
         }
+
 
         // ==========================
         //      ✅ MỞ RỘNG: Ví

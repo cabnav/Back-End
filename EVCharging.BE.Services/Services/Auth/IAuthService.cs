@@ -7,6 +7,7 @@ namespace EVCharging.BE.Services.Services.Auth
     {
         Task<AuthResponse?> LoginAsync(LoginRequest request);
         Task<AuthResponse?> RegisterAsync(RegisterRequest request);
+        Task<AuthResponse?> OAuthLoginOrRegisterAsync(OAuthLoginRequest request);
         Task<bool> LogoutAsync(string token);
         Task<bool> ValidateTokenAsync(string token);
         Task<string> GenerateTokenAsync(int userId, string email, string role);

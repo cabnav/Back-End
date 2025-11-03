@@ -163,6 +163,48 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
+        /// OAuth login or register (Google, Facebook, etc.)
+        /// </summary>
+        /// <param name="request">OAuth login details</param>
+        /// <returns>Authentication response with token</returns>
+        [HttpPost("oauth/login")]
+        public async Task<IActionResult> OAuthLogin([FromBody] OAuthLoginRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { message = "Validation failed", errors });
+                }
+
+                if (string.IsNullOrEmpty(request.Provider) || string.IsNullOrEmpty(request.ProviderId))
+                {
+                    return BadRequest(new { message = "Provider and ProviderId are required" });
+                }
+
+                var result = await _authService.OAuthLoginOrRegisterAsync(request);
+                if (result == null)
+                {
+                    return BadRequest(new { message = "OAuth login failed" });
+                }
+
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred during OAuth login", error = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// Get current user profile
         /// </summary>
         /// <returns>Current user information</returns>

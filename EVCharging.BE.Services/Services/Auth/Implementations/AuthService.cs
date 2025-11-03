@@ -268,5 +268,98 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 return false;
             }
         }
+
+        public async Task<AuthResponse?> OAuthLoginOrRegisterAsync(OAuthLoginRequest request)
+        {
+            try
+            {
+                // Find existing user by Provider + ProviderId
+                var existingUser = await _db.Users
+                    .Include(u => u.DriverProfile)
+                    .FirstOrDefaultAsync(u => u.Provider == request.Provider && u.ProviderId == request.ProviderId);
+
+                User user;
+
+                if (existingUser != null)
+                {
+                    // User exists, just login
+                    user = existingUser;
+                }
+                else
+                {
+                    // Check if email already exists (might be registered with regular account)
+                    var emailUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+                    if (emailUser != null)
+                    {
+                        throw new InvalidOperationException($"Email {request.Email} is already registered with a different account");
+                    }
+
+                    // Create new user with OAuth provider
+                    user = new User
+                    {
+                        Name = request.Name,
+                        Email = request.Email,
+                        Password = HashPassword(Guid.NewGuid().ToString()), // Random password for OAuth users
+                        Phone = request.Phone,
+                        Role = request.Role ?? "driver",
+                        WalletBalance = 0,
+                        BillingType = "postpaid",
+                        MembershipTier = "standard",
+                        CreatedAt = DateTime.UtcNow,
+                        Provider = request.Provider,
+                        ProviderId = request.ProviderId,
+                        EmailVerified = true // OAuth providers verify email
+                    };
+
+                    // Add user to database
+                    _db.Users.Add(user);
+                    await _db.SaveChangesAsync();
+
+                    // If role is driver, create driver profile
+                    if (request.Role == "driver")
+                    {
+                        var driverProfile = new DriverProfile
+                        {
+                            UserId = user.UserId,
+                            LicenseNumber = request.LicenseNumber,
+                            VehicleModel = request.VehicleModel,
+                            VehiclePlate = request.VehiclePlate,
+                            BatteryCapacity = request.BatteryCapacity
+                        };
+
+                        _db.DriverProfiles.Add(driverProfile);
+                        await _db.SaveChangesAsync();
+                    }
+                }
+
+                // Generate JWT token
+                var token = await GenerateTokenAsync(user.UserId, user.Email, user.Role);
+
+                // Create user DTO
+                var userDto = new UserDTO
+                {
+                    UserId = user.UserId,
+                    Name = user.Name,
+                    Email = user.Email,
+                    Phone = user.Phone,
+                    Role = user.Role,
+                    WalletBalance = user.WalletBalance,
+                    BillingType = user.BillingType,
+                    MembershipTier = user.MembershipTier,
+                    CreatedAt = user.CreatedAt
+                };
+
+                return new AuthResponse
+                {
+                    Token = token,
+                    ExpiresAt = DateTime.UtcNow.AddHours(24),
+                    User = userDto
+                };
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
     }
 }
