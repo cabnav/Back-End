@@ -31,86 +31,212 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// </summary>
         public async Task<ChargingSessionResponse?> StartSessionAsync(ChargingSessionStartRequest request)
         {
-            try
+            Console.WriteLine($"[StartSessionAsync] Starting session for PointId={request.ChargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
+            
+            // Sử dụng EF Core execution strategy để tương thích với retry-on-failure
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                // Validate charging point với message cụ thể
-                var chargingPoint = await _db.ChargingPoints
-                    .Include(cp => cp.Station)
-                    .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
-
-                if (chargingPoint == null)
-                    throw new KeyNotFoundException("Charging point not found (không tìm thấy điểm sạc).");
-
-                if (chargingPoint.Status != "available")
-                    throw new InvalidOperationException($"Charging point is not available (điểm sạc không khả dụng). Current status: {chargingPoint.Status ?? "null"}");
-
-                if (chargingPoint.Station == null || chargingPoint.Station.Status != "active")
-                    throw new InvalidOperationException("Charging station is not active (trạm sạc không hoạt động).");
-
-                // Validate driver với message cụ thể
-                var driver = await _db.DriverProfiles
-                    .Include(d => d.User)
-                    .FirstOrDefaultAsync(d => d.DriverId == request.DriverId);
-
-                if (driver == null || driver.User == null)
-                    throw new KeyNotFoundException("Driver profile not found or driver does not have a user account (không tìm thấy hồ sơ tài xế hoặc tài xế chưa có tài khoản).");
-
-                // Kiểm tra driver có session đang chạy không
-                var hasActiveSession = await _db.ChargingSessions
-                    .AnyAsync(s => s.DriverId == request.DriverId && s.Status == "in_progress");
-
-                if (hasActiveSession)
-                    throw new InvalidOperationException("Driver already has an active charging session (tài xế đang có phiên sạc đang hoạt động).");
-
-                // Kiểm tra lại point có đang bận không (có thể bị thay đổi sau khi validate)
-                if (chargingPoint.Status != "available")
-                    throw new InvalidOperationException("Charging point is no longer available (điểm sạc không còn khả dụng).");
-
-                // Create new charging session
-                var session = new ChargingSession
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                ChargingSession? session = null;
+                var transactionCommitted = false;
+                
+                try
                 {
-                    DriverId = request.DriverId,
-                    PointId = request.ChargingPointId,
-                    StartTime = DateTime.UtcNow,
-                    InitialSoc = request.InitialSOC,
-                    Status = "in_progress",
-                    EnergyUsed = 0,
-                    DurationMinutes = 0,
-                    CostBeforeDiscount = 0,
-                    AppliedDiscount = 0,
-                    FinalCost = 0
-                };
+                    // Re-validate trong transaction context
+                    // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
+                    if (!await ValidateChargingPointAsync(request.ChargingPointId, request.StartAtUtc))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Charging point validation failed for PointId={request.ChargingPointId}, StartAtUtc={request.StartAtUtc}");
+                        await transaction.RollbackAsync();
+                        return null;
+                    }
 
-                _db.ChargingSessions.Add(session);
-                
-                // Update charging point status
-                chargingPoint.Status = "in_use";
-                
-                await _db.SaveChangesAsync();
+                    if (!await ValidateDriverAsync(request.DriverId))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Driver validation failed for DriverId={request.DriverId}");
+                        await transaction.RollbackAsync();
+                        return null;
+                    }
 
-                // Start monitoring
-                await _sessionMonitorService.StartMonitoringAsync(session.SessionId);
+                    // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
+                    if (!await CanStartSessionAsync(request.ChargingPointId, request.DriverId, request.StartAtUtc))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Cannot start session - PointId={request.ChargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
+                        await transaction.RollbackAsync();
+                        return null;
+                    }
+                    
+                    Console.WriteLine($"[StartSessionAsync] All validations passed. Proceeding with session creation...");
 
-                // Return response
-                return await GetSessionByIdAsync(session.SessionId);
-            }
-            catch (KeyNotFoundException)
-            {
-                // Re-throw validation exceptions để controller xử lý
-                throw;
-            }
-            catch (InvalidOperationException)
-            {
-                // Re-throw validation exceptions để controller xử lý
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // Log error nhưng không throw để tránh crash
-                Console.WriteLine($"Unexpected error starting charging session: {ex.Message}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                return null;
-            }
+                    // Get charging point and driver info
+                    var chargingPoint = await _db.ChargingPoints
+                        .Include(cp => cp.Station)
+                        .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
+
+                    var driver = await _db.DriverProfiles
+                        .Include(d => d.User)   
+                        .FirstOrDefaultAsync(d => d.DriverId == request.DriverId);
+
+                    if (chargingPoint == null || driver == null)
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Point or Driver not found - PointId={request.ChargingPointId}, DriverId={request.DriverId}");
+                        await transaction.RollbackAsync();
+                        return null;
+                    }
+
+                    Console.WriteLine($"[StartSessionAsync] Creating session - Point status: {chargingPoint.Status}, Station status: {chargingPoint.Station?.Status}");
+
+                    // Create new charging session
+                    session = new ChargingSession
+                    {
+                        DriverId = request.DriverId,
+                        PointId = request.ChargingPointId,
+                        StartTime = request.StartAtUtc ?? DateTime.UtcNow,
+                        InitialSoc = request.InitialSOC,
+                        Status = "in_progress",
+                        EnergyUsed = 0,
+                        DurationMinutes = 0,
+                        CostBeforeDiscount = 0,
+                        AppliedDiscount = 0,
+                        FinalCost = 0
+                    };
+
+                    _db.ChargingSessions.Add(session);
+                    
+                    // Update charging point status
+                    chargingPoint.Status = "in_use";
+                    
+                    Console.WriteLine($"[StartSessionAsync] Saving session to database...");
+                    await _db.SaveChangesAsync();
+                    Console.WriteLine($"[StartSessionAsync] Session saved with SessionId={session.SessionId}");
+
+                    // Start monitoring (có thể throw exception)
+                    try
+                    {
+                        Console.WriteLine($"[StartSessionAsync] Starting monitoring for SessionId={session.SessionId}");
+                        await _sessionMonitorService.StartMonitoringAsync(session.SessionId);
+                        Console.WriteLine($"[StartSessionAsync] Monitoring started successfully");
+                    }
+                    catch (Exception monitorEx)
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Error starting monitoring: {monitorEx.Message}. Rolling back session creation.");
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Stack trace: {monitorEx.StackTrace}");
+                        await transaction.RollbackAsync();
+                        return null;
+                    }
+
+                    // Commit transaction TRƯỚC khi return response
+                    // Đảm bảo session và point được lưu vào DB trước khi return
+                    Console.WriteLine($"[StartSessionAsync] Committing transaction...");
+                    await transaction.CommitAsync();
+                    transactionCommitted = true;
+                    Console.WriteLine($"[StartSessionAsync] Transaction committed successfully");
+
+                    // Return response (nếu GetSessionByIdAsync fail thì vẫn OK vì transaction đã commit)
+                    try
+                    {
+                        Console.WriteLine($"[StartSessionAsync] Retrieving session data for response... SessionId={session.SessionId}");
+                        
+                        // Force reload từ DB sau khi commit để tránh tracking issue
+                        // Detach session entity hiện tại và reload
+                        _db.Entry(session).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                        
+                        var reloadedSession = await _db.ChargingSessions
+                            .AsNoTracking()
+                            .Include(s => s.Point)
+                                .ThenInclude(p => p.Station)
+                            .Include(s => s.Driver)
+                                .ThenInclude(d => d.User)
+                            .Include(s => s.SessionLogs)
+                            .FirstOrDefaultAsync(s => s.SessionId == session.SessionId);
+                        
+                        if (reloadedSession == null)
+                        {
+                            Console.WriteLine($"⚠️ [StartSessionAsync] Could not reload session from DB after commit. SessionId={session.SessionId}");
+                            // Thử lại với GetSessionByIdAsync
+                            var response = await GetSessionByIdAsync(session.SessionId);
+                            if (response != null)
+                            {
+                                Console.WriteLine($"[StartSessionAsync] GetSessionByIdAsync succeeded after reload failed. SessionId={session.SessionId}");
+                                return response;
+                            }
+                            Console.WriteLine($"⚠️ [StartSessionAsync] Both reload and GetSessionByIdAsync failed. SessionId={session.SessionId}");
+                            return null;
+                        }
+                        
+                        var response2 = MapToResponse(reloadedSession);
+                        Console.WriteLine($"[StartSessionAsync] Session created successfully! SessionId={session.SessionId}");
+                        return response2;
+                    }
+                    catch (Exception getEx)
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Error getting session after creation: {getEx.Message}. Session was created successfully but failed to retrieve.");
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Stack trace: {getEx.StackTrace}");
+                        
+                        // Try to reload session from DB
+                        try
+                        {
+                            _db.Entry(session).State = Microsoft.EntityFrameworkCore.EntityState.Detached;
+                            
+                            var reloadedSession = await _db.ChargingSessions
+                                .AsNoTracking()
+                                .Include(s => s.Point)
+                                    .ThenInclude(p => p.Station)
+                                .Include(s => s.Driver)
+                                    .ThenInclude(d => d.User)
+                                .Include(s => s.SessionLogs)
+                                .FirstOrDefaultAsync(s => s.SessionId == session.SessionId);
+                            
+                            if (reloadedSession != null)
+                            {
+                                var response = MapToResponse(reloadedSession);
+                                Console.WriteLine($"[StartSessionAsync] Response created from reloaded session after exception. SessionId={session.SessionId}");
+                                return response;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"⚠️ [StartSessionAsync] Reloaded session is null. SessionId={session.SessionId}");
+                            }
+                        }
+                        catch (Exception reloadEx)
+                        {
+                            Console.WriteLine($"⚠️ [StartSessionAsync] Error reloading session: {reloadEx.Message}");
+                            Console.WriteLine($"⚠️ [StartSessionAsync] Stack trace: {reloadEx.StackTrace}");
+                        }
+                        
+                        return null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"⚠️ [StartSessionAsync] Exception caught: {ex.Message}");
+                    Console.WriteLine($"⚠️ [StartSessionAsync] Exception type: {ex.GetType().Name}");
+                    Console.WriteLine($"⚠️ [StartSessionAsync] Stack trace: {ex.StackTrace}");
+                    
+                    // Rollback nếu transaction chưa commit
+                    if (!transactionCommitted)
+                    {
+                        try
+                        {
+                            await transaction.RollbackAsync();
+                            Console.WriteLine("⚠️ [StartSessionAsync] Transaction rolled back due to error.");
+                        }
+                        catch (Exception rollbackEx)
+                        {
+                            Console.WriteLine($"⚠️ [StartSessionAsync] Error rolling back transaction: {rollbackEx.Message}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("⚠️ [StartSessionAsync] Exception occurred after transaction commit. Session may have been created in DB.");
+                    }
+                    
+                    // Log error
+                    Console.WriteLine($"Error starting charging session: {ex.Message}");
+                    return null;
+                }
+            });
         }
 
         /// <summary>

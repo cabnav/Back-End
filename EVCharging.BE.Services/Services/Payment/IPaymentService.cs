@@ -42,5 +42,9 @@ namespace EVCharging.BE.Services.Services.Payment
         // Validation
         Task<bool> ValidatePaymentRequestAsync(PaymentCreateRequest request);
         Task<bool> CanProcessRefundAsync(int paymentId, decimal amount);
+
+        // Session Payment Methods
+        Task<PaymentResultDto> PayByWalletAsync(int sessionId, int userId);
+        Task<PaymentResultDto> PayByCashAsync(int sessionId, int userId);
     }
 }
