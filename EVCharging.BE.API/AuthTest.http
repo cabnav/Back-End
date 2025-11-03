@@ -27,6 +27,13 @@ Content-Type: application/json
   "phone": "+1234567891",
   "role": "admin"
 }
+{
+  "name": "Admin User",
+  "email": "admin@example.com",
+  "password": "admin123",
+  "phone": "+1234567891",
+  "role": "admin"
+}
 
 ### 3. Register a new user (CS Staff)
 POST https://localhost:7035/api/auth/register

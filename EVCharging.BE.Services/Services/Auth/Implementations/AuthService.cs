@@ -119,6 +119,10 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 // If role is driver, create driver profile
                 if (request.Role == "driver")
                 {
+                    // Validate BatteryCapacity > 0 nếu có value
+                    if (request.BatteryCapacity.HasValue && request.BatteryCapacity.Value <= 0)
+                        throw new ArgumentException("BatteryCapacity must be greater than 0");
+
                     var driverProfile = new DriverProfile
                     {
                         UserId = createdUser.UserId,

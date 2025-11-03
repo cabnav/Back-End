@@ -3,11 +3,13 @@ using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Payment;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
 namespace EVCharging.BE.Services.Services.Reservations.Implementations
 {
@@ -18,13 +20,18 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
     {
         private readonly EvchargingManagementContext _db;   
         private readonly ITimeValidationService _timeValidator;
+        private readonly IWalletService _walletService;
+
+        private const decimal DEPOSIT_AMOUNT = 20000m; // Cọc 20,000 VNĐ
 
         public ReservationService(
             EvchargingManagementContext db,
-            ITimeValidationService timeValidator)
+            ITimeValidationService timeValidator,
+            IWalletService walletService)
         {
             _db = db;
             _timeValidator = timeValidator;
+            _walletService = walletService;
         }
 
         /// <summary>
@@ -41,9 +48,21 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (driverId == 0)
                 throw new InvalidOperationException("Driver profile not found (không tìm thấy hồ sơ tài xế).");
 
-            // Tính EndTime (giờ kết thúc) từ StartTime + DurationMinutes
-            var startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
-            var endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            // Sử dụng logic mới: Date + Hour thay vì StartTime + DurationMinutes
+            DateTime startUtc, endUtc;
+            
+            if (request.LegacyStartTime.HasValue)
+            {
+                // Tương thích ngược với API cũ
+                startUtc = DateTime.SpecifyKind(request.LegacyStartTime.Value, DateTimeKind.Utc);
+                endUtc = startUtc.AddMinutes(request.DurationMinutes);
+            }
+            else
+            {
+                // Logic mới: sử dụng Date + Hour
+                startUtc = DateTime.SpecifyKind(request.StartTime, DateTimeKind.Utc);
+                endUtc = DateTime.SpecifyKind(request.EndTime, DateTimeKind.Utc);
+            }
 
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
@@ -65,25 +84,49 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         throw new InvalidOperationException("Time slot not available (khung giờ đã có người đặt).");
 
                     // Tạo mã đặt chỗ (reservation code) phục vụ QR/check-in
-                    var reservationCode = $"RSV-{Guid.NewGuid().ToString("N")[..8].ToUpper()}";
+                    // Code phải đúng format (CHECK constraint: CK_Reservation_Code_Format):
+                    // - Độ dài 8-12 ký tự
+                    // - Chỉ chữ cái HOA A-Z và số 2-9 (không có O,I,0,1 để tránh nhầm lẫn)
+                    string reservationCode;
+                    var random = new Random();
+                    var validChars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // 32 ký tự hợp lệ
 
-                    var reservation = new Reservation
+                    // Thử tối đa 5 lần để tránh trùng hoặc sai format
+                    for (int attempts = 0; attempts < 5; attempts++)
                     {
-                        DriverId = driverId,
-                        PointId = request.PointId,
-                        StartTime = startUtc,
-                        EndTime = endUtc,
-                        Status = "booked",
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow,
-                        ReservationCode = reservationCode
-                    };
+                        // Sinh mã 8 ký tự từ bộ ký tự hợp lệ
+                        var chars = new char[8];
+                        for (int i = 0; i < 8; i++)
+                        {
+                            chars[i] = validChars[random.Next(validChars.Length)];
+                        }
+                        reservationCode = new string(chars);
 
-                    _db.Reservations.Add(reservation);
-                    await _db.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    
-                    return reservation;
+                        // Đảm bảo code chưa tồn tại
+                        var exists = await _db.Reservations.AnyAsync(r => r.ReservationCode == reservationCode);
+                        if (!exists)
+                        {
+                            var reservation = new Reservation
+                            {
+                                DriverId = driverId,
+                                PointId = request.PointId,
+                                StartTime = startUtc,
+                                EndTime = endUtc,
+                                Status = "booked",
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow,
+                                ReservationCode = reservationCode
+                            };
+
+                            _db.Reservations.Add(reservation);
+                            await _db.SaveChangesAsync();
+                            await transaction.CommitAsync();
+
+                            return reservation;
+                        }
+                    }
+
+                    throw new InvalidOperationException("Could not generate valid reservation code (không thể sinh mã đặt chỗ hợp lệ).");
                 }
                 catch
                 {
@@ -94,9 +137,90 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             // Load navigation to map DTO (nạp quan hệ để ánh xạ DTO)
             await _db.Entry(entity).Reference(r => r.Point).LoadAsync();
+            if (entity.Point != null)
+                await _db.Entry(entity.Point).Reference(p => p.Station).LoadAsync();  // 🔥 Load station info
             await _db.Entry(entity).Reference(r => r.Driver).LoadAsync();
             if (entity.Driver != null)
                 await _db.Entry(entity.Driver).Reference(d => d.User).LoadAsync();
+
+            // Thu cọc 20,000 VNĐ sau khi tạo reservation thành công
+            try
+            {
+                var walletBalance = await _walletService.GetBalanceAsync(userId);
+                if (walletBalance >= DEPOSIT_AMOUNT)
+                {
+                    // Ví đủ tiền: trừ từ ví và tạo Payment record
+                    await _walletService.DebitAsync(
+                        userId,
+                        DEPOSIT_AMOUNT,
+                        $"Cọc đặt chỗ #{entity.ReservationCode}",
+                        entity.ReservationId
+                    );
+
+                    // Tạo Payment record cho deposit
+                    var depositPayment = new PaymentEntity
+                    {
+                        UserId = userId,
+                        ReservationId = entity.ReservationId,
+                        Amount = DEPOSIT_AMOUNT,
+                        PaymentMethod = "wallet",
+                        PaymentStatus = "success",
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _db.Payments.Add(depositPayment);
+                    await _db.SaveChangesAsync();
+                }
+                else
+                {
+                    // Ví không đủ: throw exception với message đặc biệt để controller nhận biết
+                    throw new InvalidOperationException(
+                        $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
+                        $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
+                        $"Cần: {DEPOSIT_AMOUNT:F0} VNĐ. " +
+                        $"Vui lòng thanh toán cọc qua MoMo.|{entity.ReservationId}"
+                    );
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw để controller xử lý
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Nếu có lỗi khác khi thu cọc, vẫn trả về reservation nhưng log lỗi
+                Console.WriteLine($"⚠️ [CreateReservationAsync] Error processing deposit: {ex.Message}");
+            }
+
+            // Gửi thông báo cho người dùng (English)
+            try
+            {
+                var userIdForNotification = entity.Driver?.User?.UserId;
+                if (userIdForNotification.HasValue)
+                {
+                    var startIso = entity.StartTime.ToString("o");
+                    var stationName = entity.Point?.Station?.Name ?? "charging station";
+                    var title = "Reservation confirmed";
+                    var message = $"Your charging reservation is confirmed at {stationName}. Please arrive on time. The latest allowed check-in is within 30 minutes from the start time ({startIso} UTC).";
+
+                    _db.Notifications.Add(new EVCharging.BE.DAL.Entities.Notification
+                    {
+                        UserId = userIdForNotification.Value,
+                        Title = title,
+                        Message = message,
+                        Type = "reservation_created",
+                        IsRead = false,
+                        CreatedAt = DateTime.UtcNow
+                    });
+
+                    await _db.SaveChangesAsync();
+                }
+            }
+            catch
+            {
+                // best effort; không chặn flow nếu thông báo lỗi
+            }
 
             return MapToDto(entity);
         }
@@ -108,11 +232,15 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         {
             var q = _db.Reservations
                 .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)  // 🔥 Include station cho UX
                 .Include(r => r.Driver).ThenInclude(d => d.User)
                 .AsQueryable();
 
             if (filter.DriverId.HasValue)
                 q = q.Where(r => r.DriverId == filter.DriverId.Value);
+
+            if (filter.PointId.HasValue)
+                q = q.Where(r => r.PointId == filter.PointId.Value);
 
             if (filter.StationId.HasValue)
                 q = q.Where(r => r.Point.StationId == filter.StationId.Value);
@@ -152,11 +280,13 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             if (driverId == 0) return Enumerable.Empty<ReservationDTO>();
 
+            // Dùng UTC để nhất quán toàn hệ thống
             var now = DateTime.UtcNow;
             var to = now.Add(horizon);
 
             var list = await _db.Reservations
                 .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)  // 🔥 Include station cho UX
                 .Include(r => r.Driver).ThenInclude(d => d.User)
                 .Where(r => r.DriverId == driverId
                          && r.Status == "booked"
@@ -200,6 +330,90 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             return true;
         }
 
+        /// <summary>
+        /// Cancel reservation by code (huỷ đặt chỗ bằng mã)
+        /// </summary>
+        public async Task<bool> CancelReservationByCodeAsync(int userId, string reservationCode, string? reason = null)
+        {
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                throw new InvalidOperationException("Driver profile not found (không tìm thấy hồ sơ tài xế).");
+
+            var entity = await _db.Reservations
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+            
+            if (entity == null) return false;
+
+            if (entity.Status is "cancelled" or "completed" or "no_show")
+                throw new InvalidOperationException("Cannot cancel (không thể huỷ ở trạng thái hiện tại).");
+
+            // Optional policy: không cho huỷ nếu sắp bắt đầu trong X phút
+            // if (entity.StartTime <= DateTime.UtcNow.AddMinutes(10)) { ... }
+
+            entity.Status = "cancelled";
+            entity.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        /// <summary>
+        /// Get reservation by code for specific user (tra cứu đặt chỗ bằng mã)
+        /// </summary>
+        public async Task<ReservationDTO?> GetReservationByCodeAsync(int userId, string reservationCode)
+        {
+            // Lấy driverId từ userId
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return null;
+
+            // Tìm reservation với code và driver ID
+            var reservation = await _db.Reservations
+                .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)
+                .Include(r => r.Driver)
+                    .ThenInclude(d => d.User)
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+
+            if (reservation == null)
+                return null;
+
+            return MapToDto(reservation);
+        }
+
+        /// <summary>
+        /// Đánh dấu reservation đã check-in (driver sở hữu)
+        /// </summary>
+        public async Task<bool> MarkCheckedInAsync(int userId, string reservationCode)
+        {
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return false;
+
+            var entity = await _db.Reservations
+                .FirstOrDefaultAsync(r => r.ReservationCode == reservationCode && r.DriverId == driverId);
+
+            if (entity == null)
+                return false;
+
+            entity.Status = "checked_in";
+            entity.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
         // -----------------------
         // Mapping helpers (hàm ánh xạ)
         // -----------------------
@@ -218,12 +432,18 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 ReservationCode = r.ReservationCode, // từ partial class
                 ChargingPoint = r.Point is null ? null : new ChargingPointDTO
                 {
-                    // Map tối thiểu (tuỳ DTO của bạn có gì thì map thêm)
                     PointId = r.Point.PointId,
                     StationId = r.Point.StationId,
                     ConnectorType = r.Point.ConnectorType,
+                    PowerOutput = r.Point.PowerOutput ?? 0,
                     PricePerKwh = r.Point.PricePerKwh,
-                    Status = r.Point.Status
+                    Status = r.Point.Status,
+                    QrCode = r.Point.QrCode ?? "",
+                    CurrentPower = (decimal)(r.Point.CurrentPower ?? 0.0),  // Convert double to decimal
+                    LastMaintenance = r.Point.LastMaintenance?.ToDateTime(TimeOnly.MinValue),  // Convert DateOnly to DateTime
+                    // 🔥 UX improvement: Thông tin trạm hữu ích cho người dùng  
+                    StationName = r.Point.Station?.Name,
+                    StationAddress = r.Point.Station?.Address
                 },
                 Driver = r.Driver?.User is null ? null : new UserDTO
                 {

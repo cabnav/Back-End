@@ -119,9 +119,11 @@ builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
 builder.Services.AddScoped<IQRCodeService, QRCodeService>();
+builder.Services.AddScoped<IStationSearchService, StationSearchService>();
 builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.GetSection("ReservationBackground"));
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
+builder.Services.AddHostedService<SessionAutoStopWorker>();
 
 // Staff
 builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
@@ -130,12 +132,14 @@ builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
 builder.Services.AddScoped<IAdminStaffService, AdminStaffService>();
 
 // Payments
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IVNPayService, VNPayService>();
-builder.Services.AddScoped<IMoMoService, MoMoService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IInvoiceService, InvoiceService>();
 // ➕ MockPay (QR giả lập)
 builder.Services.AddScoped<IMockPayService, MockPayService>();
+// ➕ MoMo Payment
+builder.Services.Configure<EVCharging.BE.Common.DTOs.Payments.MomoOptionModel>(builder.Configuration.GetSection("MomoAPI"));
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Payment.IMomoService, EVCharging.BE.Services.Services.Payment.Implementations.MomoService>();
 
 // Notifications
 builder.Services.AddScoped<IEmailService, EmailService>();

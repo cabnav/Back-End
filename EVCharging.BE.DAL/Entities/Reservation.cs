@@ -28,4 +28,6 @@ public partial class Reservation
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ChargingPoint Point { get; set; } = null!;
+
+    public virtual ICollection<ChargingSession> ChargingSessions { get; set; } = new List<ChargingSession>();
 }

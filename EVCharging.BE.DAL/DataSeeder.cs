@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 
@@ -7,6 +9,13 @@ namespace EVCharging.BE.DAL
 {
     public static class DataSeeder
     {
+        private static string HashPassword(string password)
+        {
+            using var sha256 = SHA256.Create();
+            var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
+            return Convert.ToBase64String(hashedBytes);
+        }
+
         public static void Seed(EvchargingManagementContext context)
         {
             // Nếu database chưa có user nào -> seed mẫu
@@ -18,7 +27,7 @@ namespace EVCharging.BE.DAL
                     {
                         Name = "Nguyen Van A",
                         Email = "a@example.com",
-                        Password = "123456", // ⚠️ Khi có Auth thì hash
+                        Password = HashPassword("123456"), // ✅ Hash password đúng cách
                         Phone = "0901234567",
                         Role = "driver",
                         WalletBalance = 500000,
@@ -30,12 +39,24 @@ namespace EVCharging.BE.DAL
                     {
                         Name = "Tran Thi B",
                         Email = "b@example.com",
-                        Password = "123456",
+                        Password = HashPassword("123456"), // ✅ Hash password đúng cách
                         Phone = "0987654321",
                         Role = "admin",
                         WalletBalance = 1000000,
                         BillingType = "postpaid",
                         MembershipTier = "vip",
+                        CreatedAt = DateTime.Now
+                    },
+                    new User
+                    {
+                        Name = "Chinh User",
+                        Email = "chinh22@gmail.com",
+                        Password = HashPassword("12345"), // ✅ Hash password đúng cách
+                        Phone = "0901234567",
+                        Role = "driver",
+                        WalletBalance = 500000,
+                        BillingType = "prepaid",
+                        MembershipTier = "standard",
                         CreatedAt = DateTime.Now
                     }
                 };

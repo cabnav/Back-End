@@ -70,6 +70,24 @@ Content-Type: application/json
   "description": "Wallet payment for charging"
 }
 
+### 4.1. Thanh toán phiên sạc bằng SessionId (Trừ thẳng vào ví)
+POST {{baseUrl}}/payments/pay-by-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1
+}
+
+### 4.2. Thanh toán tiền mặt cho phiên sạc (Tạo hóa đơn thanh toán thành công)
+POST {{baseUrl}}/payments/pay-by-session-cash
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 1
+}
+
 # ====== PAYMENT QUERIES ======
 
 ### 5. Lấy thông tin payment theo ID
@@ -82,6 +100,32 @@ Authorization: Bearer {{token}}
 
 ### 7. Lấy payments theo session
 GET {{baseUrl}}/payments/by-session/1
+Authorization: Bearer {{token}}
+
+### 7.1. Kiểm tra trạng thái thanh toán của phiên sạc
+GET {{baseUrl}}/payments/session/1/status
+Authorization: Bearer {{token}}
+
+### 7.2. Lấy lịch sử thanh toán của người dùng
+GET {{baseUrl}}/payments/user/1?skip=0&take=20
+Authorization: Bearer {{token}}
+
+# ====== INVOICE OPERATIONS ======
+
+### 8.1. Lấy hóa đơn theo InvoiceId
+GET {{baseUrl}}/invoices/1
+Authorization: Bearer {{token}}
+
+### 8.2. Lấy hóa đơn theo SessionId (Xuất hóa đơn sau khi thanh toán)
+GET {{baseUrl}}/invoices/session/1
+Authorization: Bearer {{token}}
+
+### 8.3. Lấy danh sách hóa đơn của người dùng hiện tại
+GET {{baseUrl}}/invoices/my-invoices?skip=0&take=20
+Authorization: Bearer {{token}}
+
+### 8.4. Lấy danh sách hóa đơn của một user
+GET {{baseUrl}}/invoices/user/1?skip=0&take=20
 Authorization: Bearer {{token}}
 
 ### 8. Kiểm tra số dư ví

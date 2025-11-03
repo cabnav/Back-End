@@ -18,5 +18,14 @@ namespace EVCharging.BE.Services.Services.Reservations
 
         // 🟠 Huỷ đặt chỗ
         Task<bool> CancelReservationAsync(int userId, int reservationId, string? reason = null);
+
+        // 🟠 Huỷ đặt chỗ bằng mã
+        Task<bool> CancelReservationByCodeAsync(int userId, string reservationCode, string? reason = null);
+
+        // 🔍 Tra cứu đặt chỗ bằng mã
+        Task<ReservationDTO?> GetReservationByCodeAsync(int userId, string reservationCode);
+
+        // ✅ Đánh dấu đã check-in
+        Task<bool> MarkCheckedInAsync(int userId, string reservationCode);
     }
 }

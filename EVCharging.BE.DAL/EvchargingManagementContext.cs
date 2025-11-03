@@ -170,6 +170,7 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.FinalSoc).HasColumnName("final_soc");
             entity.Property(e => e.InitialSoc).HasColumnName("initial_soc");
             entity.Property(e => e.PointId).HasColumnName("point_id");
+            entity.Property(e => e.ReservationId).HasColumnName("reservation_id");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
             entity.Property(e => e.Status)
                 .HasMaxLength(20)
@@ -185,6 +186,10 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey(d => d.PointId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__ChargingS__point__7A672E12");
+
+            entity.HasOne(d => d.Reservation).WithMany(p => p.ChargingSessions)
+                .HasForeignKey(d => d.ReservationId)
+                .HasConstraintName("FK__ChargingS__reservation__7B5B524D");
         });
 
         modelBuilder.Entity<ChargingStation>(entity =>

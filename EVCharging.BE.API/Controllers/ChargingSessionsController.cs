@@ -46,7 +46,45 @@ namespace EVCharging.BE.API.Controllers
                 var result = await _chargingService.StartSessionAsync(request);
                 if (result == null)
                 {
-                    return BadRequest(new { message = "Failed to start charging session. Please check charging point availability and driver status." });
+                    // Kiểm tra chi tiết để có thông báo lỗi rõ ràng hơn
+                    var pointIsAvailable = await _chargingService.ValidateChargingPointAsync(request.ChargingPointId, request.StartAtUtc);
+                    var driverIsValid = await _chargingService.ValidateDriverAsync(request.DriverId);
+                    var canStart = await _chargingService.CanStartSessionAsync(request.ChargingPointId, request.DriverId, request.StartAtUtc);
+                    var activeSessions = await _chargingService.GetSessionsByDriverAsync(request.DriverId);
+                    var hasActiveDriverSession = activeSessions.Any(s => s.Status == "in_progress");
+                    
+                    string errorMessage;
+                    if (!driverIsValid)
+                    {
+                        errorMessage = "Driver profile not found or invalid. Please contact support.";
+                    }
+                    else if (hasActiveDriverSession)
+                    {
+                        errorMessage = "You already have an active charging session. Please complete it first.";
+                    }
+                    else if (!pointIsAvailable)
+                    {
+                        errorMessage = "The charging point is currently unavailable. It may be in use by another session or under maintenance.";
+                    }
+                    else if (!canStart)
+                    {
+                        errorMessage = "Cannot start charging session. The charging point may be busy or you have restrictions.";
+                    }
+                    else
+                    {
+                        errorMessage = "Failed to start charging session. Please try again or contact support.";
+                    }
+                    
+                    return BadRequest(new { 
+                        message = errorMessage,
+                        pointId = request.ChargingPointId,
+                        driverId = request.DriverId,
+                        pointAvailable = pointIsAvailable,
+                        driverValid = driverIsValid,
+                        canStart = canStart,
+                        hasActiveDriverSession = hasActiveDriverSession,
+                        startAtUtc = request.StartAtUtc
+                    });
                 }
 
                 // Send real-time notification

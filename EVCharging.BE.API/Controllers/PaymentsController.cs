@@ -1,432 +1,629 @@
 ﻿using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.Services.Services.Payment;
-using EVCharging.BE.Services.Services.Users;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
-using UserEntity = EVCharging.BE.DAL.Entities.User;
+using EVCharging.BE.DAL;
+using Microsoft.EntityFrameworkCore;
+using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
 namespace EVCharging.BE.API.Controllers
 {
     /// <summary>
-    /// Controller quản lý thanh toán - Payment Management
+    /// Controller quản lý thanh toán cho phiên sạc
     /// </summary>
-    [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Yêu cầu đăng nhập
+    [Route("api/[controller]")]
+    [Authorize]
     public class PaymentsController : ControllerBase
     {
         private readonly IPaymentService _paymentService;
-        private readonly IUserService _userService;
+        private readonly IMomoService _momoService;
+        private readonly EvchargingManagementContext _db;
 
-        public PaymentsController(IPaymentService paymentService, IUserService userService)
+        public PaymentsController(
+            IPaymentService paymentService,
+            IMomoService momoService,
+            EvchargingManagementContext db)
         {
             _paymentService = paymentService;
-            _userService = userService;
+            _momoService = momoService;
+            _db = db;
         }
 
-        // ====== CORE PAYMENT OPERATIONS ======
-
         /// <summary>
-        /// Tạo payment mới
-        /// POST /api/payments
+        /// Thanh toán phiên sạc bằng SessionId - Trừ tiền trực tiếp từ ví người dùng
+        /// Chỉ người dùng sở hữu phiên sạc mới được thanh toán
         /// </summary>
-        [HttpPost]
-        public async Task<IActionResult> CreatePayment([FromBody] PaymentCreateRequest request)
+        /// <param name="request">Thông tin SessionId cần thanh toán</param>
+        /// <returns>Kết quả thanh toán</returns>
+        [HttpPost("pay-by-session")]
+        public async Task<IActionResult> PayBySession([FromBody] SessionPaymentRequestDto request)
         {
             try
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
+                    return BadRequest(new
+                    {
+                        message = "Invalid request data",
+                        errors = ModelState.Values.SelectMany(v => v.Errors)
+                    });
                 }
 
                 // Lấy userId từ JWT token
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                request.UserId = userId;
-
-                var result = await _paymentService.CreatePaymentAsync(request);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                return CreatedAtAction(nameof(GetPayment), new { id = result.PaymentId }, result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while creating payment", error = ex.Message });
-            }
-        }
+                // Gọi service để xử lý thanh toán
+                var result = await _paymentService.PayByWalletAsync(request.SessionId, currentUserId);
 
-        /// <summary>
-        /// Lấy thông tin payment theo ID
-        /// GET /api/payments/{id}
-        /// </summary>
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetPayment(int id)
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var payment = await _paymentService.GetPaymentByIdAsync(id);
-
-                if (payment == null || string.IsNullOrEmpty(payment.ErrorMessage))
+                if (result.AlreadyPaid)
                 {
-                    return NotFound(new { message = "Payment not found" });
+                    return Ok(new
+                    {
+                        message = result.Message,
+                        alreadyPaid = true,
+                        paymentInfo = result.ExistingPaymentInfo
+                    });
                 }
 
-                // Kiểm tra quyền truy cập
-                if (payment.UserId != userId && !this.User.IsInRole("Admin"))
+                if (!result.Success)
                 {
-                    return Forbid("You don't have permission to view this payment");
+                    return BadRequest(new { message = result.Message });
                 }
 
-                return Ok(payment);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving payment", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy danh sách payments của user hiện tại
-        /// GET /api/payments/my-payments?page=1&pageSize=50
-        /// </summary>
-        [HttpGet("my-payments")]
-        public async Task<IActionResult> GetMyPayments([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var payments = await _paymentService.GetPaymentsByUserAsync(userId, page, pageSize);
-                return Ok(payments);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving payments", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy payments theo session
-        /// GET /api/payments/by-session/{sessionId}
-        /// </summary>
-        [HttpGet("by-session/{sessionId:int}")]
-        public async Task<IActionResult> GetPaymentsBySession(int sessionId)
-        {
-            try
-            {
-                var payments = await _paymentService.GetPaymentsBySessionAsync(sessionId);
-                return Ok(payments);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving session payments", error = ex.Message });
-            }
-        }
-
-        // ====== PAYMENT GATEWAY INTEGRATION ======
-
-        /// <summary>
-        /// Tạo VNPay payment
-        /// POST /api/payments/vnpay
-        /// </summary>
-        [HttpPost("vnpay")]
-        public async Task<IActionResult> CreateVNPayPayment([FromBody] PaymentCreateRequest request)
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                request.UserId = userId;
-
-                var result = await _paymentService.ProcessVNPayPaymentAsync(request);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                return Ok(new
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    message = result.Message,
+                    success = result.Success,
+                    paymentInfo = result.PaymentInfo,
+                    walletInfo = result.WalletInfo,
+                    invoice = result.Invoice
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    message = ex.Message,
+                    error = "Payment processing failed"
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi xử lý thanh toán",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Thanh toán tiền mặt cho phiên sạc - Tạo hóa đơn thanh toán thành công
+        /// Chỉ người dùng sở hữu phiên sạc mới được thanh toán
+        /// </summary>
+        /// <param name="request">Thông tin SessionId cần thanh toán</param>
+        /// <returns>Hóa đơn thanh toán thành công</returns>
+        [HttpPost("pay-by-session-cash")]
+        public async Task<IActionResult> PayBySessionCash([FromBody] SessionPaymentRequestDto request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Invalid request data",
+                        errors = ModelState.Values.SelectMany(v => v.Errors)
+                    });
                 }
 
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while creating VNPay payment", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Tạo MoMo payment
-        /// POST /api/payments/momo
-        /// </summary>
-        [HttpPost("momo")]
-        public async Task<IActionResult> CreateMoMoPayment([FromBody] PaymentCreateRequest request)
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                request.UserId = userId;
-
-                var result = await _paymentService.ProcessMoMoPaymentAsync(request);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while creating MoMo payment", error = ex.Message });
-            }
-        }
+                // Gọi service để xử lý thanh toán tiền mặt
+                var result = await _paymentService.PayByCashAsync(request.SessionId, currentUserId);
 
-        /// <summary>
-        /// Xử lý callback từ payment gateway
-        /// POST /api/payments/callback/{gateway}
-        /// </summary>
-        [HttpPost("callback/{gateway}")]
-        [AllowAnonymous] // Payment gateway sẽ gọi endpoint này
-        public async Task<IActionResult> HandlePaymentCallback(string gateway, [FromBody] PaymentCallbackRequest request)
-        {
-            try
-            {
-                var result = await _paymentService.HandlePaymentCallbackAsync(request, gateway);
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while processing payment callback", error = ex.Message });
-            }
-        }
-
-        // ====== WALLET OPERATIONS ======
-
-        /// <summary>
-        /// Thanh toán bằng ví điện tử
-        /// POST /api/payments/wallet
-        /// </summary>
-        [HttpPost("wallet")]
-        public async Task<IActionResult> PayWithWallet([FromBody] PaymentCreateRequest request)
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                request.UserId = userId;
-                request.PaymentMethod = "wallet";
-
-                var result = await _paymentService.ProcessWalletPaymentAsync(request);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                if (result.AlreadyPaid)
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return Ok(new
+                    {
+                        message = result.Message,
+                        alreadyPaid = true,
+                        paymentInfo = result.ExistingPaymentInfo
+                    });
                 }
 
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while processing wallet payment", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Kiểm tra số dư ví
-        /// GET /api/payments/wallet/balance
-        /// </summary>
-        [HttpGet("wallet/balance")]
-        public async Task<IActionResult> GetWalletBalance()
-        {
-            try
-            {
-                var userId = int.Parse(this.User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-                var userEntity = await _userService.GetByIdAsync(userId);
-
-                if (userEntity == null)
+                if (!result.Success)
                 {
-                    return NotFound(new { message = "User not found" });
+                    return BadRequest(new { message = result.Message });
                 }
 
-                return Ok(new { balance = userEntity.WalletBalance ?? 0 });
+                return Ok(new
+                {
+                    message = result.Message,
+                    success = result.Success,
+                    paymentInfo = result.PaymentInfo,
+                    invoice = result.Invoice
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    message = ex.Message,
+                    error = "Payment processing failed"
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving wallet balance", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi xử lý thanh toán tiền mặt",
+                    error = ex.Message
+                });
             }
         }
 
-        // ====== REFUND OPERATIONS ======
-
         /// <summary>
-        /// Tạo yêu cầu hoàn tiền
-        /// POST /api/payments/refund
+        /// Tạo payment URL từ MoMo cho phiên sạc
         /// </summary>
-        [HttpPost("refund")]
-        public async Task<IActionResult> ProcessRefund([FromBody] RefundRequest request)
+        /// <param name="request">Thông tin SessionId cần thanh toán</param>
+        /// <returns>Payment URL từ MoMo</returns>
+        [HttpPost("pay-by-session-momo")]
+        public async Task<IActionResult> PayBySessionMomo([FromBody] SessionPaymentRequestDto request)
         {
             try
             {
-                var result = await _paymentService.ProcessRefundAsync(request);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                if (!ModelState.IsValid)
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return BadRequest(new
+                    {
+                        message = "Invalid request data",
+                        errors = ModelState.Values.SelectMany(v => v.Errors)
+                    });
                 }
 
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while processing refund", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy danh sách hoàn tiền theo payment
-        /// GET /api/payments/{paymentId}/refunds
-        /// </summary>
-        [HttpGet("{paymentId:int}/refunds")]
-        public async Task<IActionResult> GetRefunds(int paymentId)
-        {
-            try
-            {
-                var refunds = await _paymentService.GetRefundsByPaymentAsync(paymentId);
-                return Ok(refunds);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving refunds", error = ex.Message });
-            }
-        }
-
-        // ====== INVOICE OPERATIONS ======
-
-        /// <summary>
-        /// Tạo hóa đơn điện tử
-        /// POST /api/payments/{paymentId}/invoice
-        /// </summary>
-        [HttpPost("{paymentId:int}/invoice")]
-        public async Task<IActionResult> GenerateInvoice(int paymentId)
-        {
-            try
-            {
-                var result = await _paymentService.GenerateInvoiceAsync(paymentId);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
                 }
 
-                return Ok(result);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while generating invoice", error = ex.Message });
-            }
-        }
+                // Lấy thông tin phiên sạc
+                var session = await _db.ChargingSessions
+                    .Include(s => s.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
+                    .FirstOrDefaultAsync(s => s.SessionId == request.SessionId);
 
-        // ====== ANALYTICS (Admin only) ======
-
-        /// <summary>
-        /// Lấy analytics thanh toán (Admin only)
-        /// GET /api/payments/analytics?from=2023-01-01&to=2023-12-31
-        /// </summary>
-        [HttpGet("analytics")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetPaymentAnalytics([FromQuery] DateTime? from, [FromQuery] DateTime? to)
-        {
-            try
-            {
-                var fromDate = from ?? DateTime.UtcNow.AddMonths(-1);
-                var toDate = to ?? DateTime.UtcNow;
-
-                var analytics = await _paymentService.GetPaymentAnalyticsAsync(fromDate, toDate);
-                return Ok(analytics);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving payment analytics", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy tổng doanh thu (Admin only)
-        /// GET /api/payments/revenue?from=2023-01-01&to=2023-12-31
-        /// </summary>
-        [HttpGet("revenue")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetTotalRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
-        {
-            try
-            {
-                var fromDate = from ?? DateTime.UtcNow.AddMonths(-1);
-                var toDate = to ?? DateTime.UtcNow;
-
-                var revenue = await _paymentService.GetTotalRevenueAsync(fromDate, toDate);
-                return Ok(new { totalRevenue = revenue });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving revenue", error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// Lấy thống kê phương thức thanh toán (Admin only)
-        /// GET /api/payments/payment-methods-stats?from=2023-01-01&to=2023-12-31
-        /// </summary>
-        [HttpGet("payment-methods-stats")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> GetPaymentMethodStats([FromQuery] DateTime? from, [FromQuery] DateTime? to)
-        {
-            try
-            {
-                var fromDate = from ?? DateTime.UtcNow.AddMonths(-1);
-                var toDate = to ?? DateTime.UtcNow;
-
-                var stats = await _paymentService.GetPaymentMethodStatsAsync(fromDate, toDate);
-                return Ok(stats);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { message = "An error occurred while retrieving payment method stats", error = ex.Message });
-            }
-        }
-
-        // ====== PAYMENT STATUS MANAGEMENT ======
-
-        /// <summary>
-        /// Cập nhật trạng thái payment (Admin/Staff only)
-        /// PUT /api/payments/{id}/status
-        /// </summary>
-        [HttpPut("{id:int}/status")]
-        [Authorize(Roles = "Admin,Staff")]
-        public async Task<IActionResult> UpdatePaymentStatus(int id, [FromBody] UpdatePaymentStatusRequest request)
-        {
-            try
-            {
-                var result = await _paymentService.UpdatePaymentStatusAsync(id, request.Status, request.TransactionId);
-
-                if (!string.IsNullOrEmpty(result.ErrorMessage))
+                if (session == null)
                 {
-                    return BadRequest(new { message = result.ErrorMessage });
+                    return BadRequest(new { message = $"Không tìm thấy phiên sạc với SessionId: {request.SessionId}" });
                 }
 
-                return Ok(result);
+                // Kiểm tra quyền sở hữu
+                if (session.Driver?.UserId != currentUserId)
+                {
+                    return StatusCode(403, new { message = "Bạn không có quyền thanh toán phiên sạc này." });
+                }
+
+                // Kiểm tra phiên sạc đã hoàn thành chưa
+                if (session.Status != "completed")
+                {
+                    return BadRequest(new { message = $"Phiên sạc chưa hoàn thành. Trạng thái hiện tại: {session.Status}" });
+                }
+
+                // Kiểm tra đã có chi phí cuối cùng chưa
+                if (!session.FinalCost.HasValue || session.FinalCost.Value <= 0)
+                {
+                    return BadRequest(new { message = "Phiên sạc chưa có chi phí cuối cùng." });
+                }
+
+                // Kiểm tra đã thanh toán chưa - kiểm tra cả "success" và "pending" (đang xử lý)
+                var existingPayment = await _db.Payments
+                    .Where(p => p.SessionId == request.SessionId && 
+                               (p.PaymentStatus == "success" || p.PaymentStatus == "pending"))
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (existingPayment != null)
+                {
+                    if (existingPayment.PaymentStatus == "success")
+                    {
+                        return Ok(new
+                        {
+
+                            message = "Phiên sạc đã được thanh toán rồi",
+                            alreadyPaid = true,
+                            paymentInfo = new PaymentInfoDto
+                            {
+                                PaymentId = existingPayment.PaymentId,
+                                PaymentMethod = existingPayment.PaymentMethod ?? "",
+                                Amount = existingPayment.Amount,
+                                InvoiceNumber = existingPayment.InvoiceNumber,
+                                PaidAt = existingPayment.CreatedAt,
+                                SessionId = request.SessionId
+                            }
+                        });
+                    }
+                    else if (existingPayment.PaymentStatus == "pending")
+                    {
+                        // Payment đang pending - có thể đang xử lý hoặc callback chưa được gọi
+                        return BadRequest(new
+                        {
+                            message = "Đã có giao dịch thanh toán đang được xử lý cho phiên sạc này. Vui lòng đợi hoặc kiểm tra lại sau.",
+                            paymentId = existingPayment.PaymentId,
+                            paymentStatus = "pending",
+                            invoiceNumber = existingPayment.InvoiceNumber
+                        });
+                    }
+                }
+
+                // Lấy thông tin user
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == currentUserId);
+                var fullName = user?.Name ?? "Khách hàng";
+
+                // Tạo Payment record với status "pending"
+                var orderId = $"{request.SessionId}_{DateTime.UtcNow:yyyyMMddHHmmss}_{currentUserId}";
+                var payment = new PaymentEntity
+                {
+                    UserId = currentUserId,
+                    SessionId = request.SessionId,
+                    Amount = session.FinalCost.Value,
+                    PaymentMethod = "momo",
+                    PaymentStatus = "pending",
+                    InvoiceNumber = orderId, // Tạm thời dùng orderId làm InvoiceNumber, sẽ cập nhật sau
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Payments.Add(payment);
+                await _db.SaveChangesAsync();
+
+                // Tạo MoMo payment request
+                var momoRequest = new MomoCreatePaymentRequestDto
+                {
+                    SessionId = request.SessionId,
+                    UserId = currentUserId,
+                    Amount = session.FinalCost.Value,
+                    FullName = fullName,
+                    OrderInfo = $"Thanh toán phiên sạc #{request.SessionId} - Trạm: {session.Point.Station.Name}"
+                };
+
+                var momoResponse = await _momoService.CreatePaymentAsync(momoRequest);
+
+                // Cập nhật Payment với orderId từ MoMo
+                payment.InvoiceNumber = momoResponse.OrderId;
+                await _db.SaveChangesAsync();
+
+                if (momoResponse.ErrorCode != 0)
+                {
+                    // Nếu có lỗi, xóa payment record và trả về lỗi
+                    _db.Payments.Remove(payment);
+                    await _db.SaveChangesAsync();
+
+                    return BadRequest(new
+                    {
+                        message = $"Lỗi khi tạo payment: {momoResponse.Message}",
+                        errorCode = momoResponse.ErrorCode
+                    });
+                }
+
+                return Ok(new
+                {
+                    message = "Tạo payment URL thành công",
+                    payUrl = momoResponse.PayUrl,
+                    orderId = momoResponse.OrderId,
+                    qrCodeUrl = momoResponse.QrCodeUrl,
+                    deeplink = momoResponse.Deeplink,
+                    paymentId = payment.PaymentId
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while updating payment status", error = ex.Message });
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi tạo payment URL",
+                    error = ex.Message
+                });
             }
         }
 
-        public class UpdatePaymentStatusRequest
+        /// <summary>
+        /// Xử lý callback từ MoMo sau khi thanh toán (Return URL)
+        /// </summary>
+        [HttpGet("momo-callback")]
+        [AllowAnonymous]
+        public async Task<IActionResult> MomoCallback()
         {
-            public string Status { get; set; } = "";
-            public string? TransactionId { get; set; }
+            try
+            {
+                var result = await _momoService.ProcessCallbackAsync(Request.Query);
+
+                if (!result.Success)
+                {
+                    if (!string.IsNullOrEmpty(result.RedirectUrl))
+                    {
+                        return Redirect($"{Request.Scheme}://{Request.Host}{result.RedirectUrl}");
+                    }
+                    return BadRequest(new { message = result.ErrorMessage ?? "Payment processing failed" });
+                }
+
+                // Redirect đến trang thành công hoặc thất bại
+                return Redirect($"{Request.Scheme}://{Request.Host}{result.RedirectUrl}");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error processing callback", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Xử lý notify từ MoMo sau khi thanh toán (Notify URL - IPN)
+        /// </summary>
+        [HttpPost("momo-notify")]
+        [AllowAnonymous]
+        public async Task<IActionResult> MomoNotify()
+        {
+            try
+            {
+                var result = await _momoService.ProcessNotifyAsync(Request.Query);
+
+                // MoMo yêu cầu trả về JSON với format này
+                return Ok(new
+                {
+                    message = result.Message,
+                    orderId = result.OrderId,
+                    status = result.PaymentStatus
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error processing notify", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Thanh toán cọc đặt chỗ bằng MoMo (khi ví không đủ)
+        /// </summary>
+        [HttpPost("reservation-deposit-momo")]
+        public async Task<IActionResult> PayReservationDepositByMomo([FromBody] ReservationDepositPaymentRequest request)
+        {
+            try
+            {
+                // Kiểm tra validation: chỉ cần ReservationCode
+                if (request == null || string.IsNullOrWhiteSpace(request.ReservationCode))
+                {
+                    return BadRequest(new
+                    {
+                        message = "ReservationCode là bắt buộc",
+                        errors = new[] { "Vui lòng cung cấp ReservationCode" }
+                    });
+                }
+
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+                }
+
+                // Lấy reservation bằng ReservationCode (người dùng nhận qua email/SMS)
+                var driverId = await _db.DriverProfiles
+                    .Where(d => d.UserId == currentUserId)
+                    .Select(d => d.DriverId)
+                    .FirstOrDefaultAsync();
+                
+                if (driverId == 0)
+                {
+                    return BadRequest(new { message = "Không tìm thấy hồ sơ tài xế." });
+                }
+                
+                var reservation = await _db.Reservations
+                    .Include(r => r.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(r => r.Point)
+                        .ThenInclude(p => p.Station)
+                    .FirstOrDefaultAsync(r => r.ReservationCode == request.ReservationCode && r.DriverId == driverId);
+
+                if (reservation == null)
+                {
+                    return BadRequest(new { message = $"Không tìm thấy đặt chỗ với thông tin đã cung cấp." });
+                }
+
+                // Kiểm tra quyền sở hữu
+                if (reservation.Driver?.UserId != currentUserId)
+                {
+                    return StatusCode(403, new { message = "Bạn không có quyền thanh toán đặt chỗ này." });
+                }
+
+                // Kiểm tra đã thanh toán cọc chưa
+                var existingDeposit = await _db.Payments
+                    .Where(p => p.ReservationId == reservation.ReservationId && 
+                               p.PaymentStatus == "success" &&
+                               p.Amount == 20000)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (existingDeposit != null)
+                {
+                    return Ok(new
+                    {
+                        message = "Đặt chỗ đã được thanh toán cọc rồi",
+                        alreadyPaid = true,
+                        paymentInfo = new PaymentInfoDto
+                        {
+                            PaymentId = existingDeposit.PaymentId,
+                            PaymentMethod = existingDeposit.PaymentMethod ?? "",
+                            Amount = existingDeposit.Amount,
+                            InvoiceNumber = existingDeposit.InvoiceNumber,
+                            PaidAt = existingDeposit.CreatedAt,
+                            ReservationId = reservation.ReservationId // ✅ Dùng reservation.ReservationId thay vì request.ReservationId
+                        }
+                    });
+                }
+
+                // Lấy thông tin user
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == currentUserId);
+                var fullName = user?.Name ?? "Khách hàng";
+
+                // Tạo Payment record với status "pending"
+                // InvoiceNumber tạm thời, sẽ cập nhật sau khi có orderId từ MoMo
+                // Lưu ý: InvoiceNumber có max length 50 và unique constraint
+                var tempInvoiceNumber = $"RES{reservation.ReservationId}_{DateTime.UtcNow:MMddHHmmss}";
+                if (tempInvoiceNumber.Length > 50)
+                {
+                    tempInvoiceNumber = tempInvoiceNumber.Substring(0, 50);
+                }
+                
+                // Đảm bảo InvoiceNumber không trùng (nếu trùng, thêm random suffix)
+                var originalTempInvoice = tempInvoiceNumber;
+                int suffix = 0;
+                while (await _db.Payments.AnyAsync(p => p.InvoiceNumber == tempInvoiceNumber))
+                {
+                    suffix++;
+                    var suffixStr = suffix.ToString();
+                    tempInvoiceNumber = originalTempInvoice.Length + suffixStr.Length <= 50
+                        ? originalTempInvoice + suffixStr
+                        : originalTempInvoice.Substring(0, 50 - suffixStr.Length) + suffixStr;
+                }
+                
+                var depositAmount = 20000m;
+
+                var payment = new PaymentEntity
+                {
+                    UserId = currentUserId,
+                    ReservationId = reservation.ReservationId,
+                    Amount = depositAmount,
+                    PaymentMethod = "momo",
+                    PaymentStatus = "pending",
+                    InvoiceNumber = tempInvoiceNumber, // Tạm thời, sẽ update sau
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Payments.Add(payment);
+                await _db.SaveChangesAsync();
+
+                // Tạo MoMo payment request
+                var momoRequest = new MomoCreatePaymentRequestDto
+                {
+                    SessionId = 0, // Không có session, dùng ReservationId
+                    UserId = currentUserId,
+                    Amount = depositAmount,
+                    FullName = fullName,
+                    OrderInfo = $"Cọc đặt chỗ #{reservation.ReservationCode} - Trạm: {reservation.Point?.Station?.Name ?? "N/A"}"
+                };
+
+                var momoResponse = await _momoService.CreatePaymentAsync(momoRequest);
+
+                // Cập nhật Payment với orderId từ MoMo
+                // Đảm bảo orderId không quá dài (max 50 ký tự) và không trùng
+                var finalInvoiceNumber = momoResponse.OrderId ?? payment.InvoiceNumber;
+                if (finalInvoiceNumber != null && finalInvoiceNumber.Length > 50)
+                {
+                    finalInvoiceNumber = finalInvoiceNumber.Substring(0, 50);
+                }
+                
+                // Kiểm tra unique constraint trước khi update
+                if (finalInvoiceNumber != null && await _db.Payments.AnyAsync(p => p.InvoiceNumber == finalInvoiceNumber && p.PaymentId != payment.PaymentId))
+                {
+                    // Nếu trùng, giữ nguyên InvoiceNumber hiện tại
+                    finalInvoiceNumber = payment.InvoiceNumber;
+                }
+                
+                if (finalInvoiceNumber != null)
+                {
+                    payment.InvoiceNumber = finalInvoiceNumber;
+                    await _db.SaveChangesAsync();
+                }
+
+                if (momoResponse.ErrorCode != 0)
+                {
+                    // Nếu có lỗi, xóa payment record và trả về lỗi
+                    _db.Payments.Remove(payment);
+                    await _db.SaveChangesAsync();
+
+                    return BadRequest(new
+                    {
+                        message = $"Lỗi khi tạo payment: {momoResponse.Message}",
+                        errorCode = momoResponse.ErrorCode
+                    });
+                }
+
+                return Ok(new
+                {
+                    message = "Tạo payment URL thành công",
+                    payUrl = momoResponse.PayUrl,
+                    orderId = momoResponse.OrderId,
+                    qrCodeUrl = momoResponse.QrCodeUrl,
+                    deeplink = momoResponse.Deeplink,
+                    paymentId = payment.PaymentId,
+                    reservationId = reservation.ReservationId,
+                    reservationCode = reservation.ReservationCode,
+                    depositAmount = depositAmount
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Log inner exception để debug constraint violations
+                var innerEx = dbEx.InnerException;
+                var errorMessage = dbEx.Message;
+                if (innerEx != null)
+                {
+                    errorMessage = $"{errorMessage} | Inner: {innerEx.Message}";
+                }
+                
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi tạo payment record",
+                    error = errorMessage,
+                    details = "Có thể do constraint violation (unique, foreign key, check constraint). Vui lòng kiểm tra database."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi tạo payment URL",
+                    error = ex.Message,
+                    stackTrace = ex.StackTrace // Thêm stack trace để debug
+                });
+            }
         }
     }
+
+    /// <summary>
+    /// Request để thanh toán cọc đặt chỗ
+    /// Chỉ nhận ReservationCode (string) - người dùng nhận qua email/SMS
+    /// </summary>
+    public class ReservationDepositPaymentRequest
+    {
+        /// <summary>
+        /// ReservationCode (string) - Bắt buộc: Mã đặt chỗ người dùng nhận qua email/SMS
+        /// Ví dụ: "T83JU4CP"
+        /// </summary>
+        [Required(ErrorMessage = "ReservationCode là bắt buộc")]
+        public string ReservationCode { get; set; } = string.Empty;
+    }
 }
+

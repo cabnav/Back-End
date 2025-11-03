@@ -158,7 +158,11 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                     user.DriverProfile.VehiclePlate = req.VehiclePlate;
 
                 if (req.BatteryCapacity.HasValue)
+                {
+                    if (req.BatteryCapacity.Value <= 0)
+                        throw new ArgumentException("BatteryCapacity must be greater than 0");
                     user.DriverProfile.BatteryCapacity = req.BatteryCapacity.Value;
+                }
             }
 
             await _db.SaveChangesAsync();
