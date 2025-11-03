@@ -158,6 +158,25 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     );
 
                     // Tạo Payment record cho deposit
+                    // Tạo InvoiceNumber để đảm bảo unique constraint
+                    var invoiceNumber = $"DEP{entity.ReservationId}_{DateTime.UtcNow:yyyyMMddHHmmss}";
+                    if (invoiceNumber.Length > 50)
+                    {
+                        invoiceNumber = invoiceNumber.Substring(0, 50);
+                    }
+                    
+                    // Đảm bảo InvoiceNumber không trùng (nếu trùng, thêm suffix)
+                    var originalInvoiceNumber = invoiceNumber;
+                    int suffix = 0;
+                    while (await _db.Payments.AnyAsync(p => p.InvoiceNumber == invoiceNumber))
+                    {
+                        suffix++;
+                        var suffixStr = suffix.ToString();
+                        invoiceNumber = originalInvoiceNumber.Length + suffixStr.Length <= 50
+                            ? originalInvoiceNumber + suffixStr
+                            : originalInvoiceNumber.Substring(0, 50 - suffixStr.Length) + suffixStr;
+                    }
+                    
                     var depositPayment = new PaymentEntity
                     {
                         UserId = userId,
@@ -165,6 +184,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         Amount = DEPOSIT_AMOUNT,
                         PaymentMethod = "wallet",
                         PaymentStatus = "success",
+                        PaymentType = "deposit", // ⭐ Quan trọng: Phân biệt loại payment
+                        InvoiceNumber = invoiceNumber,
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -178,7 +199,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
                         $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
                         $"Cần: {DEPOSIT_AMOUNT:F0} VNĐ. " +
-                        $"Vui lòng thanh toán cọc qua MoMo.|{entity.ReservationId}"
+                        $"vui lòng nạp thêm tiền vào ví hoặc thanh toán cọc qua Momo.|{entity.ReservationId}"
                     );
                 }
             }
@@ -189,8 +210,15 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             }
             catch (Exception ex)
             {
-                // Nếu có lỗi khác khi thu cọc, vẫn trả về reservation nhưng log lỗi
-                Console.WriteLine($"⚠️ [CreateReservationAsync] Error processing deposit: {ex.Message}");
+                // Nếu có lỗi khi save payment sau khi đã trừ tiền, đây là lỗi nghiêm trọng
+                // Log chi tiết và throw lại để hệ thống biết có vấn đề
+                Console.WriteLine($"❌ [CreateReservationAsync] CRITICAL ERROR: Tiền đã trừ nhưng không thể tạo payment record!");
+                Console.WriteLine($"   Error: {ex.Message}");
+                Console.WriteLine($"   StackTrace: {ex.StackTrace}");
+                throw new InvalidOperationException(
+                    $"Đã trừ tiền cọc nhưng không thể lưu payment record. Vui lòng liên hệ quản trị viên. Lỗi: {ex.Message}",
+                    ex
+                );
             }
 
             // Gửi thông báo cho người dùng (English)
@@ -320,8 +348,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (entity.Status is "cancelled" or "completed" or "no_show")
                 throw new InvalidOperationException("Cannot cancel (không thể huỷ ở trạng thái hiện tại).");
 
-            // Optional policy: không cho huỷ nếu sắp bắt đầu trong X phút
-            // if (entity.StartTime <= DateTime.UtcNow.AddMinutes(10)) { ... }
+            // Xử lý hoàn cọc nếu có deposit payment thành công
+            await ProcessDepositRefundAsync(userId, entity);
 
             entity.Status = "cancelled";
             entity.UpdatedAt = DateTime.UtcNow;
@@ -351,14 +379,69 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (entity.Status is "cancelled" or "completed" or "no_show")
                 throw new InvalidOperationException("Cannot cancel (không thể huỷ ở trạng thái hiện tại).");
 
-            // Optional policy: không cho huỷ nếu sắp bắt đầu trong X phút
-            // if (entity.StartTime <= DateTime.UtcNow.AddMinutes(10)) { ... }
+            // Xử lý hoàn cọc nếu có deposit payment thành công
+            await ProcessDepositRefundAsync(userId, entity);
 
             entity.Status = "cancelled";
             entity.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
             return true;
+        }
+
+        /// <summary>
+        /// Xử lý hoàn cọc khi hủy reservation
+        /// - Nếu hủy trước 30 phút trước start time → hoàn cọc
+        /// - Nếu hủy dưới 30 phút trước start time → không hoàn cọc
+        /// </summary>
+        private async Task ProcessDepositRefundAsync(int userId, DAL.Entities.Reservation reservation)
+        {
+            try
+            {
+                // Kiểm tra xem có deposit payment thành công không
+                var depositPayment = await _db.Payments
+                    .Where(p => p.ReservationId == reservation.ReservationId &&
+                               p.PaymentStatus == "success" &&
+                               p.PaymentType == "deposit" &&
+                               p.Amount == DEPOSIT_AMOUNT)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (depositPayment == null)
+                {
+                    // Không có deposit payment → không cần hoàn cọc
+                    return;
+                }
+
+                // Kiểm tra thời gian hủy: nếu hủy trước 30 phút trước start time → hoàn cọc
+                var now = DateTime.UtcNow;
+                var cancelBeforeStart = reservation.StartTime - now;
+                const int REFUND_DEADLINE_MINUTES = 30; // 30 phút
+
+                if (cancelBeforeStart.TotalMinutes >= REFUND_DEADLINE_MINUTES)
+                {
+                    // Hủy trước 30 phút → hoàn cọc vào ví
+                    await _walletService.CreditAsync(
+                        userId,
+                        DEPOSIT_AMOUNT,
+                        $"Hoàn cọc hủy đặt chỗ #{reservation.ReservationCode}",
+                        reservation.ReservationId
+                    );
+
+                    Console.WriteLine($"✅ Đã hoàn cọc {DEPOSIT_AMOUNT:F0} VNĐ cho reservation {reservation.ReservationId} (hủy trước {cancelBeforeStart.TotalMinutes:F0} phút)");
+                }
+                else
+                {
+                    // Hủy dưới 30 phút → không hoàn cọc
+                    Console.WriteLine($"⚠️ Không hoàn cọc cho reservation {reservation.ReservationId} (hủy chỉ còn {cancelBeforeStart.TotalMinutes:F0} phút, yêu cầu tối thiểu {REFUND_DEADLINE_MINUTES} phút)");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để reservation vẫn được hủy
+                Console.WriteLine($"❌ Lỗi khi xử lý hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
+                Console.WriteLine($"   StackTrace: {ex.StackTrace}");
+            }
         }
 
         /// <summary>
