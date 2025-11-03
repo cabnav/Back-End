@@ -2,6 +2,7 @@
 using EVCharging.BE.Services.Services.Payment;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
@@ -252,6 +253,7 @@ namespace EVCharging.BE.API.Controllers
                     {
                         return Ok(new
                         {
+
                             message = "Phiên sạc đã được thanh toán rồi",
                             alreadyPaid = true,
                             paymentInfo = new PaymentInfoDto
@@ -400,6 +402,228 @@ namespace EVCharging.BE.API.Controllers
                 return StatusCode(500, new { message = "Error processing notify", error = ex.Message });
             }
         }
+
+        /// <summary>
+        /// Thanh toán cọc đặt chỗ bằng MoMo (khi ví không đủ)
+        /// </summary>
+        [HttpPost("reservation-deposit-momo")]
+        public async Task<IActionResult> PayReservationDepositByMomo([FromBody] ReservationDepositPaymentRequest request)
+        {
+            try
+            {
+                // Kiểm tra validation: chỉ cần ReservationCode
+                if (request == null || string.IsNullOrWhiteSpace(request.ReservationCode))
+                {
+                    return BadRequest(new
+                    {
+                        message = "ReservationCode là bắt buộc",
+                        errors = new[] { "Vui lòng cung cấp ReservationCode" }
+                    });
+                }
+
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+                }
+
+                // Lấy reservation bằng ReservationCode (người dùng nhận qua email/SMS)
+                var driverId = await _db.DriverProfiles
+                    .Where(d => d.UserId == currentUserId)
+                    .Select(d => d.DriverId)
+                    .FirstOrDefaultAsync();
+                
+                if (driverId == 0)
+                {
+                    return BadRequest(new { message = "Không tìm thấy hồ sơ tài xế." });
+                }
+                
+                var reservation = await _db.Reservations
+                    .Include(r => r.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(r => r.Point)
+                        .ThenInclude(p => p.Station)
+                    .FirstOrDefaultAsync(r => r.ReservationCode == request.ReservationCode && r.DriverId == driverId);
+
+                if (reservation == null)
+                {
+                    return BadRequest(new { message = $"Không tìm thấy đặt chỗ với thông tin đã cung cấp." });
+                }
+
+                // Kiểm tra quyền sở hữu
+                if (reservation.Driver?.UserId != currentUserId)
+                {
+                    return StatusCode(403, new { message = "Bạn không có quyền thanh toán đặt chỗ này." });
+                }
+
+                // Kiểm tra đã thanh toán cọc chưa
+                var existingDeposit = await _db.Payments
+                    .Where(p => p.ReservationId == reservation.ReservationId && 
+                               p.PaymentStatus == "success" &&
+                               p.Amount == 20000)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (existingDeposit != null)
+                {
+                    return Ok(new
+                    {
+                        message = "Đặt chỗ đã được thanh toán cọc rồi",
+                        alreadyPaid = true,
+                        paymentInfo = new PaymentInfoDto
+                        {
+                            PaymentId = existingDeposit.PaymentId,
+                            PaymentMethod = existingDeposit.PaymentMethod ?? "",
+                            Amount = existingDeposit.Amount,
+                            InvoiceNumber = existingDeposit.InvoiceNumber,
+                            PaidAt = existingDeposit.CreatedAt,
+                            ReservationId = reservation.ReservationId // ✅ Dùng reservation.ReservationId thay vì request.ReservationId
+                        }
+                    });
+                }
+
+                // Lấy thông tin user
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == currentUserId);
+                var fullName = user?.Name ?? "Khách hàng";
+
+                // Tạo Payment record với status "pending"
+                // InvoiceNumber tạm thời, sẽ cập nhật sau khi có orderId từ MoMo
+                // Lưu ý: InvoiceNumber có max length 50 và unique constraint
+                var tempInvoiceNumber = $"RES{reservation.ReservationId}_{DateTime.UtcNow:MMddHHmmss}";
+                if (tempInvoiceNumber.Length > 50)
+                {
+                    tempInvoiceNumber = tempInvoiceNumber.Substring(0, 50);
+                }
+                
+                // Đảm bảo InvoiceNumber không trùng (nếu trùng, thêm random suffix)
+                var originalTempInvoice = tempInvoiceNumber;
+                int suffix = 0;
+                while (await _db.Payments.AnyAsync(p => p.InvoiceNumber == tempInvoiceNumber))
+                {
+                    suffix++;
+                    var suffixStr = suffix.ToString();
+                    tempInvoiceNumber = originalTempInvoice.Length + suffixStr.Length <= 50
+                        ? originalTempInvoice + suffixStr
+                        : originalTempInvoice.Substring(0, 50 - suffixStr.Length) + suffixStr;
+                }
+                
+                var depositAmount = 20000m;
+
+                var payment = new PaymentEntity
+                {
+                    UserId = currentUserId,
+                    ReservationId = reservation.ReservationId,
+                    Amount = depositAmount,
+                    PaymentMethod = "momo",
+                    PaymentStatus = "pending",
+                    InvoiceNumber = tempInvoiceNumber, // Tạm thời, sẽ update sau
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Payments.Add(payment);
+                await _db.SaveChangesAsync();
+
+                // Tạo MoMo payment request
+                var momoRequest = new MomoCreatePaymentRequestDto
+                {
+                    SessionId = 0, // Không có session, dùng ReservationId
+                    UserId = currentUserId,
+                    Amount = depositAmount,
+                    FullName = fullName,
+                    OrderInfo = $"Cọc đặt chỗ #{reservation.ReservationCode} - Trạm: {reservation.Point?.Station?.Name ?? "N/A"}"
+                };
+
+                var momoResponse = await _momoService.CreatePaymentAsync(momoRequest);
+
+                // Cập nhật Payment với orderId từ MoMo
+                // Đảm bảo orderId không quá dài (max 50 ký tự) và không trùng
+                var finalInvoiceNumber = momoResponse.OrderId ?? payment.InvoiceNumber;
+                if (finalInvoiceNumber != null && finalInvoiceNumber.Length > 50)
+                {
+                    finalInvoiceNumber = finalInvoiceNumber.Substring(0, 50);
+                }
+                
+                // Kiểm tra unique constraint trước khi update
+                if (finalInvoiceNumber != null && await _db.Payments.AnyAsync(p => p.InvoiceNumber == finalInvoiceNumber && p.PaymentId != payment.PaymentId))
+                {
+                    // Nếu trùng, giữ nguyên InvoiceNumber hiện tại
+                    finalInvoiceNumber = payment.InvoiceNumber;
+                }
+                
+                if (finalInvoiceNumber != null)
+                {
+                    payment.InvoiceNumber = finalInvoiceNumber;
+                    await _db.SaveChangesAsync();
+                }
+
+                if (momoResponse.ErrorCode != 0)
+                {
+                    // Nếu có lỗi, xóa payment record và trả về lỗi
+                    _db.Payments.Remove(payment);
+                    await _db.SaveChangesAsync();
+
+                    return BadRequest(new
+                    {
+                        message = $"Lỗi khi tạo payment: {momoResponse.Message}",
+                        errorCode = momoResponse.ErrorCode
+                    });
+                }
+
+                return Ok(new
+                {
+                    message = "Tạo payment URL thành công",
+                    payUrl = momoResponse.PayUrl,
+                    orderId = momoResponse.OrderId,
+                    qrCodeUrl = momoResponse.QrCodeUrl,
+                    deeplink = momoResponse.Deeplink,
+                    paymentId = payment.PaymentId,
+                    reservationId = reservation.ReservationId,
+                    reservationCode = reservation.ReservationCode,
+                    depositAmount = depositAmount
+                });
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+            {
+                // Log inner exception để debug constraint violations
+                var innerEx = dbEx.InnerException;
+                var errorMessage = dbEx.Message;
+                if (innerEx != null)
+                {
+                    errorMessage = $"{errorMessage} | Inner: {innerEx.Message}";
+                }
+                
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi tạo payment record",
+                    error = errorMessage,
+                    details = "Có thể do constraint violation (unique, foreign key, check constraint). Vui lòng kiểm tra database."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi tạo payment URL",
+                    error = ex.Message,
+                    stackTrace = ex.StackTrace // Thêm stack trace để debug
+                });
+            }
+        }
+    }
+
+    /// <summary>
+    /// Request để thanh toán cọc đặt chỗ
+    /// Chỉ nhận ReservationCode (string) - người dùng nhận qua email/SMS
+    /// </summary>
+    public class ReservationDepositPaymentRequest
+    {
+        /// <summary>
+        /// ReservationCode (string) - Bắt buộc: Mã đặt chỗ người dùng nhận qua email/SMS
+        /// Ví dụ: "T83JU4CP"
+        /// </summary>
+        [Required(ErrorMessage = "ReservationCode là bắt buộc")]
+        public string ReservationCode { get; set; } = string.Empty;
     }
 }
 

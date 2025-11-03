@@ -1,34 +1,24 @@
-﻿using System.Text;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+﻿using EVCharging.BE.Common.DTOs.Payments;
+using System.Text;
 using QRCoder;
+using Microsoft.AspNetCore.Mvc;
 using EVCharging.BE.Services.Services.Payment;
-using EVCharging.BE.Common.DTOs.Payments;
-using EVCharging.BE.DAL;
-using EVCharging.BE.Services.Services.Payment.Implementations;
-using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
 [ApiController]
 [Route("api/[controller]")]
 public class WalletTransactionsController : ControllerBase
 {
     private readonly IMockPayService _mock;
-    private readonly EvchargingManagementContext _db;
-    private readonly IWalletService _wallet;
+    public WalletTransactionsController(IMockPayService mock) => _mock = mock;
 
-    public WalletTransactionsController(IMockPayService mock,
-                                        EvchargingManagementContext db, IWalletService wallet)
-    {
-        _mock = mock; _db = db; _wallet = wallet;
-    }
-
-    // ---------- MOCK (cũ) vẫn giữ để test nhanh nếu cần ----------
+    // 1) Tạo yêu cầu nạp → trả code + link + QR
     [HttpPost("topup/request")]
     public async Task<IActionResult> CreateTopUp([FromBody] WalletTopUpRequestDto req)
     {
         var (code, base64, expires) = await _mock.CreateTopUpAsync(req.UserId, req.Amount);
         var checkoutUrl = $"{Request.Scheme}://{Request.Host}/mockpay/checkout/{code}";
         var qrImageUrl = $"{Request.Scheme}://{Request.Host}/api/wallettransactions/topup/qr/{code}";
+
         return Ok(new
         {
             code,
@@ -55,9 +45,12 @@ public class WalletTransactionsController : ControllerBase
         var ok = await _mock.ConfirmAsync(code, success);
         if (!ok) return NotFound(new { message = "Code not found" });
 
-        var html = @"<!doctype html><html lang='vi'><head><meta charset='utf-8'>
-<title>Kết quả</title></head><body style='font-family:sans-serif;padding:24px'>
-<h3>Kết quả: " + (success ? "THÀNH CÔNG" : "THẤT BẠI") + @"</h3></body></html>";
+        var html = $@"<!doctype html>
+<html lang='vi'><head><meta charset='utf-8'><title>Kết quả thanh toán</title></head>
+<body style='font-family:sans-serif;padding:24px'>
+  <h3>Kết quả: {(success ? "THÀNH CÔNG" : "THẤT BẠI")}</h3>
+  <p>Mã GD: {code}</p>
+</body></html>";
         return Content(html, "text/html", Encoding.UTF8);
     }
 
@@ -68,4 +61,3 @@ public class WalletTransactionsController : ControllerBase
         return st is null ? NotFound() : Ok(new { code, status = st });
     }
 }
-

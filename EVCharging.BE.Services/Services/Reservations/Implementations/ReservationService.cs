@@ -3,11 +3,13 @@ using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Payment;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
 namespace EVCharging.BE.Services.Services.Reservations.Implementations
 {
@@ -18,13 +20,18 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
     {
         private readonly EvchargingManagementContext _db;   
         private readonly ITimeValidationService _timeValidator;
+        private readonly IWalletService _walletService;
+
+        private const decimal DEPOSIT_AMOUNT = 20000m; // Cọc 20,000 VNĐ
 
         public ReservationService(
             EvchargingManagementContext db,
-            ITimeValidationService timeValidator)
+            ITimeValidationService timeValidator,
+            IWalletService walletService)
         {
             _db = db;
             _timeValidator = timeValidator;
+            _walletService = walletService;
         }
 
         /// <summary>
@@ -135,6 +142,56 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             await _db.Entry(entity).Reference(r => r.Driver).LoadAsync();
             if (entity.Driver != null)
                 await _db.Entry(entity.Driver).Reference(d => d.User).LoadAsync();
+
+            // Thu cọc 20,000 VNĐ sau khi tạo reservation thành công
+            try
+            {
+                var walletBalance = await _walletService.GetBalanceAsync(userId);
+                if (walletBalance >= DEPOSIT_AMOUNT)
+                {
+                    // Ví đủ tiền: trừ từ ví và tạo Payment record
+                    await _walletService.DebitAsync(
+                        userId,
+                        DEPOSIT_AMOUNT,
+                        $"Cọc đặt chỗ #{entity.ReservationCode}",
+                        entity.ReservationId
+                    );
+
+                    // Tạo Payment record cho deposit
+                    var depositPayment = new PaymentEntity
+                    {
+                        UserId = userId,
+                        ReservationId = entity.ReservationId,
+                        Amount = DEPOSIT_AMOUNT,
+                        PaymentMethod = "wallet",
+                        PaymentStatus = "success",
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _db.Payments.Add(depositPayment);
+                    await _db.SaveChangesAsync();
+                }
+                else
+                {
+                    // Ví không đủ: throw exception với message đặc biệt để controller nhận biết
+                    throw new InvalidOperationException(
+                        $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
+                        $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
+                        $"Cần: {DEPOSIT_AMOUNT:F0} VNĐ. " +
+                        $"Vui lòng thanh toán cọc qua MoMo.|{entity.ReservationId}"
+                    );
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw để controller xử lý
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // Nếu có lỗi khác khi thu cọc, vẫn trả về reservation nhưng log lỗi
+                Console.WriteLine($"⚠️ [CreateReservationAsync] Error processing deposit: {ex.Message}");
+            }
 
             // Gửi thông báo cho người dùng (English)
             try

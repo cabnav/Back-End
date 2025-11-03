@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
+using EVCharging.BE.DAL;
+using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.API.Controllers
 {
@@ -18,19 +20,22 @@ namespace EVCharging.BE.API.Controllers
         private readonly IQRCodeService _qrCodeService;
         private readonly IStationSearchService _stationSearchService;
         private readonly ReservationBackgroundOptions _opt;
+        private readonly EvchargingManagementContext _db;
 
         public ReservationsController(
             IReservationService reservationService,
             IQRCodeService qrCodeService,
             IStationSearchService stationSearchService,
             EVCharging.BE.Services.Services.Charging.IChargingService chargingService,
-            IOptions<ReservationBackgroundOptions> opt)
+            IOptions<ReservationBackgroundOptions> opt,
+            EvchargingManagementContext db)
         {
             _reservationService = reservationService;
             _qrCodeService = qrCodeService;
             _stationSearchService = stationSearchService;
             _chargingService = chargingService;
             _opt = opt.Value;
+            _db = db;
         }
 
         // -------------------------------
@@ -217,6 +222,51 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (InvalidOperationException ex)
             {
+                // Kiểm tra xem có phải lỗi ví không đủ không
+                if (ex.Message.Contains("WALLET_INSUFFICIENT"))
+                {
+                    // Parse message để lấy reservationId
+                    var parts = ex.Message.Split('|');
+                    var reservationId = parts.Length > 2 ? int.Parse(parts[2]) : 0;
+                    var userMessage = parts.Length > 1 ? parts[1] : ex.Message;
+
+                    // Lấy reservationCode từ database để trả về cho người dùng
+                    // Người dùng cần mã này để thanh toán qua MoMo
+                    string? reservationCode = null;
+                    if (reservationId > 0)
+                    {
+                        try
+                        {
+                            var reservation = await _db.Reservations
+                                .Where(r => r.ReservationId == reservationId)
+                                .Select(r => new { r.ReservationCode })
+                                .FirstOrDefaultAsync();
+                            
+                            if (reservation != null)
+                            {
+                                reservationCode = reservation.ReservationCode;
+                            }
+                        }
+                        catch
+                        {
+                            // Nếu không lấy được reservationCode, vẫn trả về response
+                            // Người dùng có thể dùng reservationId hoặc gọi API khác để lấy code
+                        }
+                    }
+
+                    // Trả về response yêu cầu thanh toán cọc qua MoMo
+                    return BadRequest(new
+                    {
+                        message = userMessage,
+                        requiresDepositPayment = true,
+                        depositAmount = 20000,
+                        reservationId = reservationId,
+                        reservationCode = reservationCode, // ✅ Thêm reservationCode để người dùng dùng ngay
+                        paymentMethod = "momo",
+                        action = "Vui lòng gọi API /api/payments/reservation-deposit-momo để thanh toán cọc"
+                    });
+                }
+
                 // Catch validation errors (time slot closed, booking cutoff, etc.)
                 return BadRequest(new { message = ex.Message });
             }

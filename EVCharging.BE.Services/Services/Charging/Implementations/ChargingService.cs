@@ -87,11 +87,25 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     Console.WriteLine($"[StartSessionAsync] Creating session - Point status: {chargingPoint.Status}, Station status: {chargingPoint.Station?.Status}");
 
+                    // Nếu có ReservationCode, tìm reservation và set ReservationId
+                    int? reservationId = null;
+                    if (!string.IsNullOrEmpty(request.ReservationCode))
+                    {
+                        var reservation = await _db.Reservations
+                            .FirstOrDefaultAsync(r => r.ReservationCode == request.ReservationCode && r.DriverId == request.DriverId);
+                        if (reservation != null)
+                        {
+                            reservationId = reservation.ReservationId;
+                            Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}");
+                        }
+                    }
+
                     // Create new charging session
                     session = new ChargingSession
                     {
                         DriverId = request.DriverId,
                         PointId = request.ChargingPointId,
+                        ReservationId = reservationId,
                         StartTime = request.StartAtUtc ?? DateTime.UtcNow,
                         InitialSoc = request.InitialSOC,
                         Status = "in_progress",

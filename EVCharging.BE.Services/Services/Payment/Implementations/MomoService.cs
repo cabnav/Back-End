@@ -267,7 +267,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Callback: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
-                    // Tạo invoice nếu chưa có
+                    // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
+                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
                     if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices
@@ -361,6 +362,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     };
                 }
 
+
                 Console.WriteLine($"✅ Notify: Signature verification PASSED for OrderId: {result.OrderId}");
 
                 // Parse orderId để lấy sessionId
@@ -419,7 +421,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Notify: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
-                    // Tạo invoice nếu chưa có
+                    // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
+                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
                     if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices

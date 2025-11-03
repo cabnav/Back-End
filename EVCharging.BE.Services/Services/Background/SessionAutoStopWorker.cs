@@ -43,25 +43,16 @@ namespace EVCharging.BE.Services.Services.Background
                     var now = DateTime.UtcNow;
 
                     // Tìm các session "in_progress" có reservation liên quan đã quá EndTime
-                    // Join session với reservation qua PointId, sau đó filter:
-                    // - Session StartTime nằm trong khoảng reservation (StartTime <= session.StartTime <= EndTime)
-                    // - Reservation EndTime đã qua (< now)
-                    // - Reservation status là checked_in hoặc in_progress
+                    // Sử dụng ReservationId trực tiếp thay vì join qua PointId (chính xác và hiệu quả hơn)
                     var sessionsToStop = await db.ChargingSessions
-                        .Where(s => s.Status == "in_progress" && !s.EndTime.HasValue)
-                        .Join(
-                            db.Reservations
-                                .Where(r => r.EndTime < now && (r.Status == "checked_in" || r.Status == "in_progress")),
-                            session => session.PointId,
-                            reservation => reservation.PointId,
-                            (session, reservation) => new { Session = session, Reservation = reservation }
-                        )
-                        .Where(x => 
-                            x.Reservation.StartTime <= x.Session.StartTime &&
-                            x.Session.StartTime <= x.Reservation.EndTime &&
-                            x.Reservation.EndTime < now)
-                        .Select(x => x.Session)
-                        .Distinct()
+                        .Include(s => s.Reservation)
+                        .Where(s => 
+                            s.Status == "in_progress" && 
+                            !s.EndTime.HasValue &&
+                            s.ReservationId.HasValue &&
+                            s.Reservation != null &&
+                            s.Reservation.EndTime < now &&
+                            (s.Reservation.Status == "checked_in" || s.Reservation.Status == "in_progress"))
                         .ToListAsync(stoppingToken);
 
                     if (sessionsToStop.Count > 0)

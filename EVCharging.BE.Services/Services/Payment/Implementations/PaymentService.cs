@@ -78,33 +78,71 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         Amount = existingPayment.Amount,
                         InvoiceNumber = existingPayment.InvoiceNumber,
                         PaidAt = existingPayment.CreatedAt,
-                        SessionId = sessionId,
+                        SessionId = existingPayment.SessionId,
+                        ReservationId = existingPayment.ReservationId,
+                        UserId = userId,
                         TransactionId = existingTransaction?.TransactionId
                     }
                 };
             }
 
-            // Kiểm tra số dư ví
+            // Kiểm tra xem có deposit từ reservation không
+            decimal depositAmount = 0;
+            PaymentEntity? depositPayment = null;
+            if (session.ReservationId.HasValue)
+            {
+                depositPayment = await _db.Payments
+                    .Where(p => p.ReservationId == session.ReservationId.Value &&
+                               p.PaymentStatus == "success" &&
+                               p.Amount == 20000m)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (depositPayment != null)
+                {
+                    depositAmount = depositPayment.Amount;
+                }
+            }
+
+            // Tính số tiền cần thanh toán (FinalCost - Deposit)
+            var amountToPay = session.FinalCost.Value - depositAmount;
+            if (amountToPay < 0)
+            {
+                // Nếu deposit > FinalCost, hoàn tiền dư vào ví
+                var refundAmount = Math.Abs(amountToPay);
+                await _walletService.CreditAsync(
+                    userId,
+                    refundAmount,
+                    $"Hoàn tiền cọc dư cho phiên sạc #{sessionId}",
+                    sessionId
+                );
+                amountToPay = 0; // Không cần thanh toán thêm
+            }
+
+            // Kiểm tra số dư ví (chỉ nếu cần thanh toán thêm)
             var currentBalance = await _walletService.GetBalanceAsync(userId);
-            if (currentBalance < session.FinalCost.Value)
-                throw new InvalidOperationException($"Số dư ví không đủ. Số dư hiện tại: {currentBalance:F0} VND, Cần: {session.FinalCost.Value:F0} VND");
+            if (amountToPay > 0 && currentBalance < amountToPay)
+                throw new InvalidOperationException($"Số dư ví không đủ. Số dư hiện tại: {currentBalance:F0} VND, Cần: {amountToPay:F0} VND (Đã trừ cọc {depositAmount:F0} VND)");
 
-            // Trừ tiền từ ví
-            var paymentDescription = $"Thanh toán phiên sạc #{sessionId} - Trạm: {session.Point.Station.Name}";
-            await _walletService.DebitAsync(
-                userId,
-                session.FinalCost.Value,
-                paymentDescription,
-                sessionId
-            );
+            // Trừ tiền từ ví (chỉ nếu cần thanh toán thêm)
+            decimal newBalance = currentBalance;
+            if (amountToPay > 0)
+            {
+                var paymentDescription = $"Thanh toán phiên sạc #{sessionId} - Trạm: {session.Point.Station.Name} (Đã trừ cọc {depositAmount:F0} VND)";
+                await _walletService.DebitAsync(
+                    userId,
+                    amountToPay,
+                    paymentDescription,
+                    sessionId
+                );
+                newBalance = await _walletService.GetBalanceAsync(userId);
+            }
 
-            var newBalance = await _walletService.GetBalanceAsync(userId);
-
-            // Tạo hóa đơn
+            // Tạo hóa đơn với số tiền thực tế cần thanh toán (có thể là 0 nếu deposit đủ)
             var invoice = await _invoiceService.CreateInvoiceForSessionAsync(
                 sessionId,
                 userId,
-                session.FinalCost.Value,
+                amountToPay > 0 ? amountToPay : session.FinalCost.Value, // Nếu không cần thanh toán thêm, vẫn tạo invoice với FinalCost để hiển thị đúng
                 "wallet"
             );
 
@@ -113,7 +151,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             {
                 UserId = userId,
                 SessionId = sessionId,
-                Amount = session.FinalCost.Value,
+                Amount = amountToPay > 0 ? amountToPay : session.FinalCost.Value, // Lưu số tiền thực tế thanh toán
                 PaymentMethod = "wallet",
                 PaymentStatus = "success",
                 InvoiceNumber = invoice.InvoiceNumber,
@@ -131,16 +169,21 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .OrderByDescending(wt => wt.CreatedAt)
                 .FirstOrDefaultAsync();
 
+            var successMessage = depositAmount > 0
+                ? $"Thanh toán thành công. Đã trừ cọc {depositAmount:F0} VND, thanh toán thêm {amountToPay:F0} VND"
+                : "Thanh toán thành công";
+
             return new PaymentResultDto
             {
                 Success = true,
-                Message = "Thanh toán thành công",
+                Message = successMessage,
                 PaymentInfo = new PaymentInfoDto
                 {
                     PaymentId = payment.PaymentId,
                     SessionId = sessionId,
+                    ReservationId = session.ReservationId,
                     UserId = userId,
-                    Amount = session.FinalCost.Value,
+                    Amount = amountToPay > 0 ? amountToPay : session.FinalCost.Value,
                     PaymentMethod = "wallet",
                     PaymentStatus = "success",
                     InvoiceNumber = invoice.InvoiceNumber,
@@ -150,7 +193,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 WalletInfo = new WalletInfoDto
                 {
                     BalanceBefore = currentBalance,
-                    AmountDeducted = session.FinalCost.Value,
+                    AmountDeducted = amountToPay > 0 ? amountToPay : 0, // Chỉ hiển thị số tiền thực tế trừ
                     BalanceAfter = newBalance
                 },
                 Invoice = invoice
@@ -202,7 +245,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         Amount = existingPayment.Amount,
                         InvoiceNumber = existingPayment.InvoiceNumber,
                         PaidAt = existingPayment.CreatedAt,
-                        SessionId = sessionId
+                        SessionId = existingPayment.SessionId,
+                        ReservationId = existingPayment.ReservationId,
+                        UserId = userId
                     }
                 };
             }
@@ -238,6 +283,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 {
                     PaymentId = payment.PaymentId,
                     SessionId = sessionId,
+                    ReservationId = session.ReservationId,
                     UserId = userId,
                     Amount = session.FinalCost.Value,
                     PaymentMethod = "cash",

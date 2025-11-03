@@ -11,6 +11,8 @@ public partial class ChargingSession
 
     public int PointId { get; set; }
 
+    public int? ReservationId { get; set; }
+
     public DateTime StartTime { get; set; }
 
     public DateTime? EndTime { get; set; }
@@ -38,6 +40,8 @@ public partial class ChargingSession
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ChargingPoint Point { get; set; } = null!;
+
+    public virtual Reservation? Reservation { get; set; }
 
     public virtual ICollection<SessionLog> SessionLogs { get; set; } = new List<SessionLog>();
 }
