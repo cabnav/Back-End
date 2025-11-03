@@ -239,28 +239,43 @@ namespace EVCharging.BE.API.Controllers
                     return BadRequest(new { message = "Phiên sạc chưa có chi phí cuối cùng." });
                 }
 
-                // Kiểm tra đã thanh toán chưa
+                // Kiểm tra đã thanh toán chưa - kiểm tra cả "success" và "pending" (đang xử lý)
                 var existingPayment = await _db.Payments
-                    .Where(p => p.SessionId == request.SessionId && p.PaymentStatus == "success")
+                    .Where(p => p.SessionId == request.SessionId && 
+                               (p.PaymentStatus == "success" || p.PaymentStatus == "pending"))
                     .OrderByDescending(p => p.CreatedAt)
                     .FirstOrDefaultAsync();
 
                 if (existingPayment != null)
                 {
-                    return Ok(new
+                    if (existingPayment.PaymentStatus == "success")
                     {
-                        message = "Phiên sạc đã được thanh toán rồi",
-                        alreadyPaid = true,
-                        paymentInfo = new PaymentInfoDto
+                        return Ok(new
                         {
-                            PaymentId = existingPayment.PaymentId,
-                            PaymentMethod = existingPayment.PaymentMethod ?? "",
-                            Amount = existingPayment.Amount,
-                            InvoiceNumber = existingPayment.InvoiceNumber,
-                            PaidAt = existingPayment.CreatedAt,
-                            SessionId = request.SessionId
-                        }
-                    });
+                            message = "Phiên sạc đã được thanh toán rồi",
+                            alreadyPaid = true,
+                            paymentInfo = new PaymentInfoDto
+                            {
+                                PaymentId = existingPayment.PaymentId,
+                                PaymentMethod = existingPayment.PaymentMethod ?? "",
+                                Amount = existingPayment.Amount,
+                                InvoiceNumber = existingPayment.InvoiceNumber,
+                                PaidAt = existingPayment.CreatedAt,
+                                SessionId = request.SessionId
+                            }
+                        });
+                    }
+                    else if (existingPayment.PaymentStatus == "pending")
+                    {
+                        // Payment đang pending - có thể đang xử lý hoặc callback chưa được gọi
+                        return BadRequest(new
+                        {
+                            message = "Đã có giao dịch thanh toán đang được xử lý cho phiên sạc này. Vui lòng đợi hoặc kiểm tra lại sau.",
+                            paymentId = existingPayment.PaymentId,
+                            paymentStatus = "pending",
+                            invoiceNumber = existingPayment.InvoiceNumber
+                        });
+                    }
                 }
 
                 // Lấy thông tin user
