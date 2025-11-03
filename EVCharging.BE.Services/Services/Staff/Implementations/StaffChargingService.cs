@@ -1,8 +1,10 @@
 using EVCharging.BE.Common.DTOs.Charging;
+using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.Common.DTOs.Staff;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Charging;
+using EVCharging.BE.Services.Services.Payment;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.Services.Services.Staff.Implementations
@@ -16,17 +18,20 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
         private readonly IChargingService _chargingService;
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly ICostCalculationService _costCalculationService;
+        private readonly IPaymentService _paymentService;
 
         public StaffChargingService(
             EvchargingManagementContext db,
             IChargingService chargingService,
             ISessionMonitorService sessionMonitorService,
-            ICostCalculationService costCalculationService)
+            ICostCalculationService costCalculationService,
+            IPaymentService paymentService)
         {
             _db = db;
             _chargingService = chargingService;
             _sessionMonitorService = sessionMonitorService;
             _costCalculationService = costCalculationService;
+            _paymentService = paymentService;
         }
 
         // ========== STATION ASSIGNMENT & VERIFICATION ==========
@@ -228,7 +233,40 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 var estimatedHours = energyNeeded / chargingPower;
                 var estimatedCompletionTime = DateTime.UtcNow.AddHours((double)estimatedHours);
 
-                // 11. Get session details
+                // 11. Create payment immediately if payment method is cash/card/pos (pending status)
+                // Payment will be updated with actual cost when session completes
+                if (request.PaymentMethod.ToLower() == "cash" || 
+                    request.PaymentMethod.ToLower() == "card" || 
+                    request.PaymentMethod.ToLower() == "pos")
+                {
+                    var userId = guestDriver.UserId;
+                    var paymentRequest = new PaymentCreateRequest
+                    {
+                        UserId = userId,
+                        SessionId = session.SessionId,
+                        Amount = estimatedCost, // Estimated cost, will be updated when session completes
+                        PaymentMethod = request.PaymentMethod.ToLower(),
+                        Description = $"Walk-in payment for session {session.SessionId} - {request.CustomerName}"
+                    };
+
+                    var paymentResponse = await _paymentService.CreatePaymentAsync(paymentRequest);
+                    
+                    if (paymentResponse != null && string.IsNullOrEmpty(paymentResponse.ErrorMessage))
+                    {
+                        // Update PaymentType for walk-in payments
+                        var payment = await _db.Payments.FindAsync(paymentResponse.PaymentId);
+                        if (payment != null)
+                        {
+                            payment.PaymentType = "session_payment";
+                            await _db.SaveChangesAsync();
+                        }
+
+                        await LogStaffActionAsync(staffId, "create_pending_payment", session.SessionId,
+                            $"Payment method: {request.PaymentMethod}, Estimated amount: {estimatedCost}");
+                    }
+                }
+
+                // 12. Get session details
                 var sessionDetails = await _chargingService.GetSessionByIdAsync(session.SessionId);
 
                 // 12. Return response
@@ -592,6 +630,52 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             {
                 Console.WriteLine($"Error getting session detail: {ex.Message}");
                 return null;
+            }
+        }
+
+        // ========== PAYMENT OPERATIONS ==========
+
+        /// <summary>
+        /// Lấy danh sách payments pending tại trạm của staff (để xác nhận thanh toán)
+        /// </summary>
+        public async Task<List<PaymentResponse>> GetPendingPaymentsAsync(int staffId)
+        {
+            try
+            {
+                // 1. Get assigned stations
+                var stationIds = await GetAssignedStationsAsync(staffId);
+                if (!stationIds.Any())
+                    return new List<PaymentResponse>();
+
+                // 2. Get pending payments for sessions at assigned stations
+                var pendingPayments = await _db.Payments
+                    .Include(p => p.Session)
+                    .ThenInclude(s => s != null ? s.Point : null!)
+                    .Where(p => p.PaymentStatus == "pending" &&
+                               (p.PaymentMethod == "cash" || p.PaymentMethod == "card" || p.PaymentMethod == "pos") &&
+                               p.SessionId.HasValue &&
+                               p.Session != null &&
+                               p.Session.Point != null &&
+                               stationIds.Contains(p.Session.Point.StationId))
+                    .OrderByDescending(p => p.CreatedAt)
+                    .ToListAsync();
+
+                return pendingPayments.Select(p => new PaymentResponse
+                {
+                    PaymentId = p.PaymentId,
+                    UserId = p.UserId,
+                    SessionId = p.SessionId,
+                    Amount = p.Amount,
+                    PaymentMethod = p.PaymentMethod ?? "",
+                    PaymentStatus = p.PaymentStatus ?? "",
+                    InvoiceNumber = p.InvoiceNumber,
+                    CreatedAt = p.CreatedAt ?? DateTime.UtcNow
+                }).ToList();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting pending payments: {ex.Message}");
+                return new List<PaymentResponse>();
             }
         }
 

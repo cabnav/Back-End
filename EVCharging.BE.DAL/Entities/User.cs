@@ -25,6 +25,12 @@ public partial class User
 
     public DateTime? CreatedAt { get; set; }
 
+    public string? Provider { get; set; }
+
+    public string? ProviderId { get; set; }
+
+    public bool? EmailVerified { get; set; }
+
     public virtual ICollection<CorporateAccount> CorporateAccounts { get; set; } = new List<CorporateAccount>();
 
     public virtual DriverProfile? DriverProfile { get; set; }

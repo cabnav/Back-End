@@ -11,10 +11,12 @@ namespace EVCharging.BE.API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly IAuthService _authService;
+        private readonly IEmailOTPService _emailOTPService;
 
-        public AuthController(IAuthService authService)
+        public AuthController(IAuthService authService, IEmailOTPService emailOTPService)
         {
             _authService = authService;
+            _emailOTPService = emailOTPService;
         }
 
         /// <summary>
@@ -104,6 +106,73 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
+        /// Send OTP to email for verification
+        /// </summary>
+        /// <param name="request">Email address</param>
+        /// <returns>Success status</returns>
+        [HttpPost("send-otp")]
+        public async Task<IActionResult> SendOTP([FromBody] SendOTPRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { message = "Validation failed", errors });
+                }
+
+                var result = await _emailOTPService.SendOTPAsync(request.Email, request.Purpose ?? "registration");
+                if (!result)
+                {
+                    return BadRequest(new { message = "Failed to send OTP. Email may already be registered." });
+                }
+
+                return Ok(new { message = "OTP sent successfully to your email. Please check your inbox." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while sending OTP", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Verify OTP code
+        /// </summary>
+        /// <param name="request">Email and OTP code</param>
+        /// <returns>Verification result</returns>
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOTP([FromBody] VerifyOTPRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { message = "Validation failed", errors });
+                }
+
+                var result = await _emailOTPService.VerifyOTPAsync(request.Email, request.OtpCode);
+                
+                if (!result)
+                {
+                    return BadRequest(new { message = "Invalid or expired OTP code" });
+                }
+
+                return Ok(new { message = "OTP verified successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred during verification", error = ex.Message });
+            }
+        }
+
+        /// <summary>
         /// User logout
         /// </summary>
         /// <returns>Logout confirmation</returns>
@@ -159,6 +228,48 @@ namespace EVCharging.BE.API.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred during token validation", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// OAuth login or register (Google, Facebook, etc.)
+        /// </summary>
+        /// <param name="request">OAuth login details</param>
+        /// <returns>Authentication response with token</returns>
+        [HttpPost("oauth/login")]
+        public async Task<IActionResult> OAuthLogin([FromBody] OAuthLoginRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    var errors = ModelState.Values
+                        .SelectMany(v => v.Errors)
+                        .Select(e => e.ErrorMessage)
+                        .ToList();
+                    return BadRequest(new { message = "Validation failed", errors });
+                }
+
+                if (string.IsNullOrEmpty(request.Provider) || string.IsNullOrEmpty(request.ProviderId))
+                {
+                    return BadRequest(new { message = "Provider and ProviderId are required" });
+                }
+
+                var result = await _authService.OAuthLoginOrRegisterAsync(request);
+                if (result == null)
+                {
+                    return BadRequest(new { message = "OAuth login failed" });
+                }
+
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred during OAuth login", error = ex.Message });
             }
         }
 

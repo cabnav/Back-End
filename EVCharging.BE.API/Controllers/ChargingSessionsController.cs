@@ -92,6 +92,14 @@ namespace EVCharging.BE.API.Controllers
 
                 return Ok(new { message = "Charging session started successfully", data = result });
             }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred while starting the charging session", error = ex.Message });

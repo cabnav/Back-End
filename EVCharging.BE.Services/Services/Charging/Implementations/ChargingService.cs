@@ -43,7 +43,10 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 
                 try
                 {
+                    // Re-validate trong transaction context
+
                     // Re-validate trong transaction context (có thể khác với validation ở controller)
+
                     // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
                     if (!await ValidateChargingPointAsync(request.ChargingPointId, request.StartAtUtc))
                     {
@@ -87,6 +90,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     Console.WriteLine($"[StartSessionAsync] Creating session - Point status: {chargingPoint.Status}, Station status: {chargingPoint.Station?.Status}");
 
+
                     // Nếu có ReservationCode, tìm reservation và set ReservationId
                     int? reservationId = null;
                     if (!string.IsNullOrEmpty(request.ReservationCode))
@@ -99,7 +103,6 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                             Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}");
                         }
                     }
-
                     // Create new charging session
                     session = new ChargingSession
                     {
@@ -303,6 +306,19 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 session.CostBeforeDiscount = costResponse.BaseCost;
                 session.AppliedDiscount = costResponse.TotalDiscount;
                 session.FinalCost = costResponse.FinalCost;
+
+                // Update payment amount if there's a pending payment for this session (walk-in cash/card/pos)
+                var pendingPayment = await _db.Payments
+                    .FirstOrDefaultAsync(p => p.SessionId == session.SessionId && 
+                                              p.PaymentStatus == "pending" &&
+                                              (p.PaymentMethod == "cash" || p.PaymentMethod == "card" || p.PaymentMethod == "pos"));
+                
+                if (pendingPayment != null && session.FinalCost.HasValue)
+                {
+                    // Update payment amount to actual final cost
+                    pendingPayment.Amount = session.FinalCost.Value;
+                    Console.WriteLine($"Updated payment {pendingPayment.PaymentId} amount from {pendingPayment.Amount} to {session.FinalCost.Value}");
+                }
 
                 // Update charging point status
                 var chargingPoint = await _db.ChargingPoints.FindAsync(session.PointId);

@@ -1,5 +1,15 @@
-### Test Register API - Valid Registration
-POST http://localhost:5000/api/auth/register
+### Step 1: Send OTP to email for verification
+POST http://localhost:7035/api/auth/send-otp
+Content-Type: application/json
+
+{
+  "email": "test@example.com"
+}
+
+###
+
+### Step 2: Register with OTP - Valid Registration
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -7,6 +17,7 @@ Content-Type: application/json
   "email": "test@example.com",
   "password": "password123",
   "phone": "0123456789",
+  "otpCode": "123456",
   "role": "driver",
   "licenseNumber": "A123456",
   "vehicleModel": "Tesla Model 3",
@@ -17,7 +28,7 @@ Content-Type: application/json
 ###
 
 ### Test Register API - Invalid Email (No @ Symbol)
-POST http://localhost:5000/api/auth/register
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -31,7 +42,7 @@ Content-Type: application/json
 ###
 
 ### Test Register API - Invalid Email (Not Valid Format)
-POST http://localhost:5000/api/auth/register
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -45,7 +56,7 @@ Content-Type: application/json
 ###
 
 ### Test Register API - Password Too Short (Less than 6 characters)
-POST http://localhost:5000/api/auth/register
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -59,7 +70,7 @@ Content-Type: application/json
 ###
 
 ### Test Register API - Password Exactly 6 Characters (Should Pass)
-POST http://localhost:5000/api/auth/register
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -73,7 +84,7 @@ Content-Type: application/json
 ###
 
 ### Test Register API - Gmail Address
-POST http://localhost:5000/api/auth/register
+POST http://localhost:7035/api/auth/register
 Content-Type: application/json
 
 {
@@ -91,7 +102,7 @@ Content-Type: application/json
 ###
 
 ### Test Login API
-POST http://localhost:5000/api/auth/login
+POST http://localhost:7035/api/auth/login
 Content-Type: application/json
 
 {

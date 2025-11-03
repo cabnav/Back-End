@@ -47,11 +47,21 @@ namespace EVCharging.BE.Services.Services.Payment
         public int? TransactionId { get; set; }
     }
 
+// login-gg-and-fb
+        // Validation
+        Task<bool> ValidatePaymentRequestAsync(PaymentCreateRequest request);
+        Task<bool> CanProcessRefundAsync(int paymentId, decimal amount);
+
+        // Session Payment Methods
+        Task<PaymentResultDto> PayByWalletAsync(int sessionId, int userId);
+        Task<PaymentResultDto> PayByCashAsync(int sessionId, int userId);
+
     public class WalletInfoDto
     {
         public decimal BalanceBefore { get; set; }
         public decimal AmountDeducted { get; set; }
         public decimal BalanceAfter { get; set; }
+// main
     }
 }
 

@@ -21,6 +21,8 @@ public partial class Payment
 
     public string? InvoiceNumber { get; set; }
 
+    public string? PaymentType { get; set; } // "deposit", "session_payment", "refund", "top_up"
+
     public DateTime? CreatedAt { get; set; }
 
     public virtual Reservation? Reservation { get; set; }
