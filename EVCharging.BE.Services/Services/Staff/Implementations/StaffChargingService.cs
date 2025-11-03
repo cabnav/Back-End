@@ -240,30 +240,32 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                     request.PaymentMethod.ToLower() == "pos")
                 {
                     var userId = guestDriver.UserId;
-                    var paymentRequest = new PaymentCreateRequest
+                    
+                    // Generate temporary invoice number
+                    var tempInvoiceNumber = $"WALKIN-{session.SessionId}-{DateTime.UtcNow:yyyyMMddHHmmss}";
+                    if (tempInvoiceNumber.Length > 50)
+                    {
+                        tempInvoiceNumber = tempInvoiceNumber.Substring(0, 50);
+                    }
+                    
+                    // Create payment record directly
+                    var payment = new EVCharging.BE.DAL.Entities.Payment
                     {
                         UserId = userId,
                         SessionId = session.SessionId,
                         Amount = estimatedCost, // Estimated cost, will be updated when session completes
                         PaymentMethod = request.PaymentMethod.ToLower(),
-                        Description = $"Walk-in payment for session {session.SessionId} - {request.CustomerName}"
+                        PaymentStatus = "pending", // Will be updated to "success" when staff confirms payment
+                        PaymentType = "session_payment",
+                        InvoiceNumber = tempInvoiceNumber,
+                        CreatedAt = DateTime.UtcNow
                     };
-
-                    var paymentResponse = await _paymentService.CreatePaymentAsync(paymentRequest);
                     
-                    if (paymentResponse != null && string.IsNullOrEmpty(paymentResponse.ErrorMessage))
-                    {
-                        // Update PaymentType for walk-in payments
-                        var payment = await _db.Payments.FindAsync(paymentResponse.PaymentId);
-                        if (payment != null)
-                        {
-                            payment.PaymentType = "session_payment";
-                            await _db.SaveChangesAsync();
-                        }
+                    _db.Payments.Add(payment);
+                    await _db.SaveChangesAsync();
 
-                        await LogStaffActionAsync(staffId, "create_pending_payment", session.SessionId,
-                            $"Payment method: {request.PaymentMethod}, Estimated amount: {estimatedCost}");
-                    }
+                    await LogStaffActionAsync(staffId, "create_pending_payment", session.SessionId,
+                        $"Payment method: {request.PaymentMethod}, Estimated amount: {estimatedCost}");
                 }
 
                 // 12. Get session details

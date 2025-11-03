@@ -13,7 +13,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public PaymentInfoDto? PaymentInfo { get; set; }
         public PaymentInfoDto? ExistingPaymentInfo { get; set; }
         public WalletInfoDto? WalletInfo { get; set; }
-        public InvoiceDto? Invoice { get; set; }
+        public InvoiceResponseDto? Invoice { get; set; }
     }
 
     /// <summary>
