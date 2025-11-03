@@ -259,6 +259,37 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Lấy danh sách payments pending tại trạm của staff (để xác nhận thanh toán)
+        /// GET /api/staff/charging/payments/pending
+        /// </summary>
+        [HttpGet("payments/pending")]
+        public async Task<IActionResult> GetPendingPayments()
+        {
+            try
+            {
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                var pendingPayments = await _staffChargingService.GetPendingPaymentsAsync(staffId);
+                
+                return Ok(new { 
+                    message = "Pending payments retrieved successfully", 
+                    data = pendingPayments,
+                    count = pendingPayments.Count,
+                    note = "Use PUT /api/payments/{paymentId}/status to confirm payment when customer pays."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while retrieving pending payments", 
+                    error = ex.Message 
+                });
+            }
+        }
+
         // ========== HELPER METHODS ==========
 
         /// <summary>

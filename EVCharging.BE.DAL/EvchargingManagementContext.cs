@@ -29,6 +29,8 @@ public partial class EvchargingManagementContext : DbContext
 
     public virtual DbSet<DriverProfile> DriverProfiles { get; set; }
 
+    public virtual DbSet<EmailOTP> EmailOTPs { get; set; }
+
     public virtual DbSet<IncidentReport> IncidentReports { get; set; }
 
     public virtual DbSet<Invoice> Invoices { get; set; }
@@ -485,6 +487,9 @@ public partial class EvchargingManagementContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("pending")
                 .HasColumnName("payment_status");
+            entity.Property(e => e.PaymentType)
+                .HasMaxLength(30)
+                .HasColumnName("payment_type");
             entity.Property(e => e.ReservationId).HasColumnName("reservation_id");
             entity.Property(e => e.SessionId).HasColumnName("session_id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
@@ -741,6 +746,15 @@ public partial class EvchargingManagementContext : DbContext
                 .HasDefaultValue(0.00m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("wallet_balance");
+            entity.Property(e => e.Provider)
+                .HasMaxLength(50)
+                .HasColumnName("provider");
+            entity.Property(e => e.ProviderId)
+                .HasMaxLength(255)
+                .HasColumnName("provider_id");
+            entity.Property(e => e.EmailVerified)
+                .HasDefaultValue(false)
+                .HasColumnName("email_verified");
         });
 
         modelBuilder.Entity<UserBilling>(entity =>
@@ -812,6 +826,36 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__WalletTra__user___08B54D69");
+        });
+
+        modelBuilder.Entity<EmailOTP>(entity =>
+        {
+            entity.HasKey(e => e.OtpId).HasName("PK__EmailOTP__otp_id");
+
+            entity.ToTable("EmailOTP");
+
+            entity.HasIndex(e => e.Email, "IX_EmailOTP_Email");
+
+            entity.HasIndex(e => new { e.Email, e.IsUsed, e.ExpiresAt }, "IX_EmailOTP_Active");
+
+            entity.Property(e => e.OtpId).HasColumnName("otp_id");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.OtpCode)
+                .HasMaxLength(6)
+                .HasColumnName("otp_code");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsUsed)
+                .HasDefaultValue(false)
+                .HasColumnName("is_used");
+            entity.Property(e => e.Purpose)
+                .HasMaxLength(50)
+                .HasDefaultValue("registration")
+                .HasColumnName("purpose");
         });
 
         OnModelCreatingPartial(modelBuilder);

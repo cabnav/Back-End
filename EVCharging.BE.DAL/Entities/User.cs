@@ -25,10 +25,11 @@ public partial class User
 
     public DateTime? CreatedAt { get; set; }
 
-    // OAuth fields
-    public string? Provider { get; set; }  // "google", "facebook", etc.
-    public string? ProviderId { get; set; }  // External provider user ID
-    public bool EmailVerified { get; set; }
+    public string? Provider { get; set; }
+
+    public string? ProviderId { get; set; }
+
+    public bool? EmailVerified { get; set; }
 
     public virtual ICollection<CorporateAccount> CorporateAccounts { get; set; } = new List<CorporateAccount>();
 

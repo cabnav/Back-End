@@ -75,6 +75,42 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     "wallet" => await ProcessWalletPaymentAsync(request),
                     "vnpay" => await ProcessVNPayPaymentAsync(request),
                     "momo" => await ProcessMoMoPaymentAsync(request),
+                    "cash" => new PaymentResponse
+                    {
+                        PaymentId = payment.PaymentId,
+                        UserId = payment.UserId,
+                        SessionId = payment.SessionId,
+                        Amount = payment.Amount,
+                        PaymentMethod = payment.PaymentMethod ?? "",
+                        PaymentStatus = payment.PaymentStatus ?? "pending",
+                        InvoiceNumber = payment.InvoiceNumber,
+                        CreatedAt = payment.CreatedAt ?? DateTime.UtcNow
+                        // Status remains "pending" until staff confirms cash payment
+                    },
+                    "card" => new PaymentResponse
+                    {
+                        PaymentId = payment.PaymentId,
+                        UserId = payment.UserId,
+                        SessionId = payment.SessionId,
+                        Amount = payment.Amount,
+                        PaymentMethod = payment.PaymentMethod ?? "",
+                        PaymentStatus = payment.PaymentStatus ?? "pending",
+                        InvoiceNumber = payment.InvoiceNumber,
+                        CreatedAt = payment.CreatedAt ?? DateTime.UtcNow
+                        // Status remains "pending" until staff confirms card payment via POS
+                    },
+                    "pos" => new PaymentResponse
+                    {
+                        PaymentId = payment.PaymentId,
+                        UserId = payment.UserId,
+                        SessionId = payment.SessionId,
+                        Amount = payment.Amount,
+                        PaymentMethod = payment.PaymentMethod ?? "",
+                        PaymentStatus = payment.PaymentStatus ?? "pending",
+                        InvoiceNumber = payment.InvoiceNumber,
+                        CreatedAt = payment.CreatedAt ?? DateTime.UtcNow
+                        // Status remains "pending" until staff confirms POS payment
+                    },
                     _ => new PaymentResponse
                     {
                         PaymentId = payment.PaymentId,

@@ -100,6 +100,7 @@ builder.Services.AddSwaggerGen(c =>
 // Auth
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+builder.Services.AddScoped<IEmailOTPService, EmailOTPService>();
 
 // Users
 builder.Services.AddScoped<IUserService, UserService>();

@@ -94,6 +94,15 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <returns>Thông tin phiên sạc</returns>
         Task<ChargingSessionResponse?> GetSessionDetailAsync(int staffId, int sessionId);
 
+        // ========== PAYMENT OPERATIONS ==========
+
+        /// <summary>
+        /// Lấy danh sách payments pending tại trạm của staff (để xác nhận thanh toán)
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <returns>Danh sách payments pending</returns>
+        Task<List<EVCharging.BE.Common.DTOs.Payments.PaymentResponse>> GetPendingPaymentsAsync(int staffId);
+
         // ========== LOGGING & AUDIT ==========
 
         /// <summary>

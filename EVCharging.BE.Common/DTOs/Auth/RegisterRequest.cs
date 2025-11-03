@@ -26,6 +26,10 @@ namespace EVCharging.BE.Common.DTOs.Auth
         [Phone(ErrorMessage = "Invalid phone number format")]
         public string Phone { get; set; }
 
+        [Required(ErrorMessage = "OTP code is required")]
+        [StringLength(6, MinimumLength = 6, ErrorMessage = "OTP code must be 6 digits")]
+        public string OtpCode { get; set; }
+
         public string? Role { get; set; } = "driver";
 
         // Driver specific

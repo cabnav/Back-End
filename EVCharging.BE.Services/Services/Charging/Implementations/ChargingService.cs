@@ -33,36 +33,38 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                if (!await ValidateChargingPointAsync(request.ChargingPointId))
-                {
-                    Console.WriteLine("⚠️ Charging point validation failed");
-                    return null;
-                }
-
-                if (!await ValidateDriverAsync(request.DriverId))
-                {
-                    Console.WriteLine("⚠️ Driver validation failed");
-                    return null;
-                }
-
-                if (!await CanStartSessionAsync(request.ChargingPointId, request.DriverId))
-                {
-                    Console.WriteLine("⚠️ Cannot start session (maybe active session exists or point busy)");
-                    return null;
-                }
-
-
-                // Get charging point and driver info
+                // Validate charging point với message cụ thể
                 var chargingPoint = await _db.ChargingPoints
                     .Include(cp => cp.Station)
                     .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
 
+                if (chargingPoint == null)
+                    throw new KeyNotFoundException("Charging point not found (không tìm thấy điểm sạc).");
+
+                if (chargingPoint.Status != "available")
+                    throw new InvalidOperationException($"Charging point is not available (điểm sạc không khả dụng). Current status: {chargingPoint.Status ?? "null"}");
+
+                if (chargingPoint.Station == null || chargingPoint.Station.Status != "active")
+                    throw new InvalidOperationException("Charging station is not active (trạm sạc không hoạt động).");
+
+                // Validate driver với message cụ thể
                 var driver = await _db.DriverProfiles
-                    .Include(d => d.User)   
+                    .Include(d => d.User)
                     .FirstOrDefaultAsync(d => d.DriverId == request.DriverId);
 
-                if (chargingPoint == null || driver == null)
-                    return null;
+                if (driver == null || driver.User == null)
+                    throw new KeyNotFoundException("Driver profile not found or driver does not have a user account (không tìm thấy hồ sơ tài xế hoặc tài xế chưa có tài khoản).");
+
+                // Kiểm tra driver có session đang chạy không
+                var hasActiveSession = await _db.ChargingSessions
+                    .AnyAsync(s => s.DriverId == request.DriverId && s.Status == "in_progress");
+
+                if (hasActiveSession)
+                    throw new InvalidOperationException("Driver already has an active charging session (tài xế đang có phiên sạc đang hoạt động).");
+
+                // Kiểm tra lại point có đang bận không (có thể bị thay đổi sau khi validate)
+                if (chargingPoint.Status != "available")
+                    throw new InvalidOperationException("Charging point is no longer available (điểm sạc không còn khả dụng).");
 
                 // Create new charging session
                 var session = new ChargingSession
@@ -92,10 +94,21 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Return response
                 return await GetSessionByIdAsync(session.SessionId);
             }
+            catch (KeyNotFoundException)
+            {
+                // Re-throw validation exceptions để controller xử lý
+                throw;
+            }
+            catch (InvalidOperationException)
+            {
+                // Re-throw validation exceptions để controller xử lý
+                throw;
+            }
             catch (Exception ex)
             {
-                // Log error
-                Console.WriteLine($"Error starting charging session: {ex.Message}");
+                // Log error nhưng không throw để tránh crash
+                Console.WriteLine($"Unexpected error starting charging session: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
                 return null;
             }
         }
@@ -134,6 +147,19 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 session.CostBeforeDiscount = costResponse.BaseCost;
                 session.AppliedDiscount = costResponse.TotalDiscount;
                 session.FinalCost = costResponse.FinalCost;
+
+                // Update payment amount if there's a pending payment for this session (walk-in cash/card/pos)
+                var pendingPayment = await _db.Payments
+                    .FirstOrDefaultAsync(p => p.SessionId == session.SessionId && 
+                                              p.PaymentStatus == "pending" &&
+                                              (p.PaymentMethod == "cash" || p.PaymentMethod == "card" || p.PaymentMethod == "pos"));
+                
+                if (pendingPayment != null && session.FinalCost.HasValue)
+                {
+                    // Update payment amount to actual final cost
+                    pendingPayment.Amount = session.FinalCost.Value;
+                    Console.WriteLine($"Updated payment {pendingPayment.PaymentId} amount from {pendingPayment.Amount} to {session.FinalCost.Value}");
+                }
 
                 // Update charging point status
                 var chargingPoint = await _db.ChargingPoints.FindAsync(session.PointId);
