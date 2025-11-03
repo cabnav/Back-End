@@ -182,19 +182,10 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     };
                 }
 
-                // Parse orderId để lấy sessionId
-                var orderIdParts = result.OrderId.Split('_');
-                if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
-                {
-                    return new MomoCallbackResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Invalid orderId format",
-                        OrderId = result.OrderId
-                    };
-                }
-
-                // Tìm payment record
+                // Tìm payment record bằng InvoiceNumber (orderId từ MoMo)
+                // Lưu ý: orderId có thể có format khác nhau:
+                // - Session payment: {sessionId}_{timestamp}_{userId}
+                // - Reservation deposit: {orderId từ MoMo} hoặc RES{reservationId}_{timestamp}
                 var payment = await _db.Payments
                     .FirstOrDefaultAsync(p => p.InvoiceNumber == result.OrderId);
 
@@ -228,7 +219,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                     await _db.SaveChangesAsync();
 
-                    // Tạo invoice nếu chưa có
+                    // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
+                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
                     if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices
@@ -301,19 +293,10 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     };
                 }
 
-                // Parse orderId để lấy sessionId
-                var orderIdParts = result.OrderId.Split('_');
-                if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
-                {
-                    return new MomoNotifyResult
-                    {
-                        Success = false,
-                        Message = "Invalid orderId format",
-                        OrderId = result.OrderId
-                    };
-                }
-
-                // Tìm payment record
+                // Tìm payment record bằng InvoiceNumber (orderId từ MoMo)
+                // Lưu ý: orderId có thể có format khác nhau:
+                // - Session payment: {sessionId}_{timestamp}_{userId}
+                // - Reservation deposit: {orderId từ MoMo} hoặc RES{reservationId}_{timestamp}
                 var payment = await _db.Payments
                     .FirstOrDefaultAsync(p => p.InvoiceNumber == result.OrderId);
 
@@ -348,7 +331,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                     await _db.SaveChangesAsync();
 
-                    // Tạo invoice nếu chưa có
+                    // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
+                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
                     if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices

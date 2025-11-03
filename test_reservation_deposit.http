@@ -1,0 +1,240 @@
+### ========================================
+### TEST CHỨC NĂNG ĐẶT CỌC 20,000 VNĐ
+### ========================================
+
+# Variables
+@host = https://localhost:7035
+@token = YOUR_JWT_TOKEN_HERE
+
+### ========================================
+### BƯỚC 1: ĐĂNG NHẬP ĐỂ LẤY TOKEN
+### ========================================
+POST {{host}}/api/Auth/login
+Content-Type: application/json
+
+{
+  "email": "chinh22@gmail.com",
+  "password": "12345"
+}
+
+### Lưu token từ response vào biến @token ở trên
+
+### ========================================
+### BƯỚC 2: KIỂM TRA SỐ DƯ VÍ HIỆN TẠI
+### ========================================
+# Xem ví có bao nhiêu tiền (có thể qua API wallet hoặc xem trong DB)
+# Bạn cần biết số dư để quyết định test case nào
+
+### ========================================
+### TEST CASE 1: TẠO RESERVATION KHI VÍ ĐỦ TIỀN (>= 20,000 VNĐ)
+### ========================================
+# Kỳ vọng: Reservation được tạo thành công, 20,000 VNĐ tự động trừ từ ví
+POST {{host}}/api/reservations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pointId": 1,
+  "date": "2024-12-25T00:00:00Z",
+  "hour": 14
+}
+
+# ✅ Response thành công:
+# - reservationId được tạo
+# - reservationCode được tạo
+# - 20,000 VNĐ đã bị trừ từ ví
+# - Payment record với ReservationId và Amount=20000 được tạo
+
+### ========================================
+### TEST CASE 2: TẠO RESERVATION KHI VÍ KHÔNG ĐỦ TIỀN (< 20,000 VNĐ)
+### ========================================
+# Trước khi test: Đảm bảo ví có < 20,000 VNĐ
+# Có thể top-up ví ít tiền hoặc dùng user có ít tiền
+
+POST {{host}}/api/reservations
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "pointId": 1,
+  "date": "2024-12-26T00:00:00Z",
+  "hour": 15
+}
+
+# ✅ Response mong đợi:
+# Status: 400 Bad Request
+# {
+#   "message": "Ví không đủ tiền để cọc. Số dư hiện tại: X VNĐ, Cần: 20000 VNĐ. Vui lòng thanh toán cọc qua MoMo.",
+#   "requiresDepositPayment": true,
+#   "depositAmount": 20000,
+#   "reservationId": <id>,
+#   "paymentMethod": "momo",
+#   "action": "Vui lòng gọi API /api/payments/reservation-deposit-momo để thanh toán cọc"
+# }
+# 
+# Lưu ý: Reservation vẫn được tạo nhưng chưa có deposit payment
+
+### ========================================
+### TEST CASE 3: THANH TOÁN CỌC QUA MOMO (Khi ví không đủ)
+### ========================================
+# 👤 Người dùng thực hiện - Chỉ dùng ReservationCode (nhận qua email/SMS)
+# Ví dụ: Sau khi đặt chỗ, ví không đủ, người dùng thanh toán cọc qua MoMo
+POST {{host}}/api/payments/reservation-deposit-momo
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reservationCode": "KN7BCVXT"
+}
+
+# ✅ Response mong đợi:
+# Status: 200 OK
+# {
+#   "message": "Tạo payment URL thành công",
+#   "payUrl": "https://test-payment.momo.vn/...",
+#   "orderId": "...",
+#   "qrCodeUrl": "...",
+#   "deeplink": "...",
+#   "paymentId": <id>,
+#   "reservationId": 123,
+#   "depositAmount": 20000
+# }
+
+# ⚠️ Lưu ý: Cần thanh toán trên MoMo sandbox/test để callback được gọi
+# Sau khi thanh toán thành công, Payment.PaymentStatus sẽ được update thành "success"
+
+### ========================================
+### TEST CASE 4: KIỂM TRA PAYMENT DEPOSIT ĐÃ ĐƯỢC TẠO
+### ========================================
+# Kiểm tra trong database:
+# SELECT * FROM Payments WHERE ReservationId = <reservationId> AND Amount = 20000
+
+# Hoặc có thể thêm API để check:
+# GET {{host}}/api/payments/reservation/{reservationId}/deposit
+# (Cần implement thêm endpoint này nếu chưa có)
+
+### ========================================
+### TEST CASE 5: CHECK-IN RESERVATION VÀ TẠO SESSION
+### ========================================
+# Sau khi có reservation (đã cọc), check-in để tạo charging session
+POST {{host}}/api/reservations/{{reservationCode}}/check-in?initialSOC=20
+Authorization: Bearer {{token}}
+
+# ✅ Response mong đợi:
+# - Session được tạo với ReservationId được link
+# - ChargingSession.ReservationId = ReservationId của reservation
+
+### ========================================
+### TEST CASE 6: THANH TOÁN SESSION CUỐI CÙNG (CÓ TRỪ CỌC)
+### ========================================
+# Giả sử FinalCost = 50,000 VNĐ
+# Deposit = 20,000 VNĐ
+# → Chỉ cần thanh toán thêm: 50,000 - 20,000 = 30,000 VNĐ
+
+POST {{host}}/api/payments/pay-by-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 456
+}
+
+# ✅ Response mong đợi:
+# {
+#   "message": "Thanh toán thành công. Đã trừ cọc 20000 VND, thanh toán thêm 30000 VND",
+#   "success": true,
+#   "paymentInfo": {
+#     "amount": 30000  // Số tiền thực tế thanh toán thêm
+#   },
+#   "walletInfo": {
+#     "amountDeducted": 30000  // Chỉ trừ 30k từ ví
+#   }
+# }
+
+### ========================================
+### TEST CASE 7: TRƯỜNG HỢP DEPOSIT > FINALCOST (HOÀN TIỀN DƯ)
+### ========================================
+# Giả sử FinalCost = 15,000 VNĐ
+# Deposit = 20,000 VNĐ
+# → Cần hoàn lại: 20,000 - 15,000 = 5,000 VNĐ vào ví
+
+POST {{host}}/api/payments/pay-by-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 789
+}
+
+# ✅ Response mong đợi:
+# {
+#   "message": "Thanh toán thành công. Đã trừ cọc 20000 VND, thanh toán thêm 0 VND",
+#   "success": true,
+#   "paymentInfo": {
+#     "amount": 15000
+#   },
+#   "walletInfo": {
+#     "amountDeducted": 0  // Không trừ thêm từ ví
+#   }
+# }
+
+# ✅ Kiểm tra ví đã được hoàn 5,000 VNĐ:
+# - WalletBalance tăng 5,000 VNĐ
+# - WalletTransaction với type="topup" và description="Hoàn tiền cọc dư..."
+
+### ========================================
+### TEST CASE 8: KIỂM TRA DEPOSIT ĐÃ ĐƯỢC SỬ DỤNG (KHÔNG BỊ TRỪ LẠI)
+### ========================================
+# Sau khi thanh toán session, deposit payment không được trừ lại
+# Chỉ có 1 payment cho deposit và 1 payment cho session
+
+# Database check:
+# SELECT * FROM Payments WHERE ReservationId = <reservationId>
+# - 1 payment với Amount=20000 (deposit)
+# - 1 payment với Amount=<finalCost - 20000> (session payment)
+
+### ========================================
+### TEST CASE 9: TRƯỜNG HỢP KHÔNG CÓ RESERVATION (WALK-IN)
+### ========================================
+# Session không có ReservationId → Không có deposit
+# Thanh toán bình thường toàn bộ FinalCost
+
+POST {{host}}/api/payments/pay-by-session
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "sessionId": 999
+}
+
+# ✅ Response: Thanh toán bình thường toàn bộ FinalCost
+# Không có message về deposit
+
+### ========================================
+### DEBUGGING TIPS
+### ========================================
+
+# 1. Kiểm tra Payment records:
+# SELECT * FROM Payments WHERE ReservationId = <id>
+
+# 2. Kiểm tra WalletTransactions:
+# SELECT * FROM WalletTransactions WHERE UserId = <userId> ORDER BY CreatedAt DESC
+
+# 3. Kiểm tra ChargingSession có ReservationId:
+# SELECT * FROM ChargingSessions WHERE ReservationId IS NOT NULL
+
+# 4. Kiểm tra số dư ví:
+# SELECT WalletBalance FROM Users WHERE UserId = <userId>
+
+### ========================================
+### FLOW HOÀN CHỈNH
+### ========================================
+
+# 1. User tạo reservation → Hệ thống tự động thu 20k từ ví (nếu đủ)
+# 2. Nếu ví không đủ → User phải thanh toán qua MoMo
+# 3. User check-in reservation → Tạo session với ReservationId
+# 4. User sạc xong → Thanh toán session
+#    - FinalCost = 50k, Deposit = 20k → Chỉ thanh toán thêm 30k
+#    - FinalCost = 15k, Deposit = 20k → Hoàn lại 5k vào ví
+#    - Không có deposit → Thanh toán toàn bộ FinalCost
+
