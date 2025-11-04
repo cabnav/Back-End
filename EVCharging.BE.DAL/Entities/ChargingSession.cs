@@ -11,8 +11,6 @@ public partial class ChargingSession
 
     public int PointId { get; set; }
 
-    public int? ReservationId { get; set; }
-
     public DateTime StartTime { get; set; }
 
     public DateTime? EndTime { get; set; }
@@ -32,6 +30,8 @@ public partial class ChargingSession
     public decimal? FinalCost { get; set; }
 
     public string? Status { get; set; }
+
+    public int? ReservationId { get; set; }
 
     public virtual DriverProfile Driver { get; set; } = null!;
 

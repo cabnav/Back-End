@@ -681,6 +681,99 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        /// <summary>
+        /// Xác nhận thanh toán tiền mặt (chuyển từ pending sang success/completed)
+        /// </summary>
+        public async Task<PaymentResponse?> ConfirmCashPaymentAsync(int staffId, int paymentId, UpdatePaymentStatusRequest request)
+        {
+            try
+            {
+                // 1. Get payment with session info
+                var payment = await _db.Payments
+                    .Include(p => p.Session)
+                    .ThenInclude(s => s != null ? s.Point : null!)
+                    .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
+
+                if (payment == null)
+                {
+                    Console.WriteLine($"Payment {paymentId} not found");
+                    return null;
+                }
+
+                // 2. Verify payment is pending
+                if (payment.PaymentStatus != "pending")
+                {
+                    Console.WriteLine($"Payment {paymentId} is not in pending status. Current status: {payment.PaymentStatus}");
+                    return null;
+                }
+
+                // 3. Verify payment method is cash/card/pos
+                if (payment.PaymentMethod != "cash" && payment.PaymentMethod != "card" && payment.PaymentMethod != "pos")
+                {
+                    Console.WriteLine($"Payment {paymentId} method is {payment.PaymentMethod}, cannot be confirmed by staff");
+                    return null;
+                }
+
+                // 4. Verify staff has access to this payment's station
+                if (payment.SessionId.HasValue && payment.Session != null && payment.Session.Point != null)
+                {
+                    var hasAccess = await VerifyStaffAssignmentAsync(staffId, payment.Session.Point.StationId);
+                    if (!hasAccess)
+                    {
+                        Console.WriteLine($"Staff {staffId} does not have access to station {payment.Session.Point.StationId}");
+                        return null;
+                    }
+                }
+
+                // 5. Update payment status
+                payment.PaymentStatus = request.Status.ToLower();
+
+                // 6. Update invoice status if exists
+                if (!string.IsNullOrEmpty(payment.InvoiceNumber))
+                {
+                    var invoice = await _db.Invoices
+                        .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
+
+                    if (invoice != null && request.Status.ToLower() == "success")
+                    {
+                        invoice.Status = "paid";
+                        invoice.PaidAt = DateTime.UtcNow;
+                        Console.WriteLine($"Updated invoice {payment.InvoiceNumber} status to paid");
+                    }
+                }
+
+                // 7. Log staff action
+                if (payment.SessionId.HasValue)
+                {
+                    await LogStaffActionAsync(staffId, "confirm_cash_payment", payment.SessionId.Value, 
+                        $"Payment {paymentId} confirmed with status: {request.Status}");
+                }
+
+                // 8. Save changes
+                await _db.SaveChangesAsync();
+
+                Console.WriteLine($"Payment {paymentId} confirmed successfully with status: {request.Status}");
+
+                // 9. Return updated payment
+                return new PaymentResponse
+                {
+                    PaymentId = payment.PaymentId,
+                    UserId = payment.UserId,
+                    SessionId = payment.SessionId,
+                    Amount = payment.Amount,
+                    PaymentMethod = payment.PaymentMethod ?? "",
+                    PaymentStatus = payment.PaymentStatus ?? "",
+                    InvoiceNumber = payment.InvoiceNumber,
+                    CreatedAt = payment.CreatedAt ?? DateTime.UtcNow
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error confirming cash payment: {ex.Message}");
+                return null;
+            }
+        }
+
         // ========== LOGGING & AUDIT ==========
 
         /// <summary>

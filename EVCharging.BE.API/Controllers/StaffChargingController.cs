@@ -1,4 +1,6 @@
+using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.Common.DTOs.Staff;
+using EVCharging.BE.DAL;
 using EVCharging.BE.Services.Services.Staff;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -278,13 +280,56 @@ namespace EVCharging.BE.API.Controllers
                     message = "Pending payments retrieved successfully", 
                     data = pendingPayments,
                     count = pendingPayments.Count,
-                    note = "Use PUT /api/payments/{paymentId}/status to confirm payment when customer pays."
+                    note = "Use PUT /api/staff/charging/payments/{paymentId}/confirm to confirm payment when customer pays."
                 });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new { 
                     message = "An error occurred while retrieving pending payments", 
+                    error = ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Xác nhận thanh toán tiền mặt (chuyển từ pending sang success/completed)
+        /// PUT /api/staff/charging/payments/{paymentId}/confirm
+        /// </summary>
+        [HttpPut("payments/{paymentId}/confirm")]
+        public async Task<IActionResult> ConfirmCashPayment(int paymentId, [FromBody] UpdatePaymentStatusRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { 
+                        message = "Invalid request data", 
+                        errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage)) 
+                    });
+                }
+
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                var result = await _staffChargingService.ConfirmCashPaymentAsync(staffId, paymentId, request);
+                if (result == null)
+                {
+                    return BadRequest(new { 
+                        message = "Failed to confirm payment. Payment may not exist, not be in pending status, or you don't have access to this station." 
+                    });
+                }
+
+                return Ok(new { 
+                    message = "Payment confirmed successfully", 
+                    data = result 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while confirming payment", 
                     error = ex.Message 
                 });
             }
