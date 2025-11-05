@@ -173,6 +173,58 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 if (chargingPoint.Status != "available")
                     return null;
 
+                // 3.1. ✅ Check reservation để block walk-in nếu có reservation active hoặc sắp đến
+                var now = DateTime.UtcNow;
+                const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
+                var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
+                
+                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                var activeReservation = await _db.Reservations
+                    .Where(r => r.PointId == request.ChargingPointId 
+                        && r.Status == "booked" // Chỉ check reservation chưa check-in
+                        && r.StartTime <= now // Đã quá start_time
+                        && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
+                        && r.EndTime > now) // Reservation chưa kết thúc
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+                
+                // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                if (activeReservation != null)
+                {
+                    var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
+                    Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Active reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period");
+                    return null; // Staff API sẽ return null và controller sẽ trả về BadRequest
+                }
+                
+                // Check reservation sắp đến (trong tương lai)
+                var upcomingReservation = await _db.Reservations
+                    .Where(r => r.PointId == request.ChargingPointId 
+                        && (r.Status == "booked" || r.Status == "checked_in") 
+                        && r.StartTime > now
+                        && r.EndTime > now) // Reservation chưa kết thúc
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+                
+                DateTime? maxEndTime = null;
+                if (upcomingReservation != null)
+                {
+                    var timeUntilReservation = (upcomingReservation.StartTime - now).TotalMinutes;
+                    const int MINIMUM_TIME_BEFORE_RESERVATION_MINUTES = 15; // Tối thiểu 15 phút trước reservation
+                    
+                    // ✅ BLOCK walk-in nếu reservation sắp đến quá gần (dưới 15 phút)
+                    if (timeUntilReservation < MINIMUM_TIME_BEFORE_RESERVATION_MINUTES)
+                    {
+                        Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes)");
+                        return null; // Staff API sẽ return null và controller sẽ trả về BadRequest
+                    }
+                    
+                    // Có reservation sắp đến nhưng còn đủ thời gian, set maxEndTime trong Notes
+                    var bufferMinutes = 5;
+                    maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
+                    
+                    Console.WriteLine($"[StartWalkInSessionAsync] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
+                }
+
                 // 4. Create or get guest driver profile
                 var guestDriver = await GetOrCreateGuestDriverAsync();
                 if (guestDriver == null)
@@ -207,6 +259,19 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                     AppliedDiscount = 0,
                     FinalCost = 0
                 };
+
+                // ✅ Lưu maxEndTime vào Notes nếu có upcoming reservation
+                if (maxEndTime.HasValue)
+                {
+                    var maxEndTimeInfo = new
+                    {
+                        maxEndTime = maxEndTime.Value,
+                        reason = "upcoming_reservation",
+                        autoStop = true
+                    };
+                    session.Notes = System.Text.Json.JsonSerializer.Serialize(maxEndTimeInfo);
+                    Console.WriteLine($"[StartWalkInSessionAsync] MaxEndTime saved in Notes: {maxEndTime}");
+                }
 
                 _db.ChargingSessions.Add(session);
                 await _db.SaveChangesAsync();

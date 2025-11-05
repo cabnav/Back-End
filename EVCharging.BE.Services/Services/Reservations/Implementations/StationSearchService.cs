@@ -161,9 +161,11 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 var endTime = startTime.AddHours(1);
 
                 // Kiểm tra xem khung giờ này có bị đặt chỗ không
+                // ✅ CHỈ check các status đang active: booked, checked_in, in_progress
+                // ✅ KHÔNG check completed, cancelled, no_show vì những slot đó đã trống
                 var hasReservation = await _db.Reservations
                     .Where(r => r.PointId == pointId 
-                        && (r.Status == "booked" || r.Status == "completed")
+                        && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress")
                         && !(endTime <= r.StartTime || startTime >= r.EndTime))
                     .AnyAsync();
 

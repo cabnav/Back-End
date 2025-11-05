@@ -98,8 +98,10 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             // Kiểm tra trùng giờ (overlap) trên cùng point với reservation
             // Overlap khi: NOT (newEnd <= start OR newStart >= end)
+            // ✅ CHỈ check các status đang active: booked, checked_in, in_progress
+            // ✅ KHÔNG check completed, cancelled, no_show vì những slot đó đã trống
             var reservationOverlap = await _db.Reservations
-                .Where(r => r.PointId == pointId && (r.Status == "booked" || r.Status == "completed"))
+                .Where(r => r.PointId == pointId && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress"))
                 .AnyAsync(r => !(endUtc <= r.StartTime || startUtc >= r.EndTime));
 
             if (reservationOverlap)

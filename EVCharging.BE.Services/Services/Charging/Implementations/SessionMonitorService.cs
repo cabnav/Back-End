@@ -2,6 +2,7 @@ using EVCharging.BE.Common.DTOs.Charging;
 using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Concurrent;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
 {
@@ -10,14 +11,14 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
     /// </summary>
     public class SessionMonitorService : ISessionMonitorService
     {
-        private readonly EvchargingManagementContext _db;
+        private readonly IDbContextFactory<EvchargingManagementContext> _dbFactory;
         private readonly IServiceProvider _serviceProvider;
-        private readonly Dictionary<int, Timer> _monitoringTimers = new();
-        private readonly Dictionary<int, ChargingSessionResponse> _activeSessions = new();
+        private readonly ConcurrentDictionary<int, Timer> _monitoringTimers = new(); // ✅ Thread-safe cho Singleton
+        private readonly ConcurrentDictionary<int, ChargingSessionResponse> _activeSessions = new(); // ✅ Thread-safe cho Singleton
 
-        public SessionMonitorService(EvchargingManagementContext db, IServiceProvider serviceProvider)
+        public SessionMonitorService(IDbContextFactory<EvchargingManagementContext> dbFactory, IServiceProvider serviceProvider)
         {
-            _db = db;
+            _dbFactory = dbFactory;
             _serviceProvider = serviceProvider;
         }
 
@@ -28,18 +29,28 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
+                // ✅ Thread-safe: Kiểm tra xem đã có timer chưa
                 if (_monitoringTimers.ContainsKey(sessionId))
                     return; // Already monitoring
 
                 // Create timer to check session every 1 minutes
                 var timer = new Timer(async _ => await MonitorSessionAsync(sessionId), null, TimeSpan.Zero, TimeSpan.FromMinutes(1));
-                _monitoringTimers[sessionId] = timer;
+                
+                // ✅ Thread-safe: TryAdd sẽ trả về false nếu key đã tồn tại (race condition protection)
+                if (!_monitoringTimers.TryAdd(sessionId, timer))
+                {
+                    // Nếu có race condition (timer đã được thêm bởi thread khác), dispose timer mới tạo
+                    timer.Dispose();
+                    return; // Already monitoring
+                }
 
                 Console.WriteLine($"Started monitoring session {sessionId}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error starting monitoring for session {sessionId}: {ex.Message}");
+                // Remove from dictionary nếu có lỗi
+                _monitoringTimers.TryRemove(sessionId, out _);
             }
         }
 
@@ -53,10 +64,12 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (_monitoringTimers.TryGetValue(sessionId, out var timer))
                 {
                     timer.Dispose();
-                    _monitoringTimers.Remove(sessionId);
+                    // ✅ Thread-safe: ConcurrentDictionary dùng TryRemove thay vì Remove
+                    _monitoringTimers.TryRemove(sessionId, out _);
                 }
 
-                _activeSessions.Remove(sessionId);
+                // ✅ Thread-safe: ConcurrentDictionary dùng TryRemove thay vì Remove
+                _activeSessions.TryRemove(sessionId, out _);
                 Console.WriteLine($"Stopped monitoring session {sessionId}");
             }
             catch (Exception ex)
@@ -72,7 +85,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions.FindAsync(sessionId);
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                var session = await db.ChargingSessions.FindAsync(sessionId);
                 return session?.Status == "in_progress";
             }
             catch
@@ -153,7 +167,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.Point)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
@@ -163,7 +179,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var alerts = new List<string>();
 
                 // Check for high temperature
-                var latestLog = await _db.SessionLogs
+                var latestLog = await db.SessionLogs
                     .Where(sl => sl.SessionId == sessionId)
                     .OrderByDescending(sl => sl.LogTime)
                     .FirstOrDefaultAsync();
@@ -205,7 +221,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.Driver)
                         .ThenInclude(d => d.User)
                     .Include(s => s.Point)
@@ -238,7 +256,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.Driver)
                         .ThenInclude(d => d.User)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
@@ -264,7 +284,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.SessionLogs)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
@@ -303,7 +325,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.Point)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
@@ -332,7 +356,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var session = await _db.ChargingSessions
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var session = await db.ChargingSessions
                     .Include(s => s.Point)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
@@ -346,7 +372,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return TimeSpan.Zero;
 
                 // Estimate based on current power and battery capacity
-                var logs = await _db.SessionLogs
+                var logs = await db.SessionLogs
                     .Where(sl => sl.SessionId == sessionId)
                     .OrderByDescending(sl => sl.LogTime)
                     .Take(5)
@@ -375,7 +401,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             try
             {
-                var latestLog = await _db.SessionLogs
+                await using var db = await _dbFactory.CreateDbContextAsync();
+                
+                var latestLog = await db.SessionLogs
                     .Where(sl => sl.SessionId == sessionId)
                     .OrderByDescending(sl => sl.LogTime)
                     .FirstOrDefaultAsync();
