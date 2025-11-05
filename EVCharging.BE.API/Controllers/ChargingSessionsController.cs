@@ -134,27 +134,63 @@ namespace EVCharging.BE.API.Controllers
                     });
                 }
 
-                // ✅ Check upcoming reservation để giới hạn thời gian walk-in session
+                // ✅ Check reservation để giới hạn thời gian walk-in session
+                // 1) Check reservation sắp đến (trong tương lai)
+                // 2) ✅ QUAN TRỌNG: Check reservation đã QUÁ start_time nhưng vẫn trong grace period (chưa check-in)
+                const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
+                var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
+                
+                // Check reservation sắp đến (trong tương lai)
                 var upcomingReservation = await _db.Reservations
                     .Where(r => r.PointId == chargingPointId 
                         && (r.Status == "booked" || r.Status == "checked_in") 
-                        && r.StartTime > now)
+                        && r.StartTime > now
+                        && r.EndTime > now) // Reservation chưa kết thúc
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+                
+                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                var activeReservation = await _db.Reservations
+                    .Where(r => r.PointId == chargingPointId 
+                        && r.Status == "booked" // Chỉ check reservation chưa check-in
+                        && r.StartTime <= now // Đã quá start_time
+                        && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
+                        && r.EndTime > now) // Reservation chưa kết thúc
                     .OrderBy(r => r.StartTime)
                     .FirstOrDefaultAsync();
 
                 DateTime? maxEndTime = null;
                 string? warningMessage = null;
                 
+                // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                if (activeReservation != null)
+                {
+                    var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
+                    return BadRequest(new { 
+                        message = $"Cannot start walk-in session. There is an active reservation (started at {activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) that is still within the grace period. The reservation holder may check in at any time." 
+                    });
+                }
+                
                 if (upcomingReservation != null)
                 {
-                    // Có reservation sắp đến, set maxEndTime = reservation.StartTime (trừ 5 phút buffer để đảm bảo)
+                    var timeUntilReservation = (upcomingReservation.StartTime - now).TotalMinutes;
+                    const int MINIMUM_TIME_BEFORE_RESERVATION_MINUTES = 15; // Tối thiểu 15 phút trước reservation
+                    
+                    // ✅ BLOCK walk-in nếu reservation sắp đến quá gần (dưới 15 phút)
+                    if (timeUntilReservation < MINIMUM_TIME_BEFORE_RESERVATION_MINUTES)
+                    {
+                        return BadRequest(new { 
+                            message = $"Cannot start walk-in session. There is a reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes). Please wait or use a different charging point." 
+                        });
+                    }
+                    
+                    // Có reservation sắp đến nhưng còn đủ thời gian (>= 15 phút), set maxEndTime = reservation.StartTime (trừ 5 phút buffer để đảm bảo)
                     var bufferMinutes = 5; // Buffer 5 phút trước khi reservation bắt đầu
                     maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
                     
-                    var timeUntilReservation = (int)(upcomingReservation.StartTime - now).TotalMinutes;
-                    warningMessage = $"Warning: There is a reservation starting at {upcomingReservation.StartTime:HH:mm}. Your walk-in session will automatically stop at {maxEndTime.Value:HH:mm} ({timeUntilReservation - bufferMinutes} minutes from now).";
+                    warningMessage = $"Warning: There is a reservation starting at {upcomingReservation.StartTime:HH:mm}. Your walk-in session will automatically stop at {maxEndTime.Value:HH:mm} ({timeUntilReservation - bufferMinutes:F0} minutes from now).";
                     
-                    Console.WriteLine($"[StartWalkInSession] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}");
+                    Console.WriteLine($"[StartWalkInSession] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
                 }
 
                 // ✅ Convert WalkInSessionStartRequest sang ChargingSessionStartRequest

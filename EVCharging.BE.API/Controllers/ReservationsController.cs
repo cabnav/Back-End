@@ -1,4 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Reservations;
+using EVCharging.BE.Common.DTOs.Charging;
 using EVCharging.BE.Services.Services.Background;
 using EVCharging.BE.Services.Services.Reservations;
 using Microsoft.AspNetCore.Authorization;
@@ -120,6 +121,38 @@ namespace EVCharging.BE.API.Controllers
                 StartAtUtc = startAtUtc,
                 ReservationCode = reservationCode
             };
+
+            // ✅ QUAN TRỌNG: Force stop walk-in session đang active tại point này (nếu có)
+            // Nếu có walk-in session đang active, phải dừng nó trước khi check-in reservation
+            var activeWalkInSession = await _db.ChargingSessions
+                .Where(s => s.PointId == reservation.PointId
+                    && s.Status == "in_progress"
+                    && !s.ReservationId.HasValue // Walk-in session (không có ReservationId)
+                    && !s.EndTime.HasValue) // Chưa kết thúc
+                .FirstOrDefaultAsync();
+            
+            if (activeWalkInSession != null)
+            {
+                Console.WriteLine($"[CheckIn] Found active walk-in session {activeWalkInSession.SessionId} at point {reservation.PointId}. Stopping it before check-in.");
+                
+                // Force stop walk-in session
+                // ✅ FinalSoc là int? (nullable), InitialSoc là int (non-nullable), nên chỉ cần FinalSoc ?? InitialSoc
+                var stopRequest = new ChargingSessionStopRequest
+                {
+                    SessionId = activeWalkInSession.SessionId,
+                    FinalSOC = activeWalkInSession.FinalSoc ?? activeWalkInSession.InitialSoc
+                };
+                
+                var stoppedSession = await _chargingService.StopSessionAsync(stopRequest);
+                if (stoppedSession != null)
+                {
+                    Console.WriteLine($"[CheckIn] Successfully stopped walk-in session {activeWalkInSession.SessionId} before check-in.");
+                }
+                else
+                {
+                    Console.WriteLine($"⚠️ [CheckIn] Failed to stop walk-in session {activeWalkInSession.SessionId}. Proceeding with check-in anyway.");
+                }
+            }
 
             // 3) Kiểm tra có thể start session không (method này đã kiểm tra point available + driver không có session active)
             // Truyền startAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time

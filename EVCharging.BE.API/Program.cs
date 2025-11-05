@@ -111,7 +111,7 @@ builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
 builder.Services.AddScoped<IChargingService, ChargingService>();
 builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
-builder.Services.AddScoped<ISessionMonitorService, SessionMonitorService>();
+builder.Services.AddSingleton<ISessionMonitorService, SessionMonitorService>(); // ✅ Singleton để tránh dispose khi request scope kết thúc
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
 builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 
