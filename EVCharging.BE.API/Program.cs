@@ -234,15 +234,172 @@ if (app.Environment.IsDevelopment())
         var amount = pay.Amount.ToString("N0");
         var html = $@"<!doctype html>
 <html lang='vi'>
-<head><meta charset='utf-8'><title>MockPay</title></head>
-<body style='font-family:sans-serif;padding:24px'>
-  <h2>Nạp ví demo</h2>
-  <p>Mã GD: <b>{code}</b> — Số tiền: <b>{amount} VND</b></p>
-  <form method='post' action='/api/wallettransactions/topup/mock-callback'>
-    <input type='hidden' name='code' value='{code}' />
-    <button name='success' value='true'  style='padding:8px 14px'>Thanh toán thành công</button>
-    <button name='success' value='false' style='padding:8px 14px;margin-left:8px'>Thanh toán thất bại</button>
-  </form>
+<head>
+  <meta charset='utf-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+  <title>MockPay - Thanh toán nạp ví</title>
+  <style>
+    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }}
+    .container {{
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 500px;
+      width: 100%;
+      padding: 40px;
+      animation: fadeIn 0.5s ease-in;
+    }}
+    @keyframes fadeIn {{
+      from {{ opacity: 0; transform: translateY(-20px); }}
+      to {{ opacity: 1; transform: translateY(0); }}
+    }}
+    .header {{
+      text-align: center;
+      margin-bottom: 30px;
+    }}
+    .header-icon {{
+      font-size: 64px;
+      margin-bottom: 15px;
+    }}
+    .header h1 {{
+      color: #333;
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }}
+    .header p {{
+      color: #666;
+      font-size: 14px;
+    }}
+    .info-card {{
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      border-radius: 15px;
+      padding: 25px;
+      margin-bottom: 30px;
+    }}
+    .info-row {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(0,0,0,0.1);
+    }}
+    .info-row:last-child {{
+      border-bottom: none;
+    }}
+    .info-label {{
+      color: #555;
+      font-size: 14px;
+      font-weight: 500;
+    }}
+    .info-value {{
+      color: #333;
+      font-size: 16px;
+      font-weight: 700;
+    }}
+    .amount-value {{
+      color: #667eea;
+      font-size: 24px;
+    }}
+    .form-group {{
+      margin-top: 30px;
+    }}
+    .button-group {{
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }}
+    button {{
+      flex: 1;
+      padding: 16px 24px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }}
+    button[name='success'][value='true'] {{
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }}
+    button[name='success'][value='true']:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }}
+    button[name='success'][value='true']:active {{
+      transform: translateY(0);
+    }}
+    button[name='success'][value='false'] {{
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+    }}
+    button[name='success'][value='false']:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(245, 87, 108, 0.6);
+    }}
+    button[name='success'][value='false']:active {{
+      transform: translateY(0);
+    }}
+    .footer {{
+      text-align: center;
+      margin-top: 25px;
+      color: #999;
+      font-size: 12px;
+    }}
+    @media (max-width: 480px) {{
+      .container {{
+        padding: 30px 20px;
+      }}
+      .button-group {{
+        flex-direction: column;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class='container'>
+    <div class='header'>
+      <div class='header-icon'>💳</div>
+      <h1>Thanh toán nạp ví</h1>
+      <p>MockPay - Hệ thống thanh toán demo</p>
+    </div>
+    <div class='info-card'>
+      <div class='info-row'>
+        <span class='info-label'>Mã giao dịch:</span>
+        <span class='info-value'>{code}</span>
+      </div>
+      <div class='info-row'>
+        <span class='info-label'>Số tiền:</span>
+        <span class='info-value amount-value'>{amount} VND</span>
+      </div>
+    </div>
+    <form method='post' action='/api/wallettransactions/topup/mock-callback'>
+      <input type='hidden' name='code' value='{code}' />
+      <div class='form-group'>
+        <div class='button-group'>
+          <button type='submit' name='success' value='true'>✅ Xác nhận thanh toán</button>
+          <button type='submit' name='success' value='false'>❌ Hủy thanh toán</button>
+        </div>
+      </div>
+    </form>
+    <div class='footer'>
+      <p>Đây là trang thanh toán demo. Vui lòng chọn một trong hai tùy chọn để kiểm thử.</p>
+    </div>
+  </div>
 </body></html>";
 
         // ✅ cách 1: thêm charset vào header
