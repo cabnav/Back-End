@@ -1,10 +1,12 @@
 ﻿using EVCharging.BE.Services.Services.Admin;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EVCharging.BE.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Policy = "AdminPolicy")]
     public class AdminController : ControllerBase
     {
         private readonly IAdminService _service;
