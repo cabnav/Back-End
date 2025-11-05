@@ -52,9 +52,14 @@ namespace EVCharging.BE.API.Controllers
         // 5️⃣ CHECK-IN bằng reservation code (start session với StartTime = Reservation.StartTime)
         // -------------------------------
         [HttpPost("{reservationCode}/check-in")]
-        public async Task<IActionResult> CheckIn(string reservationCode, [FromQuery] int initialSOC = 10)
+        public async Task<IActionResult> CheckIn(string reservationCode, [FromBody] ReservationCheckInRequest request)
         {
             var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
+            }
 
             // 1) Lấy reservation theo code (của chính user)
             var reservation = await _reservationService.GetReservationByCodeAsync(userId, reservationCode);
@@ -82,17 +87,36 @@ namespace EVCharging.BE.API.Controllers
                 return BadRequest(new { message = $"Reservation expired (no-show). Cannot check in after {_opt.NoShowGraceMinutes} minutes." });
             }
 
-            // Nếu check-in sớm: StartAtUtc = StartTime của reservation
+            // 3) ✅ Tìm charging point từ pointQrCode và validate khớp với reservation
+            var chargingPoint = await _db.ChargingPoints
+                .FirstOrDefaultAsync(p => p.QrCode == request.PointQrCode);
+            
+            if (chargingPoint == null)
+            {
+                return NotFound(new { message = $"Charging point with QR code '{request.PointQrCode}' not found." });
+            }
+
+            // ✅ Validate: Point từ QR code phải khớp với PointId trong reservation
+            if (chargingPoint.PointId != reservation.PointId)
+            {
+                return BadRequest(new { 
+                    message = $"The QR code '{request.PointQrCode}' does not match your reservation. " +
+                              $"Your reservation is for PointId {reservation.PointId}, but the QR code belongs to PointId {chargingPoint.PointId}."
+                });
+            }
+
+            // 4) Nếu check-in sớm: StartAtUtc = StartTime của reservation
             // Nếu check-in muộn (nhưng trong 30 phút): StartAtUtc = thời điểm check-in hiện tại
             var startAtUtc = now < reservation.StartTime ? reservation.StartTime : now;
 
-            // 3) Bắt đầu phiên sạc với StartAtUtc = StartTime của reservation
+            // 5) Bắt đầu phiên sạc với StartAtUtc = StartTime của reservation
             var startReq = new EVCharging.BE.Common.DTOs.Charging.ChargingSessionStartRequest
             {
                 ChargingPointId = reservation.PointId,
                 DriverId = reservation.DriverId,
-                InitialSOC = initialSOC,
-                QrCode = "RES-CHECKIN",
+                InitialSOC = request.InitialSOC,
+                PointQrCode = request.PointQrCode, // ✅ Thêm pointQrCode
+                QrCode = request.PointQrCode, // ✅ Set QrCode cho backward compatibility
                 StartAtUtc = startAtUtc,
                 ReservationCode = reservationCode
             };

@@ -33,6 +33,8 @@ public partial class ChargingSession
 
     public int? ReservationId { get; set; }
 
+    public string? Notes { get; set; }
+
     public virtual DriverProfile Driver { get; set; } = null!;
 
     public virtual ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();

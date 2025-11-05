@@ -174,6 +174,8 @@ public partial class EvchargingManagementContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("in_progress")
                 .HasColumnName("status");
+            entity.Property(e => e.Notes)
+                .HasColumnName("notes");
 
             entity.HasOne(d => d.Driver).WithMany(p => p.ChargingSessions)
                 .HasForeignKey(d => d.DriverId)
