@@ -2,6 +2,7 @@
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Common.DTOs.Stations;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
 {
@@ -70,11 +71,19 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
         public async Task<ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus)
         {
+            // ✅ Validate status values
+            var validStatuses = new[] { "available", "in_use", "maintenance", "occupied", "out_of_order" };
+            if (!validStatuses.Contains(newStatus?.ToLower()))
+            {
+                throw new ArgumentException(
+                    $"Invalid status value. Allowed values are: {string.Join(", ", validStatuses)}");
+            }
+
             var point = await _db.ChargingPoints.FindAsync(id);
             if (point == null)
                 return null;
 
-            point.Status = newStatus;
+            point.Status = newStatus.ToLower();
             await _db.SaveChangesAsync();
 
             return ToDTO(point);
