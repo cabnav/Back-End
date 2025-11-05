@@ -31,7 +31,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// </summary>
         public async Task<ChargingSessionResponse?> StartSessionAsync(ChargingSessionStartRequest request)
         {
-            Console.WriteLine($"[StartSessionAsync] Starting session for PointId={request.ChargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
+            // ✅ Validate ChargingPointId không null
+            if (!request.ChargingPointId.HasValue)
+            {
+                Console.WriteLine($"⚠️ [StartSessionAsync] ChargingPointId is required but not provided.");
+                throw new ArgumentException("ChargingPointId is required. Please provide either ChargingPointId or PointQrCode.");
+            }
+
+            var chargingPointId = request.ChargingPointId.Value;
+            Console.WriteLine($"[StartSessionAsync] Starting session for PointId={chargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
             
             // Sử dụng EF Core execution strategy để tương thích với retry-on-failure
             var strategy = _db.Database.CreateExecutionStrategy();
@@ -48,9 +56,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     // Re-validate trong transaction context (có thể khác với validation ở controller)
 
                     // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
-                    if (!await ValidateChargingPointAsync(request.ChargingPointId, request.StartAtUtc))
+                    if (!await ValidateChargingPointAsync(chargingPointId, request.StartAtUtc))
                     {
-                        Console.WriteLine($"⚠️ [StartSessionAsync] Charging point validation failed for PointId={request.ChargingPointId}, StartAtUtc={request.StartAtUtc}");
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Charging point validation failed for PointId={chargingPointId}, StartAtUtc={request.StartAtUtc}");
                         await transaction.RollbackAsync();
                         return null;
                     }
@@ -63,9 +71,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     }
 
                     // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
-                    if (!await CanStartSessionAsync(request.ChargingPointId, request.DriverId, request.StartAtUtc))
+                    if (!await CanStartSessionAsync(chargingPointId, request.DriverId, request.StartAtUtc))
                     {
-                        Console.WriteLine($"⚠️ [StartSessionAsync] Cannot start session - PointId={request.ChargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Cannot start session - PointId={chargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
                         await transaction.RollbackAsync();
                         return null;
                     }
@@ -75,7 +83,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     // Get charging point and driver info
                     var chargingPoint = await _db.ChargingPoints
                         .Include(cp => cp.Station)
-                        .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
+                        .FirstOrDefaultAsync(cp => cp.PointId == chargingPointId);
 
                     var driver = await _db.DriverProfiles
                         .Include(d => d.User)   
@@ -83,7 +91,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     if (chargingPoint == null || driver == null)
                     {
-                        Console.WriteLine($"⚠️ [StartSessionAsync] Point or Driver not found - PointId={request.ChargingPointId}, DriverId={request.DriverId}");
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Point or Driver not found - PointId={chargingPointId}, DriverId={request.DriverId}");
                         await transaction.RollbackAsync();
                         return null;
                     }
@@ -93,23 +101,75 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     // Nếu có ReservationCode, tìm reservation và set ReservationId
                     int? reservationId = null;
+                    Reservation? reservation = null;
                     if (!string.IsNullOrEmpty(request.ReservationCode))
                     {
-                        var reservation = await _db.Reservations
+                        reservation = await _db.Reservations
                             .FirstOrDefaultAsync(r => r.ReservationCode == request.ReservationCode && r.DriverId == request.DriverId);
                         if (reservation != null)
                         {
                             reservationId = reservation.ReservationId;
-                            Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}");
+                            Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}, StartTime={reservation.StartTime}");
                         }
                     }
+                    
+                    // ✅ QUAN TRỌNG: Xác định StartTime cho session
+                    // - Nếu có request.StartAtUtc (từ check-in), dùng nó (đã được tính = reservation.StartTime khi check-in sớm)
+                    // - Nếu không có request.StartAtUtc nhưng có reservation, dùng reservation.StartTime
+                    // - Nếu không có cả hai, dùng DateTime.UtcNow
+                    DateTime sessionStartTime;
+                    if (request.StartAtUtc.HasValue)
+                    {
+                        sessionStartTime = request.StartAtUtc.Value;
+                        Console.WriteLine($"[StartSessionAsync] Using request.StartAtUtc = {sessionStartTime}");
+                    }
+                    else if (reservation != null)
+                    {
+                        // ✅ Đảm bảo: Nếu có reservation nhưng không có StartAtUtc, dùng reservation.StartTime
+                        sessionStartTime = reservation.StartTime;
+                        Console.WriteLine($"[StartSessionAsync] Using reservation.StartTime = {sessionStartTime} (request.StartAtUtc is null)");
+                    }
+                    else
+                    {
+                        sessionStartTime = DateTime.UtcNow;
+                        Console.WriteLine($"[StartSessionAsync] Using DateTime.UtcNow = {sessionStartTime} (no reservation)");
+                    }
+                    
+                    Console.WriteLine($"[StartSessionAsync] Final session StartTime = {sessionStartTime}, ReservationId = {reservationId}");
+                    
+                    // ✅ Check upcoming reservation để set maxEndTime cho walk-in session
+                    DateTime? maxEndTime = null;
+                    if (request.MaxEndTimeUtc.HasValue)
+                    {
+                        maxEndTime = request.MaxEndTimeUtc.Value;
+                        Console.WriteLine($"[StartSessionAsync] MaxEndTime set from request: {maxEndTime}");
+                    }
+                    else if (reservationId == null)
+                    {
+                        // Walk-in session: check xem có reservation sắp đến không
+                        var upcomingReservation = await _db.Reservations
+                            .Where(r => r.PointId == chargingPointId 
+                                && (r.Status == "booked" || r.Status == "checked_in") 
+                                && r.StartTime > sessionStartTime)
+                            .OrderBy(r => r.StartTime)
+                            .FirstOrDefaultAsync();
+                        
+                        if (upcomingReservation != null)
+                        {
+                            // Có reservation sắp đến, set maxEndTime = reservation.StartTime (trừ 5 phút buffer)
+                            var bufferMinutes = 5;
+                            maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
+                            Console.WriteLine($"[StartSessionAsync] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}");
+                        }
+                    }
+
                     // Create new charging session
                     session = new ChargingSession
                     {
                         DriverId = request.DriverId,
-                        PointId = request.ChargingPointId,
+                        PointId = chargingPointId, // ✅ Đã validate không null ở đầu method
                         ReservationId = reservationId,
-                        StartTime = request.StartAtUtc ?? DateTime.UtcNow,
+                        StartTime = sessionStartTime, // ✅ Đảm bảo StartTime = reservation.StartTime khi check-in sớm
                         InitialSoc = request.InitialSOC,
                         Status = "in_progress",
                         EnergyUsed = 0,
@@ -119,10 +179,44 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         FinalCost = 0
                     };
 
+                    // ✅ Lưu maxEndTime vào Notes nếu có (vì entity không có field MaxEndTime)
+                    if (maxEndTime.HasValue)
+                    {
+                        var maxEndTimeInfo = new
+                        {
+                            maxEndTime = maxEndTime.Value,
+                            reason = "upcoming_reservation",
+                            autoStop = true
+                        };
+                        session.Notes = System.Text.Json.JsonSerializer.Serialize(maxEndTimeInfo);
+                        Console.WriteLine($"[StartSessionAsync] MaxEndTime saved in Notes: {maxEndTime}");
+                    }
+
                     _db.ChargingSessions.Add(session);
                     
                     // Update charging point status
                     chargingPoint.Status = "in_use";
+                    
+                    // ✅ Update reservation status: "checked_in" → "in_progress" khi session StartTime đến
+                    if (reservation != null)
+                    {
+                        var now = DateTime.UtcNow;
+                        // Nếu session StartTime đã đến hoặc đã qua, chuyển reservation status sang "in_progress"
+                        if (sessionStartTime <= now)
+                        {
+                            if (reservation.Status == "checked_in")
+                            {
+                                reservation.Status = "in_progress";
+                                reservation.UpdatedAt = now;
+                                Console.WriteLine($"[StartSessionAsync] Updated reservation status from 'checked_in' to 'in_progress' - ReservationId={reservationId}, StartTime={sessionStartTime}, Now={now}");
+                            }
+                        }
+                        // Nếu session StartTime trong tương lai (check-in sớm), giữ status = "checked_in"
+                        else
+                        {
+                            Console.WriteLine($"[StartSessionAsync] Reservation status kept as 'checked_in' (session starts in future) - ReservationId={reservationId}, StartTime={sessionStartTime}, Now={now}");
+                        }
+                    }
                     
                     Console.WriteLine($"[StartSessionAsync] Saving session to database...");
                     await _db.SaveChangesAsync();
@@ -266,6 +360,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var session = await _db.ChargingSessions
                     .Include(s => s.Point)
                     .Include(s => s.Driver)
+                    .Include(s => s.Reservation) // ✅ Include reservation để update status
                     .FirstOrDefaultAsync(s => s.SessionId == request.SessionId);
 
                 if (session == null || session.Status != "in_progress")
@@ -274,10 +369,57 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Calculate final values
                 var now = DateTime.UtcNow;
                 
-                // Đảm bảo EndTime >= StartTime
-                // Nếu StartTime trong tương lai (check-in sớm cho reservation), dùng StartTime làm EndTime
-                // Nếu StartTime đã qua, dùng thời gian hiện tại
-                session.EndTime = now < session.StartTime ? session.StartTime : now;
+                // ✅ Nếu session có maxEndTime trong Notes (walk-in session được auto-stop), dùng maxEndTime làm EndTime
+                DateTime? endTimeToUse = null;
+                if (!string.IsNullOrEmpty(session.Notes))
+                {
+                    try
+                    {
+                        if (System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(session.Notes) is { } notesJson
+                            && notesJson.TryGetProperty("maxEndTime", out var maxEndTimeElement))
+                        {
+                            DateTime? maxEndTime = null;
+                            
+                            // Try parse as DateTime (if serialized as DateTime)
+                            if (maxEndTimeElement.TryGetDateTime(out var parsedDateTime))
+                            {
+                                maxEndTime = parsedDateTime;
+                            }
+                            // Try parse as string (if serialized as string)
+                            else if (maxEndTimeElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                            {
+                                var dateTimeString = maxEndTimeElement.GetString();
+                                if (!string.IsNullOrEmpty(dateTimeString) && DateTime.TryParse(dateTimeString, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedFromString))
+                                {
+                                    maxEndTime = parsedFromString;
+                                }
+                            }
+                            
+                            if (maxEndTime.HasValue && maxEndTime.Value <= now)
+                            {
+                                // ✅ Dùng maxEndTime làm EndTime nếu đã đến (session được auto-stop)
+                                endTimeToUse = maxEndTime.Value;
+                                Console.WriteLine($"[StopSessionAsync] Using maxEndTime {maxEndTime.Value:O} as EndTime for auto-stopped walk-in session {session.SessionId}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️ [StopSessionAsync] Error parsing Notes for maxEndTime: {ex.Message}");
+                    }
+                }
+                
+                // Nếu không có maxEndTime hoặc parse failed, dùng logic thông thường
+                if (!endTimeToUse.HasValue)
+                {
+                    // Đảm bảo EndTime >= StartTime
+                    // Nếu StartTime trong tương lai (check-in sớm cho reservation), dùng StartTime làm EndTime
+                    // Nếu StartTime đã qua, dùng thời gian hiện tại
+                    endTimeToUse = now < session.StartTime ? session.StartTime : now;
+                }
+                
+                // Đảm bảo EndTime >= StartTime (safety check)
+                session.EndTime = endTimeToUse.Value < session.StartTime ? session.StartTime : endTimeToUse.Value;
                 
                 session.FinalSoc = request.FinalSOC;
                 
@@ -292,6 +434,17 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 
                 session.DurationMinutes = durationMinutes;
                 session.Status = "completed";
+
+                // ✅ Update reservation status to "completed" if session has reservation
+                if (session.ReservationId.HasValue && session.Reservation != null)
+                {
+                    if (session.Reservation.Status == "checked_in" || session.Reservation.Status == "in_progress")
+                    {
+                        session.Reservation.Status = "completed";
+                        session.Reservation.UpdatedAt = now;
+                        Console.WriteLine($"[StopSessionAsync] Updated reservation status to 'completed' - ReservationId={session.ReservationId}, SessionId={session.SessionId}");
+                    }
+                }
 
                 // Calculate cost
                 var costRequest = new CostCalculationRequest
@@ -320,11 +473,16 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     Console.WriteLine($"Updated payment {pendingPayment.PaymentId} amount from {pendingPayment.Amount} to {session.FinalCost.Value}");
                 }
 
-                // Update charging point status
+                // ✅ Update charging point status to "available" để slot tiếp theo có thể check-in
                 var chargingPoint = await _db.ChargingPoints.FindAsync(session.PointId);
                 if (chargingPoint != null)
                 {
                     chargingPoint.Status = "available";
+                    Console.WriteLine($"[StopSessionAsync] Updated ChargingPoint {chargingPoint.PointId} status to 'available' after stopping session {session.SessionId}");
+                }
+                else
+                {
+                    Console.WriteLine($"⚠️ [StopSessionAsync] ChargingPoint {session.PointId} not found for session {session.SessionId}");
                 }
                 
                 await _db.SaveChangesAsync();

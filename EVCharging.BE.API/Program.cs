@@ -124,6 +124,7 @@ builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.G
 builder.Services.AddHostedService<ReservationExpiryWorker>();
 builder.Services.AddHostedService<ReservationReminderWorker>();
 builder.Services.AddHostedService<SessionAutoStopWorker>();
+builder.Services.AddHostedService<ReservationStatusUpdateWorker>(); // ✅ Update reservation status từ "checked_in" → "in_progress"
 
 // Staff
 builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();

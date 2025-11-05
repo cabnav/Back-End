@@ -3,6 +3,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVCharging.BE.Services.Services.Charging;
 using EVCharging.BE.Services.Services.Notification;
+using EVCharging.BE.DAL;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace EVCharging.BE.API.Controllers
 {
@@ -17,24 +20,27 @@ namespace EVCharging.BE.API.Controllers
         private readonly IChargingService _chargingService;
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly ISignalRNotificationService _signalRService;
+        private readonly EvchargingManagementContext _db;
 
         public ChargingSessionsController(
             IChargingService chargingService,
             ISessionMonitorService sessionMonitorService,
-            ISignalRNotificationService signalRService)
+            ISignalRNotificationService signalRService,
+            EvchargingManagementContext db)
         {
             _chargingService = chargingService;
             _sessionMonitorService = sessionMonitorService;
             _signalRService = signalRService;
+            _db = db;
         }
 
         /// <summary>
-        /// Bắt đầu phiên sạc
+        /// Bắt đầu phiên sạc walk-in cho driver đã có tài khoản (không có đặt chỗ)
         /// </summary>
         /// <param name="request">Thông tin bắt đầu sạc</param>
         /// <returns>Thông tin phiên sạc đã tạo</returns>
         [HttpPost("start")]
-        public async Task<IActionResult> StartSession([FromBody] ChargingSessionStartRequest request)
+        public async Task<IActionResult> StartSession([FromBody] WalkInSessionStartRequest request)
         {
             try
             {
@@ -43,54 +49,151 @@ namespace EVCharging.BE.API.Controllers
                     return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
                 }
 
-                var result = await _chargingService.StartSessionAsync(request);
+                // ✅ Lấy userId từ JWT token
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                
+                // ✅ Lấy driverId từ userId
+                var driverProfile = await _db.DriverProfiles
+                    .FirstOrDefaultAsync(d => d.UserId == userId);
+                
+                if (driverProfile == null)
+                {
+                    return BadRequest(new { 
+                        message = "Driver profile not found. Please complete your driver profile first." 
+                    });
+                }
+
+                var driverId = driverProfile.DriverId;
+                var now = DateTime.UtcNow;
+
+                // ✅ Walk-in session: Tìm charging point từ PointQrCode hoặc dùng ChargingPointId
+                int chargingPointId;
+                if (!string.IsNullOrEmpty(request.PointQrCode))
+                {
+                    // Tìm charging point từ QR code
+                    var chargingPoint = await _db.ChargingPoints
+                        .FirstOrDefaultAsync(p => p.QrCode == request.PointQrCode);
+                    
+                    if (chargingPoint == null)
+                    {
+                        return NotFound(new { message = $"Charging point with QR code '{request.PointQrCode}' not found." });
+                    }
+
+                    // Kiểm tra point có available không
+                    if (chargingPoint.Status != "available")
+                    {
+                        return BadRequest(new { 
+                            message = $"Charging point '{request.PointQrCode}' is currently {chargingPoint.Status}. Please choose another point." 
+                        });
+                    }
+
+                    chargingPointId = chargingPoint.PointId;
+                }
+                else if (request.ChargingPointId.HasValue)
+                {
+                    chargingPointId = request.ChargingPointId.Value;
+                }
+                else
+                {
+                    // Nếu không có cả PointQrCode và ChargingPointId
+                    return BadRequest(new { 
+                        message = "Either PointQrCode or ChargingPointId must be provided." 
+                    });
+                }
+
+                // ✅ Validate driver
+                var driverIsValid = await _chargingService.ValidateDriverAsync(driverId);
+                if (!driverIsValid)
+                {
+                    return BadRequest(new { message = "Driver profile not found or invalid. Please contact support." });
+                }
+
+                // ✅ Kiểm tra driver có session active không
+                var activeSessions = await _chargingService.GetSessionsByDriverAsync(driverId);
+                var hasActiveDriverSession = activeSessions.Any(s => s.Status == "in_progress");
+                if (hasActiveDriverSession)
+                {
+                    return BadRequest(new { message = "You already have an active charging session. Please complete it first." });
+                }
+
+                // ✅ Validate charging point
+                var pointIsAvailable = await _chargingService.ValidateChargingPointAsync(chargingPointId, now);
+                if (!pointIsAvailable)
+                {
+                    return BadRequest(new { 
+                        message = "The charging point is currently unavailable. It may be in use by another session or under maintenance." 
+                    });
+                }
+
+                // ✅ Kiểm tra có thể start session không
+                var canStart = await _chargingService.CanStartSessionAsync(chargingPointId, driverId, now);
+                if (!canStart)
+                {
+                    return BadRequest(new { 
+                        message = "Cannot start charging session. The charging point may be busy or you have restrictions." 
+                    });
+                }
+
+                // ✅ Check upcoming reservation để giới hạn thời gian walk-in session
+                var upcomingReservation = await _db.Reservations
+                    .Where(r => r.PointId == chargingPointId 
+                        && (r.Status == "booked" || r.Status == "checked_in") 
+                        && r.StartTime > now)
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+
+                DateTime? maxEndTime = null;
+                string? warningMessage = null;
+                
+                if (upcomingReservation != null)
+                {
+                    // Có reservation sắp đến, set maxEndTime = reservation.StartTime (trừ 5 phút buffer để đảm bảo)
+                    var bufferMinutes = 5; // Buffer 5 phút trước khi reservation bắt đầu
+                    maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
+                    
+                    var timeUntilReservation = (int)(upcomingReservation.StartTime - now).TotalMinutes;
+                    warningMessage = $"Warning: There is a reservation starting at {upcomingReservation.StartTime:HH:mm}. Your walk-in session will automatically stop at {maxEndTime.Value:HH:mm} ({timeUntilReservation - bufferMinutes} minutes from now).";
+                    
+                    Console.WriteLine($"[StartWalkInSession] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}");
+                }
+
+                // ✅ Convert WalkInSessionStartRequest sang ChargingSessionStartRequest
+                var sessionRequest = new ChargingSessionStartRequest
+                {
+                    ChargingPointId = chargingPointId,
+                    DriverId = driverId, // ✅ Dùng driverId từ JWT token
+                    InitialSOC = request.InitialSOC,
+                    PointQrCode = request.PointQrCode,
+                    QrCode = request.PointQrCode, // ✅ Set QrCode cho backward compatibility
+                    Notes = request.Notes,
+                    StartAtUtc = now, // ✅ Walk-in session luôn bắt đầu ngay lập tức
+                    MaxEndTimeUtc = maxEndTime // ✅ Set maxEndTime nếu có reservation sắp đến
+                };
+
+                // ✅ Bắt đầu phiên sạc
+                var result = await _chargingService.StartSessionAsync(sessionRequest);
                 if (result == null)
                 {
-                    // Kiểm tra chi tiết để có thông báo lỗi rõ ràng hơn
-                    var pointIsAvailable = await _chargingService.ValidateChargingPointAsync(request.ChargingPointId, request.StartAtUtc);
-                    var driverIsValid = await _chargingService.ValidateDriverAsync(request.DriverId);
-                    var canStart = await _chargingService.CanStartSessionAsync(request.ChargingPointId, request.DriverId, request.StartAtUtc);
-                    var activeSessions = await _chargingService.GetSessionsByDriverAsync(request.DriverId);
-                    var hasActiveDriverSession = activeSessions.Any(s => s.Status == "in_progress");
-                    
-                    string errorMessage;
-                    if (!driverIsValid)
-                    {
-                        errorMessage = "Driver profile not found or invalid. Please contact support.";
-                    }
-                    else if (hasActiveDriverSession)
-                    {
-                        errorMessage = "You already have an active charging session. Please complete it first.";
-                    }
-                    else if (!pointIsAvailable)
-                    {
-                        errorMessage = "The charging point is currently unavailable. It may be in use by another session or under maintenance.";
-                    }
-                    else if (!canStart)
-                    {
-                        errorMessage = "Cannot start charging session. The charging point may be busy or you have restrictions.";
-                    }
-                    else
-                    {
-                        errorMessage = "Failed to start charging session. Please try again or contact support.";
-                    }
-                    
                     return BadRequest(new { 
-                        message = errorMessage,
-                        pointId = request.ChargingPointId,
-                        driverId = request.DriverId,
-                        pointAvailable = pointIsAvailable,
-                        driverValid = driverIsValid,
-                        canStart = canStart,
-                        hasActiveDriverSession = hasActiveDriverSession,
-                        startAtUtc = request.StartAtUtc
+                        message = "Failed to start charging session. Please try again or contact support." 
                     });
+                }
+
+                // ✅ Build response message với warning nếu có
+                var responseMessage = "Charging session started successfully.";
+                if (!string.IsNullOrEmpty(warningMessage))
+                {
+                    responseMessage += $" {warningMessage}";
                 }
 
                 // Send real-time notification
                 await _signalRService.NotifySessionUpdateAsync(result.SessionId, result);
 
-                return Ok(new { message = "Charging session started successfully", data = result });
+                return Ok(new { 
+                    message = responseMessage, 
+                    data = result,
+                    warning = warningMessage 
+                });
             }
             catch (KeyNotFoundException ex)
             {
@@ -105,6 +208,7 @@ namespace EVCharging.BE.API.Controllers
                 return StatusCode(500, new { message = "An error occurred while starting the charging session", error = ex.Message });
             }
         }
+
 
         /// <summary>
         /// Dừng phiên sạc
