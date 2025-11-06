@@ -41,20 +41,32 @@ namespace EVCharging.BE.API.Controllers
             if (!ModelState.IsValid) return BadRequest(ModelState);
             var ok = await _service.UpdateAsync(id, req);
             return ok ? NoContent() : NotFound();
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(newStatus))
+                {
+                    return BadRequest(new { message = "Status cannot be empty" });
+                }
+
+                var result = await _service.UpdateStatusAsync(id, newStatus);
+                if (result == null) 
+                    return NotFound(new { message = "Charging point not found" });
+                
+                return Ok(new { message = "Status updated successfully", data = result });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while updating status", 
+                    error = ex.Message 
+                });
+            }
         }
 
-        [HttpPut("{id:int}/status")]
-        public async Task<IActionResult> UpdateStatus(int id, [FromBody] string status)
-        {
-            var dto = await _service.UpdateStatusAsync(id, status);
-            return dto is null ? NotFound() : Ok(dto);
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var ok = await _service.DeleteAsync(id);
-            return ok ? NoContent() : NotFound();
-        }
     }
 }

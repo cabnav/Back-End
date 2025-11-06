@@ -2,6 +2,7 @@
 using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 using CP = EVCharging.BE.Common.DTOs.Stations;
+using System.Linq;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
 {
@@ -103,16 +104,16 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         // ===== STATUS =====
-        public async Task<CP.ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus)
-        {
-            var entity = await _db.ChargingPoints.FirstOrDefaultAsync(p => p.PointId == id);
-            if (entity == null) return null;
+         public async Task<CP.ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus)
+ {
+     var entity = await _db.ChargingPoints.FirstOrDefaultAsync(p => p.PointId == id);
+     if (entity == null) return null;
 
-            entity.Status = newStatus;
-            await _db.SaveChangesAsync();
+     entity.Status = newStatus;
+     await _db.SaveChangesAsync();
 
-            return await GetByIdAsync(id);
-        }
+     return await GetByIdAsync(id);
+ }
 
         // ===== CREATE =====
         public async Task<CP.ChargingPointDTO> CreateAsync(CP.ChargingPointCreateRequest req)

@@ -63,7 +63,7 @@ public partial class EvchargingManagementContext : DbContext
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
-         optionsBuilder.UseSqlServer(GetConnectionString());
+        optionsBuilder.UseSqlServer(GetConnectionString());
     }
     private string GetConnectionString()
     {
@@ -75,7 +75,6 @@ public partial class EvchargingManagementContext : DbContext
 
         return strConn ?? throw new InvalidOperationException("Connection string not found");
     }
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<BillingPlan>(entity =>
@@ -89,7 +88,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasMaxLength(20)
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.CreditLimit)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("credit_limit");
             entity.Property(e => e.PaymentTerms)
@@ -99,7 +98,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasMaxLength(100)
                 .HasColumnName("plan_name");
             entity.Property(e => e.SubscriptionFee)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("subscription_fee");
         });
@@ -110,7 +109,11 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("ChargingPoint");
 
-            entity.HasIndex(e => e.QrCode, "UQ__Charging__E2FB8889E9BFE7F2").IsUnique();
+            entity.HasIndex(e => e.StationId, "IX_ChargingPoint_station_id");
+
+            entity.HasIndex(e => e.QrCode, "UQ__Charging__E2FB8889E9BFE7F2")
+                .IsUnique()
+                .HasFilter("([qr_code] IS NOT NULL)");
 
             entity.Property(e => e.PointId).HasColumnName("point_id");
             entity.Property(e => e.ConnectorType)
@@ -145,13 +148,19 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("ChargingSession");
 
+            entity.HasIndex(e => e.ReservationId, "IX_ChargingSession_ReservationId");
+
+            entity.HasIndex(e => e.DriverId, "IX_ChargingSession_driver_id");
+
+            entity.HasIndex(e => e.PointId, "IX_ChargingSession_point_id");
+
             entity.Property(e => e.SessionId).HasColumnName("session_id");
             entity.Property(e => e.AppliedDiscount)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("applied_discount");
             entity.Property(e => e.CostBeforeDiscount)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("cost_before_discount");
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
@@ -160,11 +169,11 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("duration_minutes");
             entity.Property(e => e.EndTime).HasColumnName("end_time");
             entity.Property(e => e.EnergyUsed)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(8, 2)")
                 .HasColumnName("energy_used");
             entity.Property(e => e.FinalCost)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("final_cost");
             entity.Property(e => e.FinalSoc).HasColumnName("final_soc");
@@ -176,6 +185,8 @@ public partial class EvchargingManagementContext : DbContext
                 .HasMaxLength(20)
                 .HasDefaultValue("in_progress")
                 .HasColumnName("status");
+            entity.Property(e => e.Notes)
+                .HasColumnName("notes");
 
             entity.HasOne(d => d.Driver).WithMany(p => p.ChargingSessions)
                 .HasForeignKey(d => d.DriverId)
@@ -228,6 +239,8 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("CorporateAccount");
 
+            entity.HasIndex(e => e.AdminUserId, "IX_CorporateAccount_admin_user_id");
+
             entity.Property(e => e.CorporateId).HasColumnName("corporate_id");
             entity.Property(e => e.AdminUserId).HasColumnName("admin_user_id");
             entity.Property(e => e.BillingType)
@@ -246,7 +259,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnName("created_at");
             entity.Property(e => e.CreditLimit)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("credit_limit");
             entity.Property(e => e.Status)
@@ -268,6 +281,8 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasKey(e => e.DriverId).HasName("PK__DriverPr__A411C5BD9DC02133");
 
             entity.ToTable("DriverProfile");
+
+            entity.HasIndex(e => e.CorporateId, "IX_DriverProfile_corporate_id");
 
             entity.HasIndex(e => e.UserId, "UQ__DriverPr__B9BE370E426023A1").IsUnique();
 
@@ -295,11 +310,45 @@ public partial class EvchargingManagementContext : DbContext
                 .HasConstraintName("FK__DriverPro__user___47DBAE45");
         });
 
+        modelBuilder.Entity<EmailOTP>(entity =>
+        {
+            entity.HasKey(e => e.OtpId).HasName("PK__EmailOTP__AEE35435E98A7D46");
+
+            entity.ToTable("EmailOTP");
+
+            entity.HasIndex(e => new { e.Email, e.IsUsed, e.ExpiresAt }, "IX_EmailOTP_Active");
+
+            entity.HasIndex(e => e.Email, "IX_EmailOTP_Email");
+
+            entity.Property(e => e.OtpId).HasColumnName("otp_id");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.Email)
+                .HasMaxLength(255)
+                .HasColumnName("email");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.IsUsed).HasColumnName("is_used");
+            entity.Property(e => e.OtpCode)
+                .HasMaxLength(6)
+                .HasColumnName("otp_code");
+            entity.Property(e => e.Purpose)
+                .HasMaxLength(50)
+                .HasDefaultValue("registration")
+                .HasColumnName("purpose");
+        });
+
         modelBuilder.Entity<IncidentReport>(entity =>
         {
             entity.HasKey(e => e.ReportId).HasName("PK__Incident__779B7C587B0806AC");
 
             entity.ToTable("IncidentReport");
+
+            entity.HasIndex(e => e.PointId, "IX_IncidentReport_point_id");
+
+            entity.HasIndex(e => e.ReporterId, "IX_IncidentReport_reporter_id");
+
+            entity.HasIndex(e => e.ResolvedBy, "IX_IncidentReport_resolved_by");
 
             entity.Property(e => e.ReportId).HasColumnName("report_id");
             entity.Property(e => e.Description).HasColumnName("description");
@@ -343,6 +392,10 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("Invoice");
 
+            entity.HasIndex(e => e.CorporateId, "IX_Invoice_corporate_id");
+
+            entity.HasIndex(e => e.UserId, "IX_Invoice_user_id");
+
             entity.HasIndex(e => e.InvoiceNumber, "UQ__Invoice__8081A63A529B5635").IsUnique();
 
             entity.Property(e => e.InvoiceId).HasColumnName("invoice_id");
@@ -381,9 +434,13 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("InvoiceItem");
 
+            entity.HasIndex(e => e.InvoiceId, "IX_InvoiceItem_invoice_id");
+
+            entity.HasIndex(e => e.SessionId, "IX_InvoiceItem_session_id");
+
             entity.Property(e => e.ItemId).HasColumnName("item_id");
             entity.Property(e => e.Amount)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("amount");
             entity.Property(e => e.Description)
@@ -391,12 +448,12 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("description");
             entity.Property(e => e.InvoiceId).HasColumnName("invoice_id");
             entity.Property(e => e.Quantity)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(8, 2)")
                 .HasColumnName("quantity");
             entity.Property(e => e.SessionId).HasColumnName("session_id");
             entity.Property(e => e.UnitPrice)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(8, 2)")
                 .HasColumnName("unit_price");
 
@@ -415,6 +472,8 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasKey(e => e.NotificationId).HasName("PK__Notifica__E059842F219A7F52");
 
             entity.ToTable("Notification");
+
+            entity.HasIndex(e => e.UserId, "IX_Notification_user_id");
 
             entity.Property(e => e.NotificationId).HasColumnName("notification_id");
             entity.Property(e => e.CreatedAt)
@@ -473,7 +532,19 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("Payment");
 
-            entity.HasIndex(e => e.InvoiceNumber, "UQ__Payment__8081A63AF18A8201").IsUnique();
+            entity.HasIndex(e => e.PaymentType, "IX_Payment_PaymentType");
+
+            entity.HasIndex(e => new { e.ReservationId, e.PaymentType }, "IX_Payment_ReservationType").HasFilter("([reservation_id] IS NOT NULL)");
+
+            entity.HasIndex(e => e.ReservationId, "IX_Payment_reservation_id");
+
+            entity.HasIndex(e => e.SessionId, "IX_Payment_session_id");
+
+            entity.HasIndex(e => e.UserId, "IX_Payment_user_id");
+
+            entity.HasIndex(e => e.InvoiceNumber, "UQ__Payment__8081A63AF18A8201")
+                .IsUnique()
+                .HasFilter("([invoice_number] IS NOT NULL)");
 
             entity.Property(e => e.PaymentId).HasColumnName("payment_id");
             entity.Property(e => e.Amount)
@@ -526,7 +597,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("billing_cycle");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.DiscountRate)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(5, 2)")
                 .HasColumnName("discount_rate");
             entity.Property(e => e.IsActive)
@@ -551,6 +622,10 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasKey(e => e.ReservationId).HasName("PK__Reservat__31384C2915AD554F");
 
             entity.ToTable("Reservation");
+
+            entity.HasIndex(e => e.DriverId, "IX_Reservation_driver_id");
+
+            entity.HasIndex(e => e.PointId, "IX_Reservation_point_id");
 
             entity.HasIndex(e => e.ReservationCode, "UX_Reservation_Code").IsUnique();
 
@@ -591,9 +666,11 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("SessionLog");
 
+            entity.HasIndex(e => e.SessionId, "IX_SessionLog_session_id");
+
             entity.Property(e => e.LogId).HasColumnName("log_id");
             entity.Property(e => e.CurrentPower)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(8, 2)")
                 .HasColumnName("current_power");
             entity.Property(e => e.LogTime)
@@ -602,11 +679,11 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.SessionId).HasColumnName("session_id");
             entity.Property(e => e.SocPercentage).HasColumnName("soc_percentage");
             entity.Property(e => e.Temperature)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(5, 2)")
                 .HasColumnName("temperature");
             entity.Property(e => e.Voltage)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(8, 2)")
                 .HasColumnName("voltage");
 
@@ -621,6 +698,10 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasKey(e => e.AssignmentId).HasName("PK__StationS__DA891814445759F8");
 
             entity.ToTable("StationStaff");
+
+            entity.HasIndex(e => e.StaffId, "IX_StationStaff_staff_id");
+
+            entity.HasIndex(e => e.StationId, "IX_StationStaff_station_id");
 
             entity.Property(e => e.AssignmentId).HasColumnName("assignment_id");
             entity.Property(e => e.ShiftEnd).HasColumnName("shift_end");
@@ -648,6 +729,12 @@ public partial class EvchargingManagementContext : DbContext
             entity.HasKey(e => e.SubscriptionId).HasName("PK__Subscrip__863A7EC1DF31C38A");
 
             entity.ToTable("Subscription");
+
+            entity.HasIndex(e => e.CorporateId, "IX_Subscription_corporate_id");
+
+            entity.HasIndex(e => e.PlanId, "IX_Subscription_plan_id");
+
+            entity.HasIndex(e => e.UserId, "IX_Subscription_user_id");
 
             entity.Property(e => e.SubscriptionId).HasColumnName("subscription_id");
             entity.Property(e => e.AutoRenew)
@@ -681,6 +768,12 @@ public partial class EvchargingManagementContext : DbContext
         {
             entity.HasKey(e => e.AnalyticsId).HasName("PK__UsageAna__D5DC3DE1C84F22DF");
 
+            entity.HasIndex(e => e.FavoriteStationId, "IX_UsageAnalytics_favorite_station_id");
+
+            entity.HasIndex(e => e.StationId, "IX_UsageAnalytics_station_id");
+
+            entity.HasIndex(e => e.UserId, "IX_UsageAnalytics_user_id");
+
             entity.Property(e => e.AnalyticsId).HasColumnName("analytics_id");
             entity.Property(e => e.AnalysisMonth).HasColumnName("analysis_month");
             entity.Property(e => e.FavoriteStationId).HasColumnName("favorite_station_id");
@@ -690,11 +783,11 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("session_count");
             entity.Property(e => e.StationId).HasColumnName("station_id");
             entity.Property(e => e.TotalCost)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("total_cost");
             entity.Property(e => e.TotalEnergyUsed)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("total_energy_used");
             entity.Property(e => e.UserId).HasColumnName("user_id");
@@ -720,6 +813,8 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("User");
 
+            entity.HasIndex(e => new { e.Provider, e.ProviderId }, "IX_User_Provider_ProviderId").HasFilter("([provider] IS NOT NULL)");
+
             entity.HasIndex(e => e.Email, "UQ__User__AB6E6164C07B48E9").IsUnique();
 
             entity.Property(e => e.UserId).HasColumnName("user_id");
@@ -732,6 +827,9 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.Email)
                 .HasMaxLength(255)
                 .HasColumnName("email");
+            entity.Property(e => e.EmailVerified)
+                .HasDefaultValue(false)
+                .HasColumnName("email_verified");
             entity.Property(e => e.MembershipTier)
                 .HasMaxLength(50)
                 .HasColumnName("membership_tier");
@@ -744,22 +842,19 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.Phone)
                 .HasMaxLength(20)
                 .HasColumnName("phone");
-            entity.Property(e => e.Role)
-                .HasMaxLength(20)
-                .HasColumnName("role");
-            entity.Property(e => e.WalletBalance)
-                .HasDefaultValue(0.00m)
-                .HasColumnType("decimal(10, 2)")
-                .HasColumnName("wallet_balance");
             entity.Property(e => e.Provider)
                 .HasMaxLength(50)
                 .HasColumnName("provider");
             entity.Property(e => e.ProviderId)
                 .HasMaxLength(255)
                 .HasColumnName("provider_id");
-            entity.Property(e => e.EmailVerified)
-                .HasDefaultValue(false)
-                .HasColumnName("email_verified");
+            entity.Property(e => e.Role)
+                .HasMaxLength(20)
+                .HasColumnName("role");
+            entity.Property(e => e.WalletBalance)
+                .HasDefaultValue(0.0m)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("wallet_balance");
         });
 
         modelBuilder.Entity<UserBilling>(entity =>
@@ -768,15 +863,17 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("UserBilling");
 
+            entity.HasIndex(e => e.PlanId, "IX_UserBilling_plan_id");
+
             entity.HasIndex(e => new { e.UserId, e.PlanId }, "UQ__UserBill__7257CFFF228F102F").IsUnique();
 
             entity.Property(e => e.UserBillingId).HasColumnName("user_billing_id");
             entity.Property(e => e.CreditUsed)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("credit_used");
             entity.Property(e => e.CurrentBalance)
-                .HasDefaultValue(0.00m)
+                .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("current_balance");
             entity.Property(e => e.EndDate).HasColumnName("end_date");
@@ -808,6 +905,8 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.ToTable("WalletTransaction");
 
+            entity.HasIndex(e => e.UserId, "IX_WalletTransaction_user_id");
+
             entity.Property(e => e.TransactionId).HasColumnName("transaction_id");
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(10, 2)")
@@ -831,36 +930,6 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__WalletTra__user___08B54D69");
-        });
-
-        modelBuilder.Entity<EmailOTP>(entity =>
-        {
-            entity.HasKey(e => e.OtpId).HasName("PK__EmailOTP__otp_id");
-
-            entity.ToTable("EmailOTP");
-
-            entity.HasIndex(e => e.Email, "IX_EmailOTP_Email");
-
-            entity.HasIndex(e => new { e.Email, e.IsUsed, e.ExpiresAt }, "IX_EmailOTP_Active");
-
-            entity.Property(e => e.OtpId).HasColumnName("otp_id");
-            entity.Property(e => e.Email)
-                .HasMaxLength(255)
-                .HasColumnName("email");
-            entity.Property(e => e.OtpCode)
-                .HasMaxLength(6)
-                .HasColumnName("otp_code");
-            entity.Property(e => e.CreatedAt)
-                .HasDefaultValueSql("(getdate())")
-                .HasColumnName("created_at");
-            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
-            entity.Property(e => e.IsUsed)
-                .HasDefaultValue(false)
-                .HasColumnName("is_used");
-            entity.Property(e => e.Purpose)
-                .HasMaxLength(50)
-                .HasDefaultValue("registration")
-                .HasColumnName("purpose");
         });
 
         OnModelCreatingPartial(modelBuilder);

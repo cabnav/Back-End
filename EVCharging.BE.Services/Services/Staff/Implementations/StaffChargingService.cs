@@ -173,6 +173,58 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 if (chargingPoint.Status != "available")
                     return null;
 
+                // 3.1. ✅ Check reservation để block walk-in nếu có reservation active hoặc sắp đến
+                var now = DateTime.UtcNow;
+                const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
+                var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
+                
+                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                var activeReservation = await _db.Reservations
+                    .Where(r => r.PointId == request.ChargingPointId 
+                        && r.Status == "booked" // Chỉ check reservation chưa check-in
+                        && r.StartTime <= now // Đã quá start_time
+                        && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
+                        && r.EndTime > now) // Reservation chưa kết thúc
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+                
+                // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                if (activeReservation != null)
+                {
+                    var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
+                    Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Active reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period");
+                    return null; // Staff API sẽ return null và controller sẽ trả về BadRequest
+                }
+                
+                // Check reservation sắp đến (trong tương lai)
+                var upcomingReservation = await _db.Reservations
+                    .Where(r => r.PointId == request.ChargingPointId 
+                        && (r.Status == "booked" || r.Status == "checked_in") 
+                        && r.StartTime > now
+                        && r.EndTime > now) // Reservation chưa kết thúc
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+                
+                DateTime? maxEndTime = null;
+                if (upcomingReservation != null)
+                {
+                    var timeUntilReservation = (upcomingReservation.StartTime - now).TotalMinutes;
+                    const int MINIMUM_TIME_BEFORE_RESERVATION_MINUTES = 15; // Tối thiểu 15 phút trước reservation
+                    
+                    // ✅ BLOCK walk-in nếu reservation sắp đến quá gần (dưới 15 phút)
+                    if (timeUntilReservation < MINIMUM_TIME_BEFORE_RESERVATION_MINUTES)
+                    {
+                        Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes)");
+                        return null; // Staff API sẽ return null và controller sẽ trả về BadRequest
+                    }
+                    
+                    // Có reservation sắp đến nhưng còn đủ thời gian, set maxEndTime trong Notes
+                    var bufferMinutes = 5;
+                    maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
+                    
+                    Console.WriteLine($"[StartWalkInSessionAsync] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
+                }
+
                 // 4. Create or get guest driver profile
                 var guestDriver = await GetOrCreateGuestDriverAsync();
                 if (guestDriver == null)
@@ -207,6 +259,19 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                     AppliedDiscount = 0,
                     FinalCost = 0
                 };
+
+                // ✅ Lưu maxEndTime vào Notes nếu có upcoming reservation
+                if (maxEndTime.HasValue)
+                {
+                    var maxEndTimeInfo = new
+                    {
+                        maxEndTime = maxEndTime.Value,
+                        reason = "upcoming_reservation",
+                        autoStop = true
+                    };
+                    session.Notes = System.Text.Json.JsonSerializer.Serialize(maxEndTimeInfo);
+                    Console.WriteLine($"[StartWalkInSessionAsync] MaxEndTime saved in Notes: {maxEndTime}");
+                }
 
                 _db.ChargingSessions.Add(session);
                 await _db.SaveChangesAsync();
@@ -678,6 +743,99 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             {
                 Console.WriteLine($"Error getting pending payments: {ex.Message}");
                 return new List<PaymentResponse>();
+            }
+        }
+
+        /// <summary>
+        /// Xác nhận thanh toán tiền mặt (chuyển từ pending sang success/completed)
+        /// </summary>
+        public async Task<PaymentResponse?> ConfirmCashPaymentAsync(int staffId, int paymentId, UpdatePaymentStatusRequest request)
+        {
+            try
+            {
+                // 1. Get payment with session info
+                var payment = await _db.Payments
+                    .Include(p => p.Session)
+                    .ThenInclude(s => s != null ? s.Point : null!)
+                    .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
+
+                if (payment == null)
+                {
+                    Console.WriteLine($"Payment {paymentId} not found");
+                    return null;
+                }
+
+                // 2. Verify payment is pending
+                if (payment.PaymentStatus != "pending")
+                {
+                    Console.WriteLine($"Payment {paymentId} is not in pending status. Current status: {payment.PaymentStatus}");
+                    return null;
+                }
+
+                // 3. Verify payment method is cash/card/pos
+                if (payment.PaymentMethod != "cash" && payment.PaymentMethod != "card" && payment.PaymentMethod != "pos")
+                {
+                    Console.WriteLine($"Payment {paymentId} method is {payment.PaymentMethod}, cannot be confirmed by staff");
+                    return null;
+                }
+
+                // 4. Verify staff has access to this payment's station
+                if (payment.SessionId.HasValue && payment.Session != null && payment.Session.Point != null)
+                {
+                    var hasAccess = await VerifyStaffAssignmentAsync(staffId, payment.Session.Point.StationId);
+                    if (!hasAccess)
+                    {
+                        Console.WriteLine($"Staff {staffId} does not have access to station {payment.Session.Point.StationId}");
+                        return null;
+                    }
+                }
+
+                // 5. Update payment status
+                payment.PaymentStatus = request.Status.ToLower();
+
+                // 6. Update invoice status if exists
+                if (!string.IsNullOrEmpty(payment.InvoiceNumber))
+                {
+                    var invoice = await _db.Invoices
+                        .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
+
+                    if (invoice != null && request.Status.ToLower() == "success")
+                    {
+                        invoice.Status = "paid";
+                        invoice.PaidAt = DateTime.UtcNow;
+                        Console.WriteLine($"Updated invoice {payment.InvoiceNumber} status to paid");
+                    }
+                }
+
+                // 7. Log staff action
+                if (payment.SessionId.HasValue)
+                {
+                    await LogStaffActionAsync(staffId, "confirm_cash_payment", payment.SessionId.Value, 
+                        $"Payment {paymentId} confirmed with status: {request.Status}");
+                }
+
+                // 8. Save changes
+                await _db.SaveChangesAsync();
+
+                Console.WriteLine($"Payment {paymentId} confirmed successfully with status: {request.Status}");
+
+                // 9. Return updated payment
+                return new PaymentResponse
+                {
+                    PaymentId = payment.PaymentId,
+                    UserId = payment.UserId,
+                    SessionId = payment.SessionId,
+                    Amount = payment.Amount,
+                    PaymentMethod = payment.PaymentMethod ?? "",
+                    PaymentStatus = payment.PaymentStatus ?? "",
+                    InvoiceNumber = payment.InvoiceNumber,
+                    CreatedAt = payment.CreatedAt ?? DateTime.UtcNow
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error confirming cash payment: {ex.Message}");
+                return null;
             }
         }
 

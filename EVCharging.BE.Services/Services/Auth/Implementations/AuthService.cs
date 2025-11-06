@@ -94,16 +94,31 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 if (!isOtpValid)
                     throw new InvalidOperationException("Invalid or expired OTP code. Please request a new OTP.");
 
-                // Check if user already exists
-                var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
-                if (existingUser != null)
-                    throw new InvalidOperationException("User with this email already exists");
+                // Normalize email (trim and lowercase)
+                var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                Console.WriteLine($"[Register] Normalized email: '{normalizedEmail}'");
 
-                // Create new user
+                // Check if user already exists (case-insensitive comparison)
+                // Load all emails and compare normalized versions to handle case/whitespace differences
+                var existingEmails = await _db.Users.Select(u => u.Email).ToListAsync();
+                Console.WriteLine($"[Register] Found {existingEmails.Count} existing users in database");
+                
+                var emailExists = existingEmails.Any(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                
+                if (emailExists)
+                {
+                    var foundEmail = existingEmails.First(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                    Console.WriteLine($"[Register] Email conflict! Requested: '{normalizedEmail}', Found in DB: '{foundEmail}' (original: '{request.Email}')");
+                    throw new InvalidOperationException($"User with this email already exists (found: {foundEmail})");
+                }
+                
+                Console.WriteLine($"[Register] Email '{normalizedEmail}' is available, proceeding with registration");
+
+                // Create new user (always store normalized email)
                 var user = new User
                 {
                     Name = request.Name,
-                    Email = request.Email,
+                    Email = normalizedEmail,
                     Password = HashPassword(request.Password),
                     Phone = request.Phone,
                     Role = request.Role ?? "driver",

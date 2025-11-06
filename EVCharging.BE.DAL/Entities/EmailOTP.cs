@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Collections.Generic;
 
 namespace EVCharging.BE.DAL.Entities;
 
@@ -18,4 +19,3 @@ public partial class EmailOTP
 
     public string? Purpose { get; set; }
 }
-

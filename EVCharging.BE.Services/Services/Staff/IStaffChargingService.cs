@@ -1,4 +1,5 @@
 using EVCharging.BE.Common.DTOs.Charging;
+using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.Common.DTOs.Staff;
 
 namespace EVCharging.BE.Services.Services.Staff
@@ -7,7 +8,7 @@ namespace EVCharging.BE.Services.Services.Staff
     /// Service quản lý phiên sạc từ góc độ Staff (Nhân viên trạm sạc)
     /// </summary>
     public interface IStaffChargingService
-    {
+{
         // ========== STATION ASSIGNMENT & VERIFICATION ==========
         
         /// <summary>
@@ -102,6 +103,15 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <param name="staffId">ID của staff</param>
         /// <returns>Danh sách payments pending</returns>
         Task<List<EVCharging.BE.Common.DTOs.Payments.PaymentResponse>> GetPendingPaymentsAsync(int staffId);
+
+        /// <summary>
+        /// Xác nhận thanh toán tiền mặt (chuyển từ pending sang success/completed)
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <param name="paymentId">ID của payment</param>
+        /// <param name="request">Thông tin cập nhật</param>
+        /// <returns>Thông tin payment đã cập nhật</returns>
+        Task<PaymentResponse?> ConfirmCashPaymentAsync(int staffId, int paymentId, UpdatePaymentStatusRequest request);
 
         // ========== LOGGING & AUDIT ==========
 

@@ -76,8 +76,10 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 try
                 {
                     // Re-check overlap inside transaction (kiểm tra trùng lần nữa trong giao dịch)
+                    // ✅ CHỈ check các status đang active: booked, checked_in, in_progress
+                    // ✅ KHÔNG check completed, cancelled, no_show vì những slot đó đã trống
                     var overlap = await _db.Reservations
-                        .Where(r => r.PointId == request.PointId && (r.Status == "booked" || r.Status == "completed"))
+                        .Where(r => r.PointId == request.PointId && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress"))
                         .AnyAsync(r => !(endUtc <= r.StartTime || startUtc >= r.EndTime));
 
                     if (overlap)
@@ -121,6 +123,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                             _db.Reservations.Add(reservation);
                             await _db.SaveChangesAsync();
                             await transaction.CommitAsync();
+
+                            // ✅ Sau khi tạo reservation thành công, check và update walk-in sessions nếu có overlap
+                            await UpdateWalkInSessionsForNewReservationAsync(request.PointId, startUtc);
 
                             return reservation;
                         }
@@ -491,10 +496,24 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (entity == null)
                 return false;
 
+            // ✅ Set status = "checked_in" khi đã check-in và bắt đầu session
+            // Lưu ý: CHECK constraint trong database phải cho phép giá trị "checked_in"
             entity.Status = "checked_in";
             entity.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-            return true;
+            
+            try
+            {
+                await _db.SaveChangesAsync();
+                return true;
+            }
+            catch (Microsoft.EntityFrameworkCore.DbUpdateException ex) when (ex.InnerException?.Message?.Contains("CHECK constraint") == true)
+            {
+                // ✅ Fallback: Nếu constraint không cho phép "checked_in", dùng "in_progress"
+                Console.WriteLine($"⚠️ [MarkCheckedInAsync] CHECK constraint error. Trying with 'in_progress' status instead.");
+                entity.Status = "in_progress";
+                await _db.SaveChangesAsync();
+                return true;
+            }
         }
 
         // -----------------------
@@ -536,6 +555,100 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     Phone = r.Driver.User.Phone
                 }
             };
+        }
+
+        /// <summary>
+        /// Cập nhật walk-in sessions khi có reservation mới được tạo (update maxEndTime trong Notes)
+        /// </summary>
+        private async Task UpdateWalkInSessionsForNewReservationAsync(int pointId, DateTime reservationStartTime)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var bufferMinutes = 5; // Buffer 5 phút trước khi reservation bắt đầu
+                var maxEndTime = reservationStartTime.AddMinutes(-bufferMinutes);
+
+                // Tìm tất cả walk-in sessions đang active trên point này (không có ReservationId)
+                var walkInSessions = await _db.ChargingSessions
+                    .Where(s => 
+                        s.PointId == pointId 
+                        && s.Status == "in_progress"
+                        && !s.ReservationId.HasValue
+                        && s.StartTime < reservationStartTime) // Session đã bắt đầu trước reservation
+                    .ToListAsync();
+
+                foreach (var session in walkInSessions)
+                {
+                    try
+                    {
+                        // Parse Notes hiện tại để lấy maxEndTime cũ (nếu có)
+                        DateTime? currentMaxEndTime = null;
+                        if (!string.IsNullOrEmpty(session.Notes))
+                        {
+                            try
+                            {
+                                var notesJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(session.Notes);
+                                if (notesJson.TryGetProperty("maxEndTime", out var maxEndTimeElement))
+                                {
+                                    if (maxEndTimeElement.ValueKind == System.Text.Json.JsonValueKind.String)
+                                    {
+                                        if (DateTime.TryParse(maxEndTimeElement.GetString(), out var parsedMaxEndTime))
+                                        {
+                                            currentMaxEndTime = parsedMaxEndTime;
+                                        }
+                                    }
+                                    else if (maxEndTimeElement.ValueKind == System.Text.Json.JsonValueKind.Number)
+                                    {
+                                        // Nếu là timestamp (số), convert sang DateTime
+                                        var timestamp = maxEndTimeElement.GetInt64();
+                                        currentMaxEndTime = DateTimeOffset.FromUnixTimeSeconds(timestamp).UtcDateTime;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Notes không phải JSON hợp lệ, bỏ qua
+                            }
+                        }
+
+                        // Chỉ update nếu maxEndTime mới sớm hơn maxEndTime cũ (hoặc chưa có maxEndTime)
+                        if (!currentMaxEndTime.HasValue || maxEndTime < currentMaxEndTime.Value)
+                        {
+                            // Update hoặc tạo mới Notes với maxEndTime mới
+                            // ✅ Serialize với ISO 8601 format để đảm bảo parse được
+                            var options = new System.Text.Json.JsonSerializerOptions
+                            {
+                                WriteIndented = false
+                            };
+                            var maxEndTimeInfo = new
+                            {
+                                maxEndTime = maxEndTime.ToString("O"), // ISO 8601 format
+                                reason = "upcoming_reservation",
+                                autoStop = true,
+                                reservationStartTime = reservationStartTime.ToString("O") // ISO 8601 format
+                            };
+                            session.Notes = System.Text.Json.JsonSerializer.Serialize(maxEndTimeInfo, options);
+                            Console.WriteLine($"[UpdateWalkInSessionsForNewReservation] Updated walk-in session SessionId={session.SessionId} with maxEndTime={maxEndTime} (reservation starts at {reservationStartTime})");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"⚠️ [UpdateWalkInSessionsForNewReservation] Error updating session SessionId={session.SessionId}: {ex.Message}");
+                    }
+                }
+
+                // Save changes
+                if (walkInSessions.Count > 0)
+                {
+                    await _db.SaveChangesAsync();
+                    Console.WriteLine($"[UpdateWalkInSessionsForNewReservation] Updated {walkInSessions.Count} walk-in session(s) for new reservation at {reservationStartTime}");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log error nhưng không throw để không ảnh hưởng đến việc tạo reservation
+                Console.WriteLine($"⚠️ [UpdateWalkInSessionsForNewReservation] Error updating walk-in sessions: {ex.Message}");
+            }
         }
     }
 }

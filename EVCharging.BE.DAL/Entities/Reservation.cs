@@ -23,11 +23,11 @@ public partial class Reservation
 
     public DateTime? UpdatedAt { get; set; }
 
+    public virtual ICollection<ChargingSession> ChargingSessions { get; set; } = new List<ChargingSession>();
+
     public virtual DriverProfile Driver { get; set; } = null!;
 
     public virtual ICollection<Payment> Payments { get; set; } = new List<Payment>();
 
     public virtual ChargingPoint Point { get; set; } = null!;
-
-    public virtual ICollection<ChargingSession> ChargingSessions { get; set; } = new List<ChargingSession>();
 }

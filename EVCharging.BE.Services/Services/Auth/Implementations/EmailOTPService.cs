@@ -24,11 +24,18 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
             {
                 Console.WriteLine($"[OTP] Starting SendOTP for email: {email}");
                 
-                // Check if email already registered
-                var existingUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
-                if (existingUser != null)
+                // Normalize email (trim and lowercase)
+                var normalizedEmail = email.Trim().ToLowerInvariant();
+                
+                // Check if email already registered (case-insensitive comparison)
+                // Load all emails and compare normalized versions to handle case/whitespace differences
+                var existingEmails = await _db.Users.Select(u => u.Email).ToListAsync();
+                var emailExists = existingEmails.Any(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                
+                if (emailExists)
                 {
-                    Console.WriteLine($"[OTP] Email already registered: {email}");
+                    var foundEmail = existingEmails.First(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                    Console.WriteLine($"[OTP] Email already registered: {email} (found in DB: {foundEmail})");
                     return false; // Email already registered
                 }
 
@@ -40,25 +47,28 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 // Set expiration to 30 minutes from now
                 var expiresAt = DateTime.UtcNow.AddMinutes(30);
 
-                // Invalidate all existing OTPs for this email
-                var existingOtps = await _db.EmailOTPs
-                    .Where(o => o.Email == email && !o.IsUsed && o.ExpiresAt > DateTime.UtcNow)
-                    .ToListAsync();
+                // Invalidate all existing OTPs for this email (case-insensitive)
+                var existingOtps = await _db.EmailOTPs.ToListAsync();
+                var otpsToInvalidate = existingOtps
+                    .Where(o => o.Email.Trim().ToLowerInvariant() == normalizedEmail 
+                        && !o.IsUsed 
+                        && o.ExpiresAt > DateTime.UtcNow)
+                    .ToList();
 
-                if (existingOtps.Any())
+                if (otpsToInvalidate.Any())
                 {
-                    Console.WriteLine($"[OTP] Invalidating {existingOtps.Count} old OTPs");
-                    foreach (var existingOtp in existingOtps)
+                    Console.WriteLine($"[OTP] Invalidating {otpsToInvalidate.Count} old OTPs");
+                    foreach (var existingOtp in otpsToInvalidate)
                     {
                         existingOtp.IsUsed = true;
                     }
                     await _db.SaveChangesAsync();
                 }
 
-                // Create new OTP
+                // Create new OTP (store normalized email)
                 var emailOtp = new EmailOTP
                 {
-                    Email = email,
+                    Email = normalizedEmail,
                     OtpCode = otpCode,
                     CreatedAt = DateTime.UtcNow,
                     ExpiresAt = expiresAt,
@@ -66,12 +76,12 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                     Purpose = purpose
                 };
 
-                Console.WriteLine($"[OTP] Created OTP: {otpCode} for {email}");
+                Console.WriteLine($"[OTP] Created OTP: {otpCode} for {normalizedEmail} (original: {email})");
                 _db.EmailOTPs.Add(emailOtp);
                 await _db.SaveChangesAsync();
                 Console.WriteLine($"[OTP] OTP saved to database successfully");
 
-                // Send email
+                // Send email (use original email for display)
                 var subject = purpose == "registration" 
                     ? "Mã xác nhận đăng ký - EV Charging System"
                     : "Mã xác nhận - EV Charging System";
@@ -131,28 +141,46 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
             try
             {
                 if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otpCode))
+                {
+                    Console.WriteLine($"[VerifyOTP] Invalid input - email or OTP code is empty");
                     return false;
+                }
 
-                // Find valid OTP
-                var otp = await _db.EmailOTPs
-                    .Where(o => o.Email == email 
-                        && o.OtpCode == otpCode 
+                // Normalize email for comparison
+                var normalizedEmail = email.Trim().ToLowerInvariant();
+                Console.WriteLine($"[VerifyOTP] Verifying OTP for email: '{normalizedEmail}' (original: '{email}')");
+
+                // Find valid OTP (case-insensitive email comparison)
+                var allOtps = await _db.EmailOTPs
+                    .Where(o => o.OtpCode == otpCode 
                         && !o.IsUsed 
                         && o.ExpiresAt > DateTime.UtcNow)
+                    .ToListAsync();
+
+                var otp = allOtps
+                    .Where(o => o.Email.Trim().ToLowerInvariant() == normalizedEmail)
                     .OrderByDescending(o => o.CreatedAt)
-                    .FirstOrDefaultAsync();
+                    .FirstOrDefault();
 
                 if (otp == null)
+                {
+                    Console.WriteLine($"[VerifyOTP] OTP not found or invalid for email: '{normalizedEmail}'");
                     return false;
+                }
+
+                Console.WriteLine($"[VerifyOTP] OTP found and valid for email: '{normalizedEmail}' (stored as: '{otp.Email}')");
 
                 // Mark OTP as used
                 otp.IsUsed = true;
                 await _db.SaveChangesAsync();
+                Console.WriteLine($"[VerifyOTP] OTP marked as used successfully");
 
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                Console.WriteLine($"[VerifyOTP ERROR] {ex.Message}");
+                Console.WriteLine($"[VerifyOTP ERROR] StackTrace: {ex.StackTrace}");
                 return false;
             }
         }
@@ -161,10 +189,15 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
         {
             try
             {
-                var hasValidOTP = await _db.EmailOTPs
-                    .AnyAsync(o => o.Email == email 
-                        && !o.IsUsed 
-                        && o.ExpiresAt > DateTime.UtcNow);
+                // Normalize email for comparison
+                var normalizedEmail = email.Trim().ToLowerInvariant();
+                
+                var allOtps = await _db.EmailOTPs
+                    .Where(o => !o.IsUsed && o.ExpiresAt > DateTime.UtcNow)
+                    .ToListAsync();
+
+                var hasValidOTP = allOtps
+                    .Any(o => o.Email.Trim().ToLowerInvariant() == normalizedEmail);
 
                 return hasValidOTP;
             }

@@ -162,14 +162,86 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 var endTime = startTime.AddHours(1);
 
                 // Kiểm tra xem khung giờ này có bị đặt chỗ không
+                // ✅ CHỈ check các status đang active: booked, checked_in, in_progress
+                // ✅ KHÔNG check completed, cancelled, no_show vì những slot đó đã trống
                 var hasReservation = await _db.Reservations
                     .Where(r => r.PointId == pointId 
-                        && (r.Status == "booked" || r.Status == "completed")
+                        && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress")
                         && !(endTime <= r.StartTime || startTime >= r.EndTime))
                     .AnyAsync();
 
-                // Kiểm tra xem có trong quá khứ không (chỉ block slot đã kết thúc + buffer 5 phút)
+                // ✅ Kiểm tra xem có walk-in session đang active trong slot này không
                 var now = DateTime.UtcNow;
+                // Chỉ lấy các session có thể overlap với slot này
+                // Session overlap nếu: session.StartTime < slot.endTime VÀ (session.EndTime ?? maxEndTime ?? now) > slot.startTime
+                var walkInSessions = await _db.ChargingSessions
+                    .Where(s => 
+                        s.PointId == pointId 
+                        && s.Status == "in_progress"
+                        && !s.ReservationId.HasValue // Walk-in session (không có ReservationId)
+                        && s.StartTime < endTime) // Session bắt đầu trước khi slot kết thúc (điều kiện tối thiểu)
+                    .ToListAsync();
+                
+                var hasWalkInSession = false;
+                foreach (var session in walkInSessions)
+                {
+                    DateTime? effectiveEndTime = null;
+                    
+                    // Nếu session có EndTime, dùng EndTime
+                    if (session.EndTime.HasValue)
+                    {
+                        effectiveEndTime = session.EndTime.Value;
+                    }
+                    // Nếu session chưa có EndTime nhưng có maxEndTime trong Notes, dùng maxEndTime
+                    else if (!string.IsNullOrEmpty(session.Notes))
+                    {
+                        try
+                        {
+                            var notesJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(session.Notes);
+                            if (notesJson.TryGetProperty("maxEndTime", out var maxEndTimeElement))
+                            {
+                                if (maxEndTimeElement.TryGetDateTime(out var maxEndTime))
+                                {
+                                    effectiveEndTime = maxEndTime;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore parse errors
+                        }
+                    }
+                    
+                    // Nếu không có EndTime và không có maxEndTime, chỉ block slot hiện tại (nếu now trong slot)
+                    if (!effectiveEndTime.HasValue)
+                    {
+                        // Chỉ block slot mà session đang active (now trong slot) hoặc slot mà session bắt đầu
+                        // Điều kiện: session bắt đầu trong slot này HOẶC (session đã bắt đầu VÀ now đang trong slot này)
+                        // QUAN TRỌNG: Không block các slot tương lai nếu session không có EndTime
+                        var sessionStartInSlot = session.StartTime >= startTime && session.StartTime < endTime;
+                        var nowInSlot = session.StartTime <= now && now >= startTime && now < endTime;
+                        
+                        // Chỉ block nếu session bắt đầu trong slot này HOẶC session đang active (now trong slot)
+                        // KHÔNG block các slot tương lai nếu session không có EndTime
+                        if (sessionStartInSlot || nowInSlot)
+                        {
+                            hasWalkInSession = true;
+                            break;
+                        }
+                        // Nếu không có điều kiện nào thỏa mãn, tiếp tục check session tiếp theo
+                    }
+                    else
+                    {
+                        // Có effectiveEndTime: check overlap bình thường
+                        if (effectiveEndTime.Value > startTime && session.StartTime < endTime)
+                        {
+                            hasWalkInSession = true;
+                            break;
+                        }
+                    }
+                }
+
+                // Kiểm tra xem có trong quá khứ không (chỉ block slot đã kết thúc + buffer 5 phút)
                 var bufferMinutes = 5;
                 var cutoffTime = now.AddMinutes(bufferMinutes);
                 var isInPast = endTime <= cutoffTime;
@@ -182,8 +254,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     Hour = hour,
                     StartTime = startTime,
                     EndTime = endTime,
-                    IsAvailable = !hasReservation && !isInPast && !tooLateToBook,
-                    AvailablePointsCount = hasReservation ? 0 : 1 // Đơn giản hóa, mỗi điểm sạc chỉ có 1 cổng
+                    IsAvailable = !hasReservation && !hasWalkInSession && !isInPast && !tooLateToBook,
+                    AvailablePointsCount = (hasReservation || hasWalkInSession) ? 0 : 1 // Đơn giản hóa, mỗi điểm sạc chỉ có 1 cổng
                 });
             }
 
