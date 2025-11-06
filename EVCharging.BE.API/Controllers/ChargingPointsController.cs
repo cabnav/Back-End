@@ -1,8 +1,6 @@
 ﻿using EVCharging.BE.Services.Services.Charging;
-using EVCharging.BE.Common.DTOs.Charging;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
+using CP = EVCharging.BE.Common.DTOs.Stations;
 
 namespace EVCharging.BE.API.Controllers
 {
@@ -11,117 +9,52 @@ namespace EVCharging.BE.API.Controllers
     public class ChargingPointsController : ControllerBase
     {
         private readonly IChargingPointService _service;
-        private readonly ICostCalculationService _costCalculationService;
+        public ChargingPointsController(IChargingPointService service) => _service = service;
 
-        public ChargingPointsController(IChargingPointService service, ICostCalculationService costCalculationService)
+        [HttpGet]
+        public async Task<IActionResult> GetAll() => Ok(await _service.GetAllAsync());
+
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
-            _service = service;
-            _costCalculationService = costCalculationService;
+            var dto = await _service.GetByIdAsync(id);
+            return dto is null ? NotFound() : Ok(dto);
         }
 
         [HttpGet("available")]
-        public async Task<IActionResult> GetAvailable()
-        {
-            var list = await _service.GetAvailableAsync();
-            return Ok(list);
-        }
+        public async Task<IActionResult> GetAvailable() => Ok(await _service.GetAvailableAsync());
 
-        [HttpGet("by-station/{stationId}")]
+        [HttpGet("by-station/{stationId:int}")]
         public async Task<IActionResult> GetByStation(int stationId)
+            => Ok(await _service.GetByStationAsync(stationId));
+
+        [HttpPost]
+        public async Task<IActionResult> Create([FromBody] CP.ChargingPointCreateRequest req)
         {
-            var list = await _service.GetByStationAsync(stationId);
-            return Ok(list);
+            var dto = await _service.CreateAsync(req);
+            return CreatedAtAction(nameof(GetById), new { id = dto.PointId }, dto);
         }
 
-        [HttpPut("{id}/status")]
-        public async Task<IActionResult> UpdateStatus(int id, [FromBody] string newStatus)
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] CP.ChargingPointUpdateRequest req)
         {
-            var result = await _service.UpdateStatusAsync(id, newStatus);
-            if (result == null) return NotFound();
-            return Ok(result);
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+            var ok = await _service.UpdateAsync(id, req);
+            return ok ? NoContent() : NotFound();
         }
 
-        /// <summary>
-        /// Cập nhật giá sạc - chỉ admin mới được phép
-        /// </summary>
-        /// <param name="id">ID của charging point</param>
-        /// <param name="request">Thông tin cập nhật giá</param>
-        /// <returns>Kết quả cập nhật giá</returns>
-        [HttpPut("{id}/price")]
-        [Authorize(Roles = "Admin")]
-        public async Task<IActionResult> UpdatePrice(int id, [FromBody] PriceUpdateRequest request)
+        [HttpPut("{id:int}/status")]
+        public async Task<IActionResult> UpdateStatus(int id, [FromBody] string status)
         {
-            try
-            {
-                if (!ModelState.IsValid)
-                {
-                    return BadRequest(new { 
-                        message = "Invalid request data", 
-                        errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage)) 
-                    });
-                }
-
-                // Get current user info
-                var currentUser = User.Identity?.Name ?? "Unknown";
-                var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "User";
-
-                // Double check admin role
-                if (userRole != "Admin")
-                {
-                    return Forbid("Only administrators can update pricing");
-                }
-
-                var result = await _costCalculationService.UpdatePricingWithValidationAsync(id, request, currentUser);
-                
-                return Ok(new { 
-                    message = "Price updated successfully",
-                    data = result
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    message = "An error occurred while updating price", 
-                    error = ex.Message 
-                });
-            }
+            var dto = await _service.UpdateStatusAsync(id, status);
+            return dto is null ? NotFound() : Ok(dto);
         }
 
-        /// <summary>
-        /// Lấy thông tin giá hiện tại của charging point
-        /// </summary>
-        /// <param name="id">ID của charging point</param>
-        /// <returns>Thông tin giá hiện tại</returns>
-        [HttpGet("{id}/price")]
-        public async Task<IActionResult> GetCurrentPrice(int id)
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
         {
-            try
-            {
-                var currentPrice = await _costCalculationService.GetCurrentPricePerKwhAsync(id);
-                
-                if (currentPrice == 0)
-                {
-                    return NotFound(new { message = "Charging point not found or price not set" });
-                }
-
-                return Ok(new { 
-                    chargingPointId = id,
-                    currentPrice = currentPrice,
-                    currency = "VND",
-                    retrievedAt = DateTime.UtcNow
-                });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { 
-                    message = "An error occurred while retrieving price", 
-                    error = ex.Message 
-                });
-            }
+            var ok = await _service.DeleteAsync(id);
+            return ok ? NoContent() : NotFound();
         }
     }
 }
