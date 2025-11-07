@@ -191,11 +191,19 @@ builder.Services.AddAuthorization(options =>
             context.User.IsInRole("Staff") || 
             context.User.IsInRole("staff") ||
             context.User.IsInRole("STAFF")));
-    
+
     // Add case-insensitive role policy for Admin
     options.AddPolicy("AdminPolicy", policy =>
         policy.RequireAssertion(context =>
-            context.User.IsInRole("Admin") || 
+            context.User.IsInRole("Admin") ||
+            context.User.IsInRole("admin") ||
+            context.User.IsInRole("ADMIN")));
+    options.AddPolicy("StaffOrAdminPolicy", policy =>
+        policy.RequireAssertion(context =>
+            context.User.IsInRole("Staff") ||
+            context.User.IsInRole("staff") ||
+            context.User.IsInRole("STAFF") ||
+            context.User.IsInRole("Admin") ||
             context.User.IsInRole("admin") ||
             context.User.IsInRole("ADMIN")));
 });

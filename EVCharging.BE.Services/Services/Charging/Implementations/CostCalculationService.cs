@@ -133,17 +133,17 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// <summary>
         /// Kiểm tra có phải giờ cao điểm không
         /// </summary>
-        public async Task<bool> IsPeakHoursAsync(DateTime dateTime)
+        public Task<bool> IsPeakHoursAsync(DateTime dateTime)
         {
             var time = dateTime.TimeOfDay;
             
             // Morning peak: 7:00 AM - 9:00 AM
             if (time >= _peakHourStart && time <= _peakHourEnd)
-                return true;
+                return Task.FromResult(true);
             
             // Evening peak: 5:00 PM - 7:00 PM
             if (time >= _eveningPeakStart && time <= _eveningPeakEnd)
-                return true;
+                return Task.FromResult(true);
             
             // Weekend check (optional)
             if (dateTime.DayOfWeek == DayOfWeek.Saturday || dateTime.DayOfWeek == DayOfWeek.Sunday)
@@ -152,28 +152,29 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var weekendPeakStart = new TimeSpan(10, 0, 0);
                 var weekendPeakEnd = new TimeSpan(14, 0, 0);
                 if (time >= weekendPeakStart && time <= weekendPeakEnd)
-                    return true;
+                    return Task.FromResult(true);
             }
             
-            return false;
+            return Task.FromResult(false);
         }
 
         /// <summary>
         /// Lấy tỷ lệ giảm giá theo membership
         /// </summary>
-        public async Task<decimal> GetMembershipDiscountRateAsync(string membershipTier)
+        public Task<decimal> GetMembershipDiscountRateAsync(string membershipTier)
         {
-            return _membershipDiscounts.TryGetValue(membershipTier?.ToLower() ?? "basic", out var discount) 
-                ? discount 
+            var discount = _membershipDiscounts.TryGetValue(membershipTier?.ToLower() ?? "basic", out var rate) 
+                ? rate 
                 : 0m;
+            return Task.FromResult(discount);
         }
 
         /// <summary>
         /// Lấy tỷ lệ phụ thu giờ cao điểm
         /// </summary>
-        public async Task<decimal> GetPeakHourSurchargeRateAsync()
+        public Task<decimal> GetPeakHourSurchargeRateAsync()
         {
-            return _peakHourSurchargeRate;
+            return Task.FromResult(_peakHourSurchargeRate);
         }
 
         /// <summary>
@@ -277,16 +278,17 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// <summary>
         /// Validate price range
         /// </summary>
-        public async Task<bool> ValidatePriceAsync(decimal price)
+        public Task<bool> ValidatePriceAsync(decimal price)
         {
             // Price must be between 0.01 and 100,000 VND per kWh
-            return price >= 0.01m && price <= 100000m;
+            var isValid = price >= 0.01m && price <= 100000m;
+            return Task.FromResult(isValid);
         }
 
         /// <summary>
         /// Thông báo thay đổi giá
         /// </summary>
-        public async Task NotifyPriceChangeAsync(int chargingPointId, decimal oldPrice, decimal newPrice)
+        public Task NotifyPriceChangeAsync(int chargingPointId, decimal oldPrice, decimal newPrice)
         {
             try
             {
@@ -309,6 +311,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 Console.WriteLine($"Error notifying price change: {ex.Message}");
             }
+            
+            return Task.CompletedTask;
         }
 
         /// <summary>

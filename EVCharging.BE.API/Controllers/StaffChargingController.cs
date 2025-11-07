@@ -13,7 +13,7 @@ namespace EVCharging.BE.API.Controllers
     /// </summary>
     [Route("api/staff/charging")]
     [ApiController]
-    [Authorize(Policy = "StaffPolicy")]
+    [Authorize(Policy = "StaffOrAdminPolicy")]
     public class StaffChargingController : ControllerBase
     {
         private readonly IStaffChargingService _staffChargingService;

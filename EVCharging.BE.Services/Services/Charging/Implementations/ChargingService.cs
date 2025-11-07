@@ -280,6 +280,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"[StartSessionAsync] Session saved with SessionId={session.SessionId}");
 
+                    // Tạo initial log khi session bắt đầu
+                    var initialLog = new SessionLog
+                    {
+                        SessionId = session.SessionId,
+                        SocPercentage = request.InitialSOC,
+                        CurrentPower = chargingPoint.PowerOutput ?? 0, // Dùng PowerOutput ban đầu
+                        Voltage = 400, // Mặc định 400V
+                        Temperature = 25, // Mặc định 25°C
+                        LogTime = session.StartTime
+                    };
+                    _db.SessionLogs.Add(initialLog);
+                    await _db.SaveChangesAsync();
+                    Console.WriteLine($"[StartSessionAsync] Initial log created for SessionId={session.SessionId}");
+
                     // Start monitoring (có thể throw exception)
                     try
                     {
