@@ -648,6 +648,8 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.TargetSoc)
+                .HasColumnName("target_soc");
 
             entity.HasOne(d => d.Driver).WithMany(p => p.Reservations)
                 .HasForeignKey(d => d.DriverId)

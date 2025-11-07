@@ -222,6 +222,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     }
 
                     // Create new charging session
+                    // Nếu có reservation và reservation có TargetSoc, set làm FinalSoc (target SOC)
+                    // FinalSoc sẽ được dùng để auto-stop session khi đạt target
+                    // Nếu không có, FinalSoc = null và session sẽ auto-stop ở 100%
+                    int? targetSocFromReservation = reservation?.TargetSoc;
+                    
                     session = new ChargingSession
                     {
                         DriverId = request.DriverId,
@@ -229,6 +234,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         ReservationId = reservationId,
                         StartTime = sessionStartTime, // ✅ Đảm bảo StartTime = reservation.StartTime khi check-in sớm
                         InitialSoc = request.InitialSOC,
+                        FinalSoc = targetSocFromReservation, // Set target SOC từ reservation (nếu có)
                         Status = "in_progress",
                         EnergyUsed = 0,
                         DurationMinutes = 0,
@@ -236,6 +242,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         AppliedDiscount = 0,
                         FinalCost = 0
                     };
+                    
+                    if (targetSocFromReservation.HasValue)
+                    {
+                        Console.WriteLine($"[StartSessionAsync] Session will auto-stop at {targetSocFromReservation.Value}% SOC (from reservation TargetSoc)");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[StartSessionAsync] Session will auto-stop at 100% SOC (no target specified)");
+                    }
 
                     // ✅ Lưu maxEndTime vào Notes nếu có (vì entity không có field MaxEndTime)
                     if (maxEndTime.HasValue)

@@ -2,6 +2,7 @@
 using EVCharging.BE.Common.DTOs.Users;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -34,6 +35,14 @@ namespace EVCharging.BE.Common.DTOs.Reservations
         /// Thời gian kết thúc được tính tự động (1 tiếng sau StartTime)
         /// </summary>
         public DateTime EndTime => StartTime.AddHours(1);
+
+        /// <summary>
+        /// Target SOC (%) mà người dùng muốn sạc đến
+        /// Nếu null hoặc không set, mặc định sẽ sạc đến 100%
+        /// Range: 0-100
+        /// </summary>
+        [Range(0, 100, ErrorMessage = "Target SOC must be between 0 and 100")]
+        public int? TargetSoc { get; set; }
 
         // Giữ lại các thuộc tính cũ để tương thích ngược
         [Obsolete("Use Date and Hour instead")]

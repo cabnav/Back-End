@@ -477,9 +477,25 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var currentSOC = await GetCurrentSOCAsync(sessionId);
 
                 // Xác định target SOC
-                // Nếu có FinalSoc được set (từ reservation hoặc user), dùng FinalSoc
-                // Nếu không, mặc định là 100%
-                int targetSOC = session.FinalSoc.HasValue ? session.FinalSoc.Value : 100;
+                // FinalSoc trong session có thể là:
+                // 1. Target SOC từ reservation (được set khi start session)
+                // 2. SOC thực tế cuối cùng (được set khi stop session)
+                // Vì vậy, nếu session đang "in_progress" và có FinalSoc, đó là target SOC
+                // Nếu không có FinalSoc hoặc session đã completed, mặc định là 100%
+                int targetSOC = 100;
+                
+                if (session.Status == "in_progress" && session.FinalSoc.HasValue)
+                {
+                    // Nếu session đang chạy và có FinalSoc, đó là target SOC từ reservation
+                    targetSOC = session.FinalSoc.Value;
+                    _logger.LogDebug("Session {SessionId} using target SOC from reservation: {TargetSOC}%", sessionId, targetSOC);
+                }
+                else
+                {
+                    // Mặc định sạc đến 100%
+                    targetSOC = 100;
+                    _logger.LogDebug("Session {SessionId} using default target SOC: 100%", sessionId);
+                }
 
                 // Kiểm tra xem có đạt target chưa
                 if (currentSOC >= targetSOC)

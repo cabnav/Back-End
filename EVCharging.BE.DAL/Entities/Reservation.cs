@@ -23,6 +23,12 @@ public partial class Reservation
 
     public DateTime? UpdatedAt { get; set; }
 
+    /// <summary>
+    /// Target SOC (%) mà người dùng muốn sạc đến khi đặt reservation
+    /// Nếu null, mặc định sẽ sạc đến 100%
+    /// </summary>
+    public int? TargetSoc { get; set; }
+
     public virtual ICollection<ChargingSession> ChargingSessions { get; set; } = new List<ChargingSession>();
 
     public virtual DriverProfile Driver { get; set; } = null!;

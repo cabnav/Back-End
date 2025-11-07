@@ -117,7 +117,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                                 Status = "booked",
                                 CreatedAt = DateTime.UtcNow,
                                 UpdatedAt = DateTime.UtcNow,
-                                ReservationCode = reservationCode
+                                ReservationCode = reservationCode,
+                                TargetSoc = request.TargetSoc // Lưu target SOC từ request
                             };
 
                             _db.Reservations.Add(reservation);
