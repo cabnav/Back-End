@@ -1,6 +1,6 @@
 using EVCharging.BE.Common.DTOs.Shared;
 using EVCharging.BE.Common.DTOs.Stations;
-using EVCharging.BE.Services.DTOs;
+using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Services.Services.Charging;
 using EVCharging.BE.Services.Services.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -122,7 +122,7 @@ namespace EVCharging.BE.API.Controllers
                 }
 
                 // Bước 2: Tìm trạm sạc gần tọa độ
-                var filter = new StationSearchDTO
+                var filter = new StationFilterDTO
                 {
                     Latitude = coordinates.Value.latitude,
                     Longitude = coordinates.Value.longitude,

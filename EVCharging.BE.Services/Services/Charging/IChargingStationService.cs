@@ -1,19 +1,21 @@
 ﻿using EVCharging.BE.Common.DTOs.Stations;
-using EVCharging.BE.DAL;
-using EVCharging.BE.DAL.Entities;
-using EVCharging.BE.Services.DTOs;
+using EVCharging.BE.Common.DTOs.Stations.EVCharging.BE.Common.DTOs.Stations;
 
 namespace EVCharging.BE.Services.Services.Charging
 {
     public interface IChargingStationService
     {
-        Task<IEnumerable<ChargingStation>> GetAllAsync();
-        Task<ChargingStation?> GetByIdAsync(int id);
-        Task<IEnumerable<StationResultDTO>> SearchStationsAsync(StationSearchDTO filter);
-        Task<object?> GetStationStatusAsync(int stationId);
-        
-        // New interactive map methods
+        // CRUD
+        Task<IEnumerable<StationDTO>> GetAllAsync();
+        Task<StationDTO?> GetByIdAsync(int id);
+        Task<StationDTO> CreateAsync(StationCreateRequest req);
+        Task<StationDTO?> UpdateAsync(int id, StationUpdateRequest req);
+        Task<bool> DeleteAsync(int id);
+
+        // Search / Filter / Realtime
         Task<IEnumerable<InteractiveStationDTO>> GetInteractiveStationsAsync(StationFilterDTO filter);
-        Task<object> GetRealTimeStationStatusAsync(int stationId);
+        Task<IEnumerable<InteractiveStationDTO>> SearchStationsAsync(StationFilterDTO filter);
+        Task<object?> GetRealTimeStationStatusAsync(int stationId);
+
     }
 }

@@ -541,8 +541,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     PricePerKwh = r.Point.PricePerKwh,
                     Status = r.Point.Status,
                     QrCode = r.Point.QrCode ?? "",
-                    CurrentPower = (decimal)(r.Point.CurrentPower ?? 0.0),  // Convert double to decimal
-                    LastMaintenance = r.Point.LastMaintenance?.ToDateTime(TimeOnly.MinValue),  // Convert DateOnly to DateTime
+                    CurrentPower = r.Point.CurrentPower,      
+                    LastMaintenance = r.Point.LastMaintenance,  
                     // 🔥 UX improvement: Thông tin trạm hữu ích cho người dùng  
                     StationName = r.Point.Station?.Name,
                     StationAddress = r.Point.Station?.Address

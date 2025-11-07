@@ -1,8 +1,8 @@
-﻿using EVCharging.BE.Common.DTOs.Stations; // 👉 import DTO
+﻿using EVCharging.BE.Common.DTOs.Stations;
+using EVCharging.BE.Common.DTOs.Stations.EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.Enums;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
-using EVCharging.BE.Services.DTOs;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
@@ -16,110 +16,93 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             _db = db;
         }
 
-        // ✅ Hàm 1: Lấy toàn bộ
-        public async Task<IEnumerable<ChargingStation>> GetAllAsync()
+        // ===== CRUD =====
+        public async Task<IEnumerable<StationDTO>> GetAllAsync()
         {
-            return await _db.ChargingStations.Include(s => s.ChargingPoints).ToListAsync();
+            var list = await _db.ChargingStations.AsNoTracking().ToListAsync();
+            return list.Select(ToDTO);
         }
 
-        // ✅ Hàm 2: Lấy theo ID
-        public async Task<ChargingStation?> GetByIdAsync(int id)
+        public async Task<StationDTO?> GetByIdAsync(int id)
         {
-            return await _db.ChargingStations
-                .Include(s => s.ChargingPoints)
-                .FirstOrDefaultAsync(s => s.StationId == id);
+            var s = await _db.ChargingStations.AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.StationId == id);
+            return s == null ? null : ToDTO(s);
         }
 
-
-        // ✅ Hàm 4: Tìm kiếm nâng cao
-        public async Task<IEnumerable<StationResultDTO>> SearchStationsAsync(StationSearchDTO filter)
+        public async Task<StationDTO> CreateAsync(StationCreateRequest req)
         {
-            var query = _db.ChargingStations.AsQueryable();
-
-            if (!string.IsNullOrEmpty(filter.Name))
-                query = query.Where(s => EF.Functions.Like(s.Name, $"%{filter.Name}%"));
-
-            if (!string.IsNullOrEmpty(filter.Address))
-                query = query.Where(s => EF.Functions.Like(s.Address, $"%{filter.Address}%"));
-
-            if (!string.IsNullOrEmpty(filter.Operator))
-                query = query.Where(s => EF.Functions.Like(s.Operator, $"%{filter.Operator}%"));
-
-            var list = await query.Where(s => s.Latitude.HasValue && s.Longitude.HasValue).ToListAsync();
-
-            var result = list.Select(s => new StationResultDTO
+            var entity = new ChargingStation
             {
-                StationId = s.StationId,
-                Name = s.Name,
-                Address = s.Address,
-                Latitude = s.Latitude ?? 0,
-                Longitude = s.Longitude ?? 0,
-                Operator = s.Operator,
-                Status = s.Status,
-                DistanceKm = filter.Latitude.HasValue && filter.Longitude.HasValue
-                    ? Math.Round(CalculateDistance(filter.Latitude.Value, filter.Longitude.Value, s.Latitude.Value, s.Longitude.Value), 2)
-                    : 0,
-                GoogleMapsUrl = $"https://www.google.com/maps?q={s.Latitude},{s.Longitude}"
-            })
-            .OrderBy(x => x.DistanceKm)
-            .ToList();
-
-            // Nếu filter.MaxDistanceKm có giá trị thì lọc thêm
-            if (filter.MaxDistanceKm.HasValue)
-                result = result.Where(r => r.DistanceKm <= filter.MaxDistanceKm.Value).ToList();
-
-            return result;
-        }
-
-        // ✅ Hàm 5: Trạng thái tổng hợp của trạm
-        public async Task<object?> GetStationStatusAsync(int stationId)
-        {
-            var station = await _db.ChargingStations
-                .Include(s => s.ChargingPoints)
-                .FirstOrDefaultAsync(s => s.StationId == stationId);
-
-            if (station == null) return null;
-
-            int total = station.ChargingPoints.Count;
-            int available = station.ChargingPoints.Count(p => p.Status == "Available");
-            int busy = station.ChargingPoints.Count(p => p.Status == "Busy");
-            int maintenance = station.ChargingPoints.Count(p => p.Status == "Maintenance");
-
-            return new
-            {
-                station.StationId,
-                StationName = station.Name,
-                TotalPoints = total,
-                Available = available,
-                Busy = busy,
-                Maintenance = maintenance,
-                Utilization = total == 0 ? 0 : Math.Round((double)busy / total * 100, 1)
+                Name = req.Name,
+                Address = req.Address,
+                Latitude = req.Latitude,
+                Longitude = req.Longitude,
+                Operator = req.Operator,
+                Status = req.Status
             };
+
+            _db.ChargingStations.Add(entity);
+            await _db.SaveChangesAsync();
+            return ToDTO(entity);
         }
 
-        /// <summary>
-        /// Get interactive station map data with real-time status
-        /// </summary>
+        public async Task<StationDTO?> UpdateAsync(int id, StationUpdateRequest req)
+        {
+            var s = await _db.ChargingStations.FirstOrDefaultAsync(x => x.StationId == id);
+            if (s == null) return null;
+
+            s.Name = req.Name ?? s.Name;
+            s.Address = req.Address ?? s.Address;
+            s.Latitude = req.Latitude ?? s.Latitude;
+            s.Longitude = req.Longitude ?? s.Longitude;
+            s.Operator = req.Operator ?? s.Operator;
+            s.Status = req.Status ?? s.Status;
+
+            await _db.SaveChangesAsync();
+            return ToDTO(s);
+        }
+
+        public async Task<bool> DeleteAsync(int id)
+        {
+            var s = await _db.ChargingStations.FirstOrDefaultAsync(x => x.StationId == id);
+            if (s == null) return false;
+
+            _db.ChargingStations.Remove(s);
+            await _db.SaveChangesAsync();
+            return true;
+        }
+
+        private static StationDTO ToDTO(ChargingStation s) => new StationDTO
+        {
+            StationId = s.StationId,
+            Name = s.Name,
+            Address = s.Address,
+            Latitude = s.Latitude,
+            Longitude = s.Longitude,
+            Operator = s.Operator,
+            Status = s.Status,
+            TotalPoints = s.TotalPoints,
+            AvailablePoints = s.AvailablePoints
+        };
+
+        // ===== SEARCH =====
         public async Task<IEnumerable<InteractiveStationDTO>> GetInteractiveStationsAsync(StationFilterDTO filter)
         {
             var query = _db.ChargingStations
                 .Include(s => s.ChargingPoints)
                 .Where(s => s.Latitude.HasValue && s.Longitude.HasValue);
 
-            // Apply filters
-            if (!string.IsNullOrEmpty(filter.Name))
+            if (!string.IsNullOrWhiteSpace(filter.Name))
                 query = query.Where(s => EF.Functions.Like(s.Name, $"%{filter.Name}%"));
-
-            if (!string.IsNullOrEmpty(filter.Address))
+            if (!string.IsNullOrWhiteSpace(filter.Address))
                 query = query.Where(s => EF.Functions.Like(s.Address, $"%{filter.Address}%"));
-
-            if (!string.IsNullOrEmpty(filter.Operator))
+            if (!string.IsNullOrWhiteSpace(filter.Operator))
                 query = query.Where(s => EF.Functions.Like(s.Operator, $"%{filter.Operator}%"));
-
-            if (!string.IsNullOrEmpty(filter.Status))
+            if (!string.IsNullOrWhiteSpace(filter.Status))
                 query = query.Where(s => s.Status == filter.Status);
 
-            var stations = await query.ToListAsync();
+            var stations = await query.AsNoTracking().ToListAsync();
 
             var result = stations.Select(s => new InteractiveStationDTO
             {
@@ -130,144 +113,78 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 Longitude = s.Longitude ?? 0,
                 Operator = s.Operator,
                 Status = s.Status ?? "Unknown",
-                DistanceKm = filter.Latitude.HasValue && filter.Longitude.HasValue
-                    ? Math.Round(CalculateDistance(filter.Latitude.Value, filter.Longitude.Value, s.Latitude.Value, s.Longitude.Value), 2)
-                    : 0,
-                GoogleMapsUrl = $"https://www.google.com/maps?q={s.Latitude},{s.Longitude}",
                 TotalPoints = s.ChargingPoints.Count,
                 AvailablePoints = s.ChargingPoints.Count(p => p.Status == "Available"),
                 BusyPoints = s.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use"),
                 MaintenancePoints = s.ChargingPoints.Count(p => p.Status == "Maintenance"),
-                UtilizationPercentage = s.ChargingPoints.Count == 0 ? 0 : 
-                    Math.Round((double)s.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use") / s.ChargingPoints.Count * 100, 1),
+                GoogleMapsUrl = $"https://www.google.com/maps?q={s.Latitude},{s.Longitude}",
                 ChargingPoints = s.ChargingPoints.Select(cp => new ChargingPointMapDTO
                 {
                     PointId = cp.PointId,
-                    ConnectorType = Enum.TryParse<ConnectorType>(cp.ConnectorType, out var connectorType) ? connectorType : ConnectorType.AC,
+                    ConnectorType = ConnectorType.AC,
                     PowerOutput = cp.PowerOutput ?? 0,
                     PricePerKwh = cp.PricePerKwh,
                     Status = cp.Status ?? "Unknown",
                     CurrentPower = cp.CurrentPower ?? 0,
                     IsAvailable = cp.Status == "Available",
                     LastMaintenance = cp.LastMaintenance?.ToDateTime(TimeOnly.MinValue)
-                }).ToList(),
-                Pricing = CalculatePricingInfo(s.ChargingPoints)
-            }).ToList();
+                }).ToList()
+            });
 
-            // Apply additional filters
-            if (filter.ConnectorTypes?.Any() == true)
-            {
-                result = result.Where(s => s.ChargingPoints.Any(cp => filter.ConnectorTypes.Contains(cp.ConnectorType))).ToList();
-            }
-
-            if (filter.MinPowerOutput.HasValue)
-            {
-                result = result.Where(s => s.ChargingPoints.Any(cp => cp.PowerOutput >= filter.MinPowerOutput.Value)).ToList();
-            }
-
-            if (filter.MaxPricePerKwh.HasValue)
-            {
-                result = result.Where(s => s.ChargingPoints.Any(cp => cp.PricePerKwh <= filter.MaxPricePerKwh.Value)).ToList();
-            }
-
-            if (filter.IsAvailable.HasValue)
-            {
-                result = result.Where(s => filter.IsAvailable.Value ? s.AvailablePoints > 0 : s.AvailablePoints == 0).ToList();
-            }
-
+            // Filter khoảng cách
             if (filter.MaxDistanceKm.HasValue && filter.Latitude.HasValue && filter.Longitude.HasValue)
             {
-                result = result.Where(s => s.DistanceKm <= filter.MaxDistanceKm.Value).ToList();
+                double Haversine(double la1, double lo1, double la2, double lo2)
+                {
+                    const double R = 6371;
+                    var dLat = (la2 - la1) * Math.PI / 180;
+                    var dLon = (lo2 - lo1) * Math.PI / 180;
+                    var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                             Math.Cos(la1 * Math.PI / 180) * Math.Cos(la2 * Math.PI / 180) *
+                             Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+                    return 2 * R * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+                }
+
+                result = result.Select(r =>
+                {
+                    r.DistanceKm = Haversine(filter.Latitude.Value, filter.Longitude.Value, r.Latitude, r.Longitude);
+                    return r;
+                })
+                .Where(r => r.DistanceKm <= filter.MaxDistanceKm.Value)
+                .OrderBy(r => r.DistanceKm)
+                .ToList();
             }
 
-            return result.OrderBy(s => s.DistanceKm);
+            return result;
         }
 
-        /// <summary>
-        /// Get real-time station status for map updates
-        /// </summary>
-        public async Task<object> GetRealTimeStationStatusAsync(int stationId)
+        public Task<IEnumerable<InteractiveStationDTO>> SearchStationsAsync(StationFilterDTO filter)
+            => GetInteractiveStationsAsync(filter);
+
+        // ===== REAL-TIME =====
+        public async Task<object?> GetRealTimeStationStatusAsync(int stationId)
         {
-            var station = await _db.ChargingStations
-                .Include(s => s.ChargingPoints)
-                .FirstOrDefaultAsync(s => s.StationId == stationId);
+            var s = await _db.ChargingStations
+                .Include(x => x.ChargingPoints)
+                .FirstOrDefaultAsync(x => x.StationId == stationId);
 
-            if (station == null) return null;
+            if (s == null) return null;
 
-            var total = station.ChargingPoints.Count;
-            var available = station.ChargingPoints.Count(p => p.Status == "Available");
-            var busy = station.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use");
-            var maintenance = station.ChargingPoints.Count(p => p.Status == "Maintenance");
+            var total = s.ChargingPoints.Count;
+            var busy = s.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use");
 
             return new
             {
-                StationId = station.StationId,
-                StationName = station.Name,
+                s.StationId,
+                StationName = s.Name,
                 TotalPoints = total,
-                Available = available,
+                Available = s.ChargingPoints.Count(p => p.Status == "Available"),
                 Busy = busy,
-                Maintenance = maintenance,
+                Maintenance = s.ChargingPoints.Count(p => p.Status == "Maintenance"),
                 Utilization = total == 0 ? 0 : Math.Round((double)busy / total * 100, 1),
-                LastUpdated = DateTime.UtcNow,
-                ChargingPoints = station.ChargingPoints.Select(cp => new
-                {
-                    cp.PointId,
-                    cp.ConnectorType,
-                    cp.PowerOutput,
-                    cp.PricePerKwh,
-                    cp.Status,
-                    cp.CurrentPower,
-                    IsAvailable = cp.Status == "Available"
-                })
+                LastUpdated = DateTime.UtcNow
             };
         }
 
-        /// <summary>
-        /// Calculate pricing information including peak/off-peak rates
-        /// </summary>
-        private PricingInfoDTO CalculatePricingInfo(ICollection<ChargingPoint> chargingPoints)
-        {
-            if (!chargingPoints.Any())
-                return new PricingInfoDTO();
-
-            var basePrice = chargingPoints.Min(cp => cp.PricePerKwh);
-            var peakMultiplier = 1.5m; // 50% increase during peak hours
-            var offPeakMultiplier = 0.8m; // 20% discount during off-peak hours
-
-            var now = DateTime.Now;
-            var currentHour = now.Hour;
-            var isPeakHour = currentHour >= 18 && currentHour <= 22; // Peak hours: 6 PM - 10 PM
-            var isOffPeakHour = currentHour >= 0 && currentHour <= 6; // Off-peak hours: 12 AM - 6 AM
-
-            var currentPrice = isPeakHour ? basePrice * peakMultiplier :
-                              isOffPeakHour ? basePrice * offPeakMultiplier :
-                              basePrice;
-
-            return new PricingInfoDTO
-            {
-                BasePricePerKwh = basePrice,
-                PeakHourPrice = basePrice * peakMultiplier,
-                OffPeakPrice = basePrice * offPeakMultiplier,
-                PeakHours = "18:00-22:00",
-                CurrentPrice = currentPrice,
-                IsPeakHour = isPeakHour,
-                PriceDescription = isPeakHour ? "Peak Hour Rate" :
-                                  isOffPeakHour ? "Off-Peak Rate" :
-                                  "Standard Rate"
-            };
-        }
-
-        // 🧭 Hàm tính khoảng cách (km)
-        private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
-        {
-            const double R = 6371; // km
-            var dLat = (lat2 - lat1) * Math.PI / 180;
-            var dLon = (lon2 - lon1) * Math.PI / 180;
-            var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                    Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
-                    Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-            var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-            return R * c;
-        }
     }
 }

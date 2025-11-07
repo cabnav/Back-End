@@ -1,15 +1,17 @@
-﻿using EVCharging.BE.Services.DTOs;
-using EVCharging.BE.Common.DTOs.Stations;
-
+﻿using CP = EVCharging.BE.Common.DTOs.Stations;
 
 namespace EVCharging.BE.Services.Services.Charging
 {
     public interface IChargingPointService
     {
-        Task<IEnumerable<ChargingPointDTO>> GetAllAsync();
-        Task<ChargingPointDTO?> GetByIdAsync(int id);
-        Task<IEnumerable<ChargingPointDTO>> GetAvailableAsync();
-        Task<IEnumerable<ChargingPointDTO>> GetByStationAsync(int stationId);
-        Task<ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus);
+        Task<IEnumerable<CP.ChargingPointDTO>> GetAllAsync();
+        Task<CP.ChargingPointDTO?> GetByIdAsync(int id);
+        Task<IEnumerable<CP.ChargingPointDTO>> GetAvailableAsync();
+        Task<IEnumerable<CP.ChargingPointDTO>> GetByStationAsync(int stationId);
+
+        Task<CP.ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus);
+        Task<CP.ChargingPointDTO> CreateAsync(CP.ChargingPointCreateRequest req);
+        Task<bool> UpdateAsync(int id, CP.ChargingPointUpdateRequest req);
+        Task<bool> DeleteAsync(int id);
     }
 }

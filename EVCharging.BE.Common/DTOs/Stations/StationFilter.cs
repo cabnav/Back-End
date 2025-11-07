@@ -8,8 +8,8 @@ namespace EVCharging.BE.Common.DTOs.Stations
 {
     public class StationFilter
     {
-        public decimal? Latitude { get; set; }
-        public decimal? Longitude { get; set; }
+        public double? Latitude { get; set; }
+        public double? Longitude { get; set; }
         public decimal? Radius { get; set; } // in km
         public string ConnectorType { get; set; }
         public int? MinPower { get; set; }
