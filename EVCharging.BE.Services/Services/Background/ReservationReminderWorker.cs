@@ -41,6 +41,8 @@ public class ReservationReminderWorker : BackgroundService
                 var reminderTime = now.AddMinutes(_opt.ReminderMinutes);
 
                 var upcomingReservations = await db.Reservations
+                    .Include(r => r.Point)
+                        .ThenInclude(p => p.Station)
                     .Where(r => r.Status == "booked" && r.StartTime <= reminderTime && r.StartTime > now)
                     .OrderBy(r => r.StartTime)
                     .ToListAsync(stoppingToken);
@@ -56,11 +58,34 @@ public class ReservationReminderWorker : BackgroundService
 
                         if (userId > 0)
                         {
+                            var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                            var stationAddress = reservation.Point?.Station?.Address ?? "";
+                            var pointId = reservation.PointId;
+                            var connectorType = reservation.Point?.ConnectorType ?? "N/A";
+                            var powerOutput = reservation.Point?.PowerOutput ?? 0;
+                            
+                            // Tạo message chi tiết với thông tin điểm sạc
+                            var message = $"Bạn có đặt chỗ sắp tới tại {stationName}";
+                            if (!string.IsNullOrEmpty(stationAddress))
+                            {
+                                message += $" ({stationAddress})";
+                            }
+                            message += $" - Điểm sạc #{pointId}";
+                            if (!string.IsNullOrEmpty(connectorType) && connectorType != "N/A")
+                            {
+                                message += $", loại {connectorType}";
+                            }
+                            if (powerOutput > 0)
+                            {
+                                message += $", công suất {powerOutput}kW";
+                            }
+                            message += $" vào lúc {reservation.StartTime:HH:mm dd/MM/yyyy}. Vui lòng đến đúng giờ.";
+                            
                             db.Notifications.Add(new EVCharging.BE.DAL.Entities.Notification
                             {
                                 UserId = userId,
                                 Title = "Nhắc nhở đặt chỗ sắp tới",
-                                Message = $"Bạn có đặt chỗ sắp tới tại điểm sạc {reservation.PointId} vào lúc {reservation.StartTime:HH:mm dd/MM/yyyy}.",
+                                Message = message,
                                 Type = "reservation_reminder",
                                 IsRead = false,
                                 CreatedAt = now

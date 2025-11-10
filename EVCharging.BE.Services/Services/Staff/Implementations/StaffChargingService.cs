@@ -407,7 +407,7 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 {
                     ReporterId = staffId,
                     PointId = session.PointId,
-                    Title = $"Emergency Stop - Session #{sessionId}",
+                    Title = $"Dừng khẩn cấp - Phiên sạc #{sessionId}",
                     Description = request.Reason,
                     Priority = request.Severity,
                     Status = "open",
