@@ -259,15 +259,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (session == null)
                     return;
 
-                var message = $"Charging session completed! " +
-                             $"Energy: {session.EnergyUsed:F2} kWh, " +
-                             $"Cost: {session.FinalCost:F0} VND, " +
-                             $"Duration: {session.DurationMinutes} minutes";
+                var message = $"Phiên sạc đã hoàn thành! " +
+                             $"Năng lượng: {session.EnergyUsed:F2} kWh, " +
+                             $"Chi phí: {session.FinalCost:F0} VNĐ, " +
+                             $"Thời gian: {session.DurationMinutes} phút";
 
                 _logger.LogInformation("Session {SessionId} completed: {Message}", sessionId, message);
                 
                 // TODO: Send notification to user
-                // await _notificationService.SendAsync(session.Driver.UserId, "Charging Complete", message);
+                // await _notificationService.SendAsync(session.Driver.UserId, "Phiên sạc đã hoàn thành", message);
             }
             catch (Exception ex)
             {
@@ -296,7 +296,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 _logger.LogWarning("Session {SessionId} error: {ErrorMessage}", sessionId, errorMessage);
                 
                 // TODO: Send error notification to user and admin
-                // await _notificationService.SendAsync(session.Driver.UserId, "Charging Alert", errorMessage);
+                // await _notificationService.SendAsync(session.Driver.UserId, "Cảnh báo phiên sạc", errorMessage);
             }
             catch (Exception ex)
             {

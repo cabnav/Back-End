@@ -266,7 +266,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     UpdatedAt = DateTime.UtcNow,
                     UpdatedBy = updatedBy,
                     NotifyUsers = request.NotifyUsers,
-                    Message = $"Price updated successfully from {oldPrice:N0} to {request.NewPrice:N0} VND/kWh"
+                    Message = $"Giá đã được cập nhật thành công từ {oldPrice:N0} lên {request.NewPrice:N0} VNĐ/kWh"
                 };
             }
             catch (Exception ex)

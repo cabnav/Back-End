@@ -248,36 +248,36 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     StationAddress = session.Point.Station.Address
                 };
 
-                // Send email notification
+                // Gửi email thông báo (Tiếng Việt)
                 if (!string.IsNullOrEmpty(completionData.DriverEmail))
                 {
-                    var subject = "Charging Session Completed";
+                    var subject = "Phiên sạc đã hoàn thành";
                     var body = $@"
-                        <h2>Charging Session Completed</h2>
-                        <p>Dear {completionData.DriverName},</p>
-                        <p>Your charging session has been completed successfully.</p>
+                        <h2>Phiên sạc đã hoàn thành</h2>
+                        <p>Xin chào {completionData.DriverName},</p>
+                        <p>Phiên sạc của bạn đã hoàn thành thành công.</p>
                         <ul>
-                            <li><strong>Station:</strong> {completionData.StationName}</li>
-                            <li><strong>Address:</strong> {completionData.StationAddress}</li>
-                            <li><strong>Duration:</strong> {completionData.DurationMinutes} minutes</li>
-                            <li><strong>Energy Used:</strong> {completionData.EnergyUsed:F2} kWh</li>
-                            <li><strong>Total Cost:</strong> ${completionData.TotalCost:F2}</li>
-                            <li><strong>Initial SOC:</strong> {completionData.InitialSOC}%</li>
-                            <li><strong>Final SOC:</strong> {completionData.FinalSOC}%</li>
+                            <li><strong>Trạm sạc:</strong> {completionData.StationName}</li>
+                            <li><strong>Địa chỉ:</strong> {completionData.StationAddress}</li>
+                            <li><strong>Thời gian:</strong> {completionData.DurationMinutes} phút</li>
+                            <li><strong>Năng lượng đã sạc:</strong> {completionData.EnergyUsed:F2} kWh</li>
+                            <li><strong>Tổng chi phí:</strong> {completionData.TotalCost:N0} VNĐ</li>
+                            <li><strong>SOC ban đầu:</strong> {completionData.InitialSOC}%</li>
+                            <li><strong>SOC cuối:</strong> {completionData.FinalSOC}%</li>
                         </ul>
-                        <p>Thank you for using our charging service!</p>";
+                        <p>Cảm ơn bạn đã sử dụng dịch vụ sạc của chúng tôi!</p>";
 
                     await _emailService.SendEmailAsync(completionData.DriverEmail, subject, body);
                 }
 
                 // TODO: Implement SMS notification service
-                // await _smsService.SendSMSAsync(completionData.DriverPhone, "Charging completed successfully!");
+                // await _smsService.SendSMSAsync(completionData.DriverPhone, "Phiên sạc đã hoàn thành thành công!");
 
-                Console.WriteLine($"Charging completion notification sent for session {session.SessionId}");
+                Console.WriteLine($"Đã gửi thông báo hoàn thành phiên sạc cho session {session.SessionId}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error sending completion notification: {ex.Message}");
+                Console.WriteLine($"Lỗi khi gửi thông báo hoàn thành: {ex.Message}");
             }
         }
 

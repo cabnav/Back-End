@@ -227,16 +227,16 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 );
             }
 
-            // Gửi thông báo cho người dùng (English)
+            // Gửi thông báo cho người dùng (Tiếng Việt)
             try
             {
                 var userIdForNotification = entity.Driver?.User?.UserId;
                 if (userIdForNotification.HasValue)
                 {
                     var startIso = entity.StartTime.ToString("o");
-                    var stationName = entity.Point?.Station?.Name ?? "charging station";
-                    var title = "Reservation confirmed";
-                    var message = $"Your charging reservation is confirmed at {stationName}. Please arrive on time. The latest allowed check-in is within 30 minutes from the start time ({startIso} UTC).";
+                    var stationName = entity.Point?.Station?.Name ?? "trạm sạc";
+                    var title = "Đặt chỗ đã được xác nhận";
+                    var message = $"Đặt chỗ sạc của bạn đã được xác nhận tại {stationName}. Vui lòng đến đúng giờ. Thời gian check-in muộn nhất được phép là trong vòng 30 phút kể từ thời gian bắt đầu ({startIso} UTC).";
 
                     _db.Notifications.Add(new EVCharging.BE.DAL.Entities.Notification
                     {
