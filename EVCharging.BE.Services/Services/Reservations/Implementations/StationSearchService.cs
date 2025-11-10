@@ -31,7 +31,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         {
             // Lấy tất cả trạm sạc có điểm sạc phù hợp với loại cổng
             var stationsQuery = _db.ChargingStations
-                .Where(s => s.Status == "active")
+                .Where(s => s.Status != null && s.Status.ToLower() == "active")
                 .Include(s => s.ChargingPoints)
                 .Where(s => s.ChargingPoints.Any(p => p.ConnectorType == request.ConnectorType && p.Status == "available"));
 

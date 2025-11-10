@@ -1,4 +1,5 @@
-﻿using EVCharging.BE.Common.DTOs.Stations;
+﻿using System;
+using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Stations.EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.Enums;
 using EVCharging.BE.DAL;
@@ -100,7 +101,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             if (!string.IsNullOrWhiteSpace(filter.Operator))
                 query = query.Where(s => EF.Functions.Like(s.Operator, $"%{filter.Operator}%"));
             if (!string.IsNullOrWhiteSpace(filter.Status))
-                query = query.Where(s => s.Status == filter.Status);
+                query = query.Where(s => s.Status != null && s.Status.ToLower() == filter.Status.ToLower());
 
             var stations = await query.AsNoTracking().ToListAsync();
 
@@ -165,22 +166,30 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         public async Task<object?> GetRealTimeStationStatusAsync(int stationId)
         {
             var s = await _db.ChargingStations
-                .Include(x => x.ChargingPoints)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.StationId == stationId);
 
             if (s == null) return null;
 
-            var total = s.ChargingPoints.Count;
-            var busy = s.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use");
+            // Query trực tiếp từ ChargingPoints để đảm bảo load đúng dữ liệu
+            var points = await _db.ChargingPoints
+                .AsNoTracking()
+                .Where(p => p.StationId == stationId)
+                .ToListAsync();
+
+            var total = points.Count;
+            var available = points.Count(p => p.Status != null && p.Status.Equals("Available", StringComparison.OrdinalIgnoreCase));
+            var busy = points.Count(p => p.Status != null && (p.Status.Equals("Busy", StringComparison.OrdinalIgnoreCase) || p.Status.Equals("in_use", StringComparison.OrdinalIgnoreCase)));
+            var maintenance = points.Count(p => p.Status != null && p.Status.Equals("Maintenance", StringComparison.OrdinalIgnoreCase));
 
             return new
             {
                 s.StationId,
                 StationName = s.Name,
                 TotalPoints = total,
-                Available = s.ChargingPoints.Count(p => p.Status == "Available"),
+                Available = available,
                 Busy = busy,
-                Maintenance = s.ChargingPoints.Count(p => p.Status == "Maintenance"),
+                Maintenance = maintenance,
                 Utilization = total == 0 ? 0 : Math.Round((double)busy / total * 100, 1),
                 LastUpdated = DateTime.UtcNow
             };

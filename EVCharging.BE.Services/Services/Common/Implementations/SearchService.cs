@@ -11,7 +11,7 @@ namespace EVCharging.BE.Services.Services.Common.Implementations
                 query = query.Where(s => s.Name.Contains(keyword) || s.Address.Contains(keyword));
 
             if (!string.IsNullOrWhiteSpace(status))
-                query = query.Where(s => s.Status == status);
+                query = query.Where(s => s.Status != null && s.Status.ToLower() == status.ToLower());
 
             return query;
         }
