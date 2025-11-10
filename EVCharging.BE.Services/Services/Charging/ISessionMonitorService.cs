@@ -26,5 +26,8 @@ namespace EVCharging.BE.Services.Services.Charging
         Task<Dictionary<string, object>> GetSessionAnalyticsAsync(int sessionId);
         Task<decimal> CalculateEfficiencyAsync(int sessionId);
         Task<TimeSpan> EstimateRemainingTimeAsync(int sessionId, int targetSOC);
+        
+        // Monitoring Status
+        Task<Dictionary<string, object>> GetMonitoringStatusAsync(int sessionId);
     }
 }

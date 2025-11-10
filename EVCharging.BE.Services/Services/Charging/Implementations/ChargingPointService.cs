@@ -126,7 +126,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 StationId = req.StationId,
                 ConnectorType = req.ConnectorType,
-                Status = req.Status ?? "Available",
+                Status = req.Status ?? "available",
                 PowerOutput = req.PowerOutput,
                 PricePerKwh = req.PricePerKwh,
                 CurrentPower = req.CurrentPower,

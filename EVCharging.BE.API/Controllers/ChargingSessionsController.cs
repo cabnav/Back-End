@@ -361,21 +361,71 @@ namespace EVCharging.BE.API.Controllers
 
 
         /// <summary>
-        /// Lấy logs của phiên sạc
+        /// Lấy log mới nhất của phiên sạc
         /// </summary>
         /// <param name="sessionId">ID phiên sạc</param>
-        /// <returns>Danh sách logs</returns>
+        /// <returns>Log mới nhất và thông tin monitoring</returns>
         [HttpGet("{sessionId}/logs")]
         public async Task<IActionResult> GetSessionLogs(int sessionId)
         {
             try
             {
-                var result = await _chargingService.GetSessionLogsAsync(sessionId);
-                return Ok(new { data = result, count = result.Count() });
+                var logs = await _chargingService.GetSessionLogsAsync(sessionId);
+                var monitoringStatus = await _sessionMonitorService.GetMonitoringStatusAsync(sessionId);
+                
+                // Lấy log cuối cùng (log mới nhất)
+                var lastLog = logs.OrderByDescending(l => l.LogTime).FirstOrDefault();
+                
+                // Trả về chỉ 1 log mới nhất trong mảng data
+                var logList = lastLog != null ? new List<SessionLogDTO> { lastLog } : new List<SessionLogDTO>();
+                
+                return Ok(new { 
+                    data = logList,
+                    count = logList.Count,
+                    monitoring = monitoringStatus,
+                    summary = new
+                    {
+                        totalLogs = logs.Count(),
+                        lastLogTime = lastLog?.LogTime,
+                        currentSOC = lastLog?.SOCPercentage,
+                        currentPower = lastLog?.CurrentPower,
+                        voltage = lastLog?.Voltage,
+                        temperature = lastLog?.Temperature
+                    }
+                });
             }
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred while retrieving session logs", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Kiểm tra trạng thái monitoring và logs của session
+        /// </summary>
+        /// <param name="sessionId">ID phiên sạc</param>
+        /// <returns>Trạng thái monitoring và thông tin logs</returns>
+        [HttpGet("{sessionId}/monitoring-status")]
+        public async Task<IActionResult> GetMonitoringStatus(int sessionId)
+        {
+            try
+            {
+                var monitoringStatus = await _sessionMonitorService.GetMonitoringStatusAsync(sessionId);
+                var session = await _chargingService.GetSessionByIdAsync(sessionId);
+                
+                if (session == null)
+                {
+                    return NotFound(new { message = "Session not found" });
+                }
+                
+                return Ok(new { 
+                    data = monitoringStatus,
+                    session = session
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while retrieving monitoring status", error = ex.Message });
             }
         }
 

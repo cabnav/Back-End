@@ -62,11 +62,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(1)); // ✅ First check after 2 minutes, then every 1 minute
 
                 _monitoringTimers[sessionId] = timer;
-                _logger.LogInformation("Started monitoring session {SessionId}", sessionId);
+                _logger.LogInformation("✅ [StartMonitoring] Started monitoring session {SessionId} - First check in 2 minutes, then every 1 minute", sessionId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error starting monitoring for session {SessionId}", sessionId);
+                _logger.LogError(ex, "❌ [StartMonitoring] Error starting monitoring for session {SessionId}: {Error}", sessionId, ex.Message);
             }
             
             return Task.CompletedTask;
@@ -652,6 +652,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return;
                 }
 
+                _logger.LogDebug("🔍 [MonitorSession] Session {SessionId} - Starting monitoring cycle", sessionId);
+
                 // Tự động tạo log mới và cập nhật SOC
                 await AutoCreateSessionLogAsync(sessionId);
 
@@ -718,7 +720,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                                       (now - lastLog.LogTime!.Value).TotalSeconds > 30;
 
                 if (!shouldCreateLog)
+                {
+                    _logger.LogDebug("⏭️ [AutoCreateSessionLog] Session {SessionId} - Skipping log creation (last log is {SecondsSinceLastLog:F0}s old, threshold: 30s)",
+                        sessionId, lastLog != null && lastLog.LogTime.HasValue 
+                            ? (now - lastLog.LogTime.Value).TotalSeconds 
+                            : 0);
                     return;
+                }
+                
+                _logger.LogDebug("📝 [AutoCreateSessionLog] Session {SessionId} - Creating new log (last log: {LastLogTime}, time since: {SecondsSinceLastLog:F0}s)",
+                    sessionId, 
+                    lastLog?.LogTime?.ToString("HH:mm:ss") ?? "N/A",
+                    lastLog != null && lastLog.LogTime.HasValue 
+                        ? (now - lastLog.LogTime.Value).TotalSeconds 
+                        : 0);
 
                 // Tính toán SOC hiện tại
                 var currentSOC = CalculateCurrentSOCFromLogs(session, lastLog);
@@ -746,10 +761,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 }
 
                 await db.SaveChangesAsync();
+                
+                // Log thông tin khi tạo log mới
+                _logger.LogInformation(
+                    "✅ [AutoCreateSessionLog] Session {SessionId} - Created new log: SOC={SOC}%, Power={Power}kW, Voltage={Voltage}V, Temp={Temp}°C, Time={LogTime}",
+                    sessionId, currentSOC, currentPower, newLog.Voltage, newLog.Temperature, newLog.LogTime);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error auto-creating session log for session {SessionId}", sessionId);
+                _logger.LogError(ex, "❌ [AutoCreateSessionLog] Error auto-creating session log for session {SessionId}", sessionId);
             }
         }
 
@@ -904,6 +924,94 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             }
 
             return totalEnergy;
+        }
+
+        /// <summary>
+        /// Lấy trạng thái monitoring của session
+        /// </summary>
+        public async Task<Dictionary<string, object>> GetMonitoringStatusAsync(int sessionId)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+
+                var session = await db.ChargingSessions
+                    .Include(s => s.SessionLogs)
+                    .Include(s => s.Point)
+                    .Include(s => s.Driver)
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+                if (session == null)
+                {
+                    return new Dictionary<string, object>
+                    {
+                        ["sessionId"] = sessionId,
+                        ["isMonitoring"] = false,
+                        ["error"] = "Session not found"
+                    };
+                }
+
+                var isMonitoring = _monitoringTimers.ContainsKey(sessionId);
+                var isMonitoringInProgress = _monitoringInProgress.ContainsKey(sessionId);
+                
+                // Lấy log cuối cùng
+                var lastLog = session.SessionLogs?
+                    .OrderByDescending(l => l.LogTime)
+                    .FirstOrDefault();
+
+                // Đếm tổng số logs
+                var totalLogs = session.SessionLogs?.Count ?? 0;
+
+                // Tính thời gian từ log cuối cùng
+                var timeSinceLastLog = lastLog?.LogTime.HasValue == true
+                    ? (DateTime.UtcNow - lastLog.LogTime!.Value)
+                    : (TimeSpan?)null;
+
+                var status = new Dictionary<string, object>
+                {
+                    ["sessionId"] = sessionId,
+                    ["sessionStatus"] = session.Status ?? "unknown",
+                    ["isMonitoring"] = isMonitoring,
+                    ["isMonitoringInProgress"] = isMonitoringInProgress,
+                    ["totalLogs"] = totalLogs,
+                    ["lastLogTime"] = lastLog?.LogTime,
+                    ["timeSinceLastLog"] = timeSinceLastLog.HasValue 
+                        ? $"{timeSinceLastLog.Value.TotalSeconds:F0} seconds"
+                        : "N/A",
+                    ["lastLog"] = lastLog != null ? new Dictionary<string, object?>
+                    {
+                        ["logId"] = lastLog.LogId,
+                        ["socPercentage"] = lastLog.SocPercentage,
+                        ["currentPower"] = lastLog.CurrentPower,
+                        ["voltage"] = lastLog.Voltage,
+                        ["temperature"] = lastLog.Temperature,
+                        ["logTime"] = lastLog.LogTime
+                    } : null,
+                    ["sessionInfo"] = new Dictionary<string, object?>
+                    {
+                        ["startTime"] = session.StartTime,
+                        ["initialSOC"] = session.InitialSoc,
+                        ["finalSOC"] = session.FinalSoc,
+                        ["energyUsed"] = session.EnergyUsed,
+                        ["durationMinutes"] = session.DurationMinutes,
+                        ["pointId"] = session.PointId,
+                        ["driverId"] = session.DriverId
+                    }
+                };
+
+                return status;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting monitoring status for session {SessionId}", sessionId);
+                return new Dictionary<string, object>
+                {
+                    ["sessionId"] = sessionId,
+                    ["isMonitoring"] = false,
+                    ["error"] = ex.Message
+                };
+            }
         }
 
         /// <summary>
