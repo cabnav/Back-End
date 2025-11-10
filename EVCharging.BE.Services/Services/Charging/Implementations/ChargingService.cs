@@ -1,4 +1,4 @@
-using EVCharging.BE.Common.DTOs.Charging;
+    using EVCharging.BE.Common.DTOs.Charging;
 using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
@@ -149,26 +149,29 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     }
                     else if (reservationId == null)
                     {
-                        // Walk-in session: check xem có reservation sắp đến hoặc đang active không
+                        // Walk-in session: Đơn giản hóa logic - CHỈ block nếu thực sự cần thiết
+                        // Note: CanStartSessionAsync đã kiểm tra point availability (có session đang chạy không)
                         var now = DateTime.UtcNow;
                         const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
                         var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
                         
-                        // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                        // ✅ CHỈ block walk-in nếu có reservation status="booked" (chưa check-in) đang trong grace period
+                        // Logic: Nếu reservation đã check-in (status="checked_in" hoặc "in_progress"), point đã được sử dụng
+                        // và CanStartSessionAsync đã kiểm tra point availability rồi, không cần block ở đây nữa
                         var activeReservation = await _db.Reservations
                             .Where(r => r.PointId == chargingPointId 
-                                && r.Status == "booked" // Chỉ check reservation chưa check-in
+                                && r.Status == "booked" // CHỈ check reservation chưa check-in
                                 && r.StartTime <= now // Đã quá start_time
                                 && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
                                 && r.EndTime > now) // Reservation chưa kết thúc
                             .OrderBy(r => r.StartTime)
                             .FirstOrDefaultAsync();
                         
-                        // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                        // ✅ BLOCK walk-in nếu có reservation đang trong grace period (chưa check-in)
                         if (activeReservation != null)
                         {
                             var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
-                            Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Active reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period. Rolling back transaction.");
+                            Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period. Rolling back transaction.");
                             try
                             {
                                 await transaction.RollbackAsync();
@@ -179,45 +182,63 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                             {
                                 Console.WriteLine($"⚠️ [StartSessionAsync] Error rolling back transaction: {rollbackEx.Message}");
                             }
-                            throw new InvalidOperationException($"Cannot start walk-in session. There is an active reservation (started at {activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) that is still within the grace period. The reservation holder may check in at any time.");
+                            throw new InvalidOperationException($"Cannot start walk-in session. There is a reservation (started at {activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) that is still within the grace period. The reservation holder may check in at any time.");
                         }
                         
-                        // Check reservation sắp đến (trong tương lai)
+                        // ✅ Check reservation sắp đến - CHỈ block nếu reservation sắp đến trong 15 phút tới
+                        // CHỈ block reservations status="booked" (chưa check-in) vì reservations đã check-in
+                        // sẽ được xử lý bởi CanStartSessionAsync (kiểm tra point availability)
+                        const int MINIMUM_TIME_BEFORE_RESERVATION_MINUTES = 15; // Tối thiểu 15 phút trước reservation
+                        var timeWindowEnd = now.AddMinutes(MINIMUM_TIME_BEFORE_RESERVATION_MINUTES);
+                        
                         var upcomingReservation = await _db.Reservations
                             .Where(r => r.PointId == chargingPointId 
-                                && (r.Status == "booked" || r.Status == "checked_in") 
-                                && r.StartTime > sessionStartTime
-                                && r.EndTime > now) // Reservation chưa kết thúc
+                                && r.Status == "booked" // CHỈ check reservations chưa check-in (relax logic)
+                                && r.StartTime > now // Trong tương lai
+                                && r.StartTime <= timeWindowEnd) // CHỈ check reservations trong 15 phút tới
                             .OrderBy(r => r.StartTime)
                             .FirstOrDefaultAsync();
                         
                         if (upcomingReservation != null)
                         {
                             var timeUntilReservation = (upcomingReservation.StartTime - now).TotalMinutes;
-                            const int MINIMUM_TIME_BEFORE_RESERVATION_MINUTES = 15; // Tối thiểu 15 phút trước reservation
                             
                             // ✅ BLOCK walk-in nếu reservation sắp đến quá gần (dưới 15 phút)
-                            // Throw exception TRƯỚC KHI tạo session object để đảm bảo transaction được rollback đúng
-                            if (timeUntilReservation < MINIMUM_TIME_BEFORE_RESERVATION_MINUTES)
+                            Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Reservation (Status=booked) starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes) is too close. Rolling back transaction.");
+                            try
                             {
-                                Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes) is too close. Rolling back transaction.");
-                                try
-                                {
-                                    await transaction.RollbackAsync();
-                                    transactionRolledBack = true; // ✅ Đánh dấu transaction đã được rollback
-                                    Console.WriteLine("⚠️ [StartSessionAsync] Transaction rolled back successfully.");
-                                }
-                                catch (Exception rollbackEx)
-                                {
-                                    Console.WriteLine($"⚠️ [StartSessionAsync] Error rolling back transaction: {rollbackEx.Message}");
-                                }
-                                throw new InvalidOperationException($"Cannot start walk-in session. There is a reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes). Please wait or use a different charging point.");
+                                await transaction.RollbackAsync();
+                                transactionRolledBack = true;
+                                Console.WriteLine("⚠️ [StartSessionAsync] Transaction rolled back successfully.");
                             }
-                            
-                            // Có reservation sắp đến nhưng còn đủ thời gian (>= 15 phút), set maxEndTime = reservation.StartTime (trừ 5 phút buffer)
+                            catch (Exception rollbackEx)
+                            {
+                                Console.WriteLine($"⚠️ [StartSessionAsync] Error rolling back transaction: {rollbackEx.Message}");
+                            }
+                            throw new InvalidOperationException($"Cannot start walk-in session. There is a reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes). Please wait or use a different charging point.");
+                        }
+                        
+                        Console.WriteLine($"[StartSessionAsync] No upcoming reservations found in the next 15 minutes. Walk-in session can proceed.");
+                        
+                        // ✅ Nếu có reservation xa hơn (> 15 phút), set maxEndTime để tự động dừng trước khi reservation bắt đầu
+                        // CHỈ check reservations status="booked" vì reservations đã check-in sẽ được xử lý bởi CanStartSessionAsync
+                        var futureReservation = await _db.Reservations
+                            .Where(r => r.PointId == chargingPointId 
+                                && r.Status == "booked" // CHỈ check reservations chưa check-in
+                                && r.StartTime > timeWindowEnd) // Xa hơn 15 phút
+                            .OrderBy(r => r.StartTime)
+                            .FirstOrDefaultAsync();
+                        
+                        if (futureReservation != null)
+                        {
                             var bufferMinutes = 5;
-                            maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
-                            Console.WriteLine($"[StartSessionAsync] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
+                            maxEndTime = futureReservation.StartTime.AddMinutes(-bufferMinutes);
+                            var timeUntilReservation = (futureReservation.StartTime - now).TotalMinutes;
+                            Console.WriteLine($"[StartSessionAsync] Future reservation found (Status=booked) - ReservationId={futureReservation.ReservationId}, StartTime={futureReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"[StartSessionAsync] No blocking reservations found for walk-in session. Point is available.");
                         }
                     }
 
