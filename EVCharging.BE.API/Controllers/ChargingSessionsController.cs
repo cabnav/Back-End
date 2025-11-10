@@ -361,15 +361,53 @@ namespace EVCharging.BE.API.Controllers
 
 
         /// <summary>
-        /// Lấy log mới nhất của phiên sạc
+        /// Lấy log mới nhất của phiên sạc (tự động lấy từ userId trong JWT token, không cần sessionId)
         /// </summary>
-        /// <param name="sessionId">ID phiên sạc</param>
-        /// <returns>Log mới nhất và thông tin monitoring</returns>
-        [HttpGet("{sessionId}/logs")]
-        public async Task<IActionResult> GetSessionLogs(int sessionId)
+        /// <returns>Log mới nhất và thông tin monitoring của session đang active</returns>
+        [HttpGet("logs")]
+        public async Task<IActionResult> GetSessionLogs()
         {
             try
             {
+                // ✅ Lấy userId từ JWT token
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                
+                // ✅ Lấy driverId từ userId
+                var driverProfile = await _db.DriverProfiles
+                    .FirstOrDefaultAsync(d => d.UserId == userId);
+                
+                if (driverProfile == null)
+                {
+                    return BadRequest(new { 
+                        message = "Driver profile not found. Please complete your driver profile first." 
+                    });
+                }
+
+                var driverId = driverProfile.DriverId;
+
+                // ✅ Tìm session đang active của driver (ưu tiên session đang sạc)
+                var activeSession = await _db.ChargingSessions
+                    .Where(s => s.DriverId == driverId && s.Status == "in_progress")
+                    .OrderByDescending(s => s.StartTime)
+                    .FirstOrDefaultAsync();
+
+                // Nếu không có session active, lấy session mới nhất
+                if (activeSession == null)
+                {
+                    activeSession = await _db.ChargingSessions
+                        .Where(s => s.DriverId == driverId)
+                        .OrderByDescending(s => s.StartTime)
+                        .FirstOrDefaultAsync();
+                }
+
+                if (activeSession == null)
+                {
+                    return NotFound(new { 
+                        message = "No charging session found for this user." 
+                    });
+                }
+
+                var sessionId = activeSession.SessionId;
                 var logs = await _chargingService.GetSessionLogsAsync(sessionId);
                 var monitoringStatus = await _sessionMonitorService.GetMonitoringStatusAsync(sessionId);
                 
@@ -382,6 +420,8 @@ namespace EVCharging.BE.API.Controllers
                 return Ok(new { 
                     data = logList,
                     count = logList.Count,
+                    sessionId = sessionId,
+                    sessionStatus = activeSession.Status,
                     monitoring = monitoringStatus,
                     summary = new
                     {
