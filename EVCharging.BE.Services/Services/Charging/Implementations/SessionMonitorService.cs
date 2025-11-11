@@ -1,6 +1,7 @@
 using EVCharging.BE.Common.DTOs.Charging;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         private readonly ConcurrentDictionary<int, Timer> _monitoringTimers = new();
         private readonly ConcurrentDictionary<int, bool> _monitoringInProgress = new(); // Prevent overlapping
         private readonly ConcurrentDictionary<int, ChargingSessionResponse> _activeSessions = new();
+        private readonly ConcurrentDictionary<int, bool> _nearTargetSocNotified = new(); // Track if near target SOC notification was sent
+        private readonly ConcurrentDictionary<int, bool> _reservationReminderNotified = new(); // Track if reservation reminder was sent
         private bool _disposed = false;
 
         public SessionMonitorService(IServiceProvider serviceProvider, ILogger<SessionMonitorService> logger)
@@ -87,6 +90,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 _activeSessions.TryRemove(sessionId, out _);
                 _monitoringInProgress.TryRemove(sessionId, out _);
+                _nearTargetSocNotified.TryRemove(sessionId, out _);
+                _reservationReminderNotified.TryRemove(sessionId, out _);
             }
             catch (Exception ex)
             {
@@ -211,20 +216,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 if (latestLog?.Temperature > 60) // 60°C threshold
                 {
-                    alerts.Add($"High temperature detected: {latestLog.Temperature}°C");
+                    alerts.Add($"Nhiệt độ cao được phát hiện: {latestLog.Temperature:F1}°C. Vui lòng kiểm tra hệ thống sạc.");
                 }
 
                 // Check for low power output
                 if (latestLog?.CurrentPower < 1.0m) // Less than 1kW
                 {
-                    alerts.Add($"Low power output: {latestLog.CurrentPower}kW");
+                    alerts.Add($"Công suất sạc thấp: {latestLog.CurrentPower:F2} kW. Có thể có vấn đề với kết nối hoặc thiết bị.");
                 }
 
                 // Check for long session duration
                 var duration = DateTime.UtcNow - session.StartTime;
                 if (duration.TotalHours > 8) // 8 hours threshold
                 {
-                    alerts.Add($"Long session duration: {duration.TotalHours:F1} hours");
+                    alerts.Add($"Phiên sạc kéo dài: {duration.TotalHours:F1} giờ. Vui lòng kiểm tra pin và hệ thống sạc.");
                 }
 
                 // Send alerts
@@ -248,6 +253,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 var session = await db.ChargingSessions
                     .Include(s => s.Driver)
@@ -256,18 +262,31 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         .ThenInclude(p => p.Station)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
-                if (session == null)
+                if (session == null || session.Driver?.User == null)
                     return;
 
-                var message = $"Phiên sạc đã hoàn thành! " +
-                             $"Năng lượng: {session.EnergyUsed:F2} kWh, " +
-                             $"Chi phí: {session.FinalCost:F0} VNĐ, " +
-                             $"Thời gian: {session.DurationMinutes} phút";
+                var userId = session.Driver.User.UserId;
+                var stationName = session.Point?.Station?.Name ?? "trạm sạc";
+                var finalSoc = session.FinalSoc ?? 100;
+                var energyUsed = session.EnergyUsed ?? 0;
+                var finalCost = session.FinalCost ?? 0;
+                var durationMinutes = session.DurationMinutes ?? 0;
+
+                var title = "Sạc đầy hoàn tất";
+                var message = $"Phiên sạc của bạn đã hoàn tất tại {stationName}.\n" +
+                             $"Pin đã sạc đến {finalSoc}%.\n" +
+                             $"Năng lượng đã sạc: {energyUsed:F2} kWh\n" +
+                             $"Thời gian sạc: {durationMinutes} phút\n" +
+                             $"Chi phí: {finalCost:N0} VND";
 
                 _logger.LogInformation("Session {SessionId} completed: {Message}", sessionId, message);
                 
-                // TODO: Send notification to user
-                // await _notificationService.SendAsync(session.Driver.UserId, "Phiên sạc đã hoàn thành", message);
+                await notificationService.SendNotificationAsync(
+                    userId, 
+                    title, 
+                    message, 
+                    "charging_complete", 
+                    sessionId);
             }
             catch (Exception ex)
             {
@@ -284,19 +303,33 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
                 var session = await db.ChargingSessions
                     .Include(s => s.Driver)
                         .ThenInclude(d => d.User)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
-                if (session == null)
+                if (session == null || session.Driver?.User == null)
                     return;
+
+                var userId = session.Driver.User.UserId;
+                var stationName = session.Point?.Station?.Name ?? "trạm sạc";
+
+                var title = "Cảnh báo phiên sạc";
+                var message = $"Phiên sạc tại {stationName} gặp vấn đề:\n{errorMessage}\n" +
+                             $"Vui lòng kiểm tra hoặc liên hệ hỗ trợ nếu cần thiết.";
 
                 _logger.LogWarning("Session {SessionId} error: {ErrorMessage}", sessionId, errorMessage);
                 
-                // TODO: Send error notification to user and admin
-                // await _notificationService.SendAsync(session.Driver.UserId, "Cảnh báo phiên sạc", errorMessage);
+                await notificationService.SendNotificationAsync(
+                    userId, 
+                    title, 
+                    message, 
+                    "charging_alert", 
+                    sessionId);
             }
             catch (Exception ex)
             {
@@ -587,6 +620,168 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         /// <summary>
+        /// Kiểm tra và gửi thông báo khi gần sạc đầy (còn 10% so với targetSOC)
+        /// </summary>
+        private async Task CheckAndNotifyNearTargetSocAsync(int sessionId)
+        {
+            try
+            {
+                // Chỉ gửi thông báo một lần
+                if (_nearTargetSocNotified.ContainsKey(sessionId))
+                    return;
+
+                using var scope = _serviceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                var session = await db.ChargingSessions
+                    .Include(s => s.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
+                    .Include(s => s.SessionLogs)
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+                if (session == null || session.Status != "in_progress" || session.Driver?.User == null)
+                    return;
+
+                // Xác định target SOC
+                int targetSOC = session.FinalSoc ?? 100;
+
+                // Lấy SOC hiện tại
+                int currentSOC;
+                var latestLog = session.SessionLogs?
+                    .OrderByDescending(sl => sl.LogTime)
+                    .FirstOrDefault();
+
+                if (latestLog?.SocPercentage.HasValue == true)
+                {
+                    currentSOC = latestLog.SocPercentage.Value;
+                }
+                else if (session.Driver?.BatteryCapacity.HasValue == true && 
+                         session.EnergyUsed.HasValue && 
+                         session.Driver.BatteryCapacity.Value > 0)
+                {
+                    var batteryCapacity = session.Driver.BatteryCapacity.Value;
+                    var energyUsed = session.EnergyUsed.Value;
+                    var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
+                    currentSOC = session.InitialSoc + socIncrease;
+                    currentSOC = Math.Min(currentSOC, 100);
+                }
+                else
+                {
+                    return; // Chưa có dữ liệu SOC
+                }
+
+                // Kiểm tra xem có gần target chưa (còn 10% so với targetSOC)
+                int remainingToTarget = targetSOC - currentSOC;
+                if (remainingToTarget <= 10 && remainingToTarget > 0)
+                {
+                    var userId = session.Driver.User.UserId;
+                    var stationName = session.Point?.Station?.Name ?? "trạm sạc";
+                    var estimatedMinutes = await EstimateRemainingTimeAsync(sessionId, targetSOC);
+
+                    var title = "Sắp sạc đầy";
+                    var message = $"Pin của bạn đang ở {currentSOC}% và sắp đạt mục tiêu {targetSOC}%.\n" +
+                                 $"Còn khoảng {remainingToTarget}% nữa để hoàn tất.\n" +
+                                 $"Thời gian ước tính: {estimatedMinutes.TotalMinutes:F0} phút.\n" +
+                                 $"Trạm sạc: {stationName}";
+
+                    await notificationService.SendNotificationAsync(
+                        userId, 
+                        title, 
+                        message, 
+                        "charging_near_complete", 
+                        sessionId);
+
+                    _nearTargetSocNotified[sessionId] = true;
+                    _logger.LogInformation("Sent near target SOC notification for session {SessionId}: {CurrentSOC}% -> {TargetSOC}%", 
+                        sessionId, currentSOC, targetSOC);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking and notifying near target SOC for session {SessionId}", sessionId);
+            }
+        }
+
+        /// <summary>
+        /// Kiểm tra và gửi thông báo gần đến giờ đặt chỗ
+        /// </summary>
+        private async Task CheckAndNotifyReservationReminderAsync(int sessionId)
+        {
+            try
+            {
+                // Chỉ gửi thông báo một lần
+                if (_reservationReminderNotified.ContainsKey(sessionId))
+                    return;
+
+                using var scope = _serviceProvider.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
+                var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+
+                var session = await db.ChargingSessions
+                    .Include(s => s.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(s => s.Reservation)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
+
+                if (session == null || session.Status != "in_progress" || session.Driver?.User == null)
+                    return;
+
+                // Chỉ gửi thông báo nếu session có reservation
+                if (session.ReservationId == null || session.Reservation == null)
+                    return;
+
+                var reservation = session.Reservation;
+                var now = DateTime.UtcNow;
+
+                // Kiểm tra xem có reservation tiếp theo không (trong vòng 30 phút tới)
+                // Lấy reservation tiếp theo của driver này (không phải reservation hiện tại)
+                var upcomingReservation = await db.Reservations
+                    .Include(r => r.Point)
+                        .ThenInclude(p => p.Station)
+                    .Where(r => r.DriverId == session.DriverId 
+                        && r.ReservationId != session.ReservationId
+                        && r.Status == "booked"
+                        && r.StartTime > now
+                        && r.StartTime <= now.AddMinutes(30))
+                    .OrderBy(r => r.StartTime)
+                    .FirstOrDefaultAsync();
+
+                if (upcomingReservation != null)
+                {
+                    var userId = session.Driver.User.UserId;
+                    var timeUntilReservation = upcomingReservation.StartTime - now;
+                    var stationName = upcomingReservation.Point?.Station?.Name ?? "trạm sạc";
+                    var minutesUntil = (int)timeUntilReservation.TotalMinutes;
+
+                    var title = "Nhắc nhở đặt chỗ sắp tới";
+                    var message = $"Bạn có đặt chỗ sắp tới tại {stationName} trong {minutesUntil} phút nữa.\n" +
+                                 $"Thời gian bắt đầu: {upcomingReservation.StartTime:HH:mm} ngày {upcomingReservation.StartTime:dd/MM/yyyy}.\n" +
+                                 $"Vui lòng chuẩn bị để đến đúng giờ.";
+
+                    await notificationService.SendNotificationAsync(
+                        userId, 
+                        title, 
+                        message, 
+                        "reservation_reminder", 
+                        upcomingReservation.ReservationId);
+
+                    _reservationReminderNotified[sessionId] = true;
+                    _logger.LogInformation("Sent reservation reminder for session {SessionId}: upcoming reservation {ReservationId} in {Minutes} minutes", 
+                        sessionId, upcomingReservation.ReservationId, minutesUntil);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking and notifying reservation reminder for session {SessionId}", sessionId);
+            }
+        }
+
+        /// <summary>
         /// Lấy SOC hiện tại
         /// </summary>
         private async Task<int> GetCurrentSOCAsync(int sessionId)
@@ -659,6 +854,12 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 // Tự động cập nhật EnergyUsed từ logs
                 await UpdateEnergyUsedFromLogsAsync(sessionId);
+
+                // Kiểm tra và gửi thông báo gần sạc đầy (còn 10% so với targetSOC)
+                await CheckAndNotifyNearTargetSocAsync(sessionId);
+
+                // Kiểm tra và gửi thông báo gần đến giờ đặt chỗ
+                await CheckAndNotifyReservationReminderAsync(sessionId);
 
                 // Kiểm tra và tự động dừng nếu đạt target SOC hoặc 100%
                 var shouldAutoStop = await CheckAndAutoStopSessionAsync(sessionId);
@@ -975,7 +1176,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     ["isMonitoring"] = isMonitoring,
                     ["isMonitoringInProgress"] = isMonitoringInProgress,
                     ["totalLogs"] = totalLogs,
-                    ["lastLogTime"] = lastLog?.LogTime,
+                    ["lastLogTime"] = lastLog?.LogTime ?? (DateTime?)null,
                     ["timeSinceLastLog"] = timeSinceLastLog.HasValue 
                         ? $"{timeSinceLastLog.Value.TotalSeconds:F0} seconds"
                         : "N/A",
@@ -986,8 +1187,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         ["currentPower"] = lastLog.CurrentPower,
                         ["voltage"] = lastLog.Voltage,
                         ["temperature"] = lastLog.Temperature,
-                        ["logTime"] = lastLog.LogTime
-                    } : null,
+                        ["logTime"] = lastLog.LogTime ?? (DateTime?)null
+                    } : (Dictionary<string, object?>?)null,
                     ["sessionInfo"] = new Dictionary<string, object?>
                     {
                         ["startTime"] = session.StartTime,
@@ -1040,6 +1241,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             _monitoringTimers.Clear();
             _activeSessions.Clear();
             _monitoringInProgress.Clear();
+            _nearTargetSocNotified.Clear();
+            _reservationReminderNotified.Clear();
 
             _disposed = true;
             _logger.LogInformation("SessionMonitorService disposed");

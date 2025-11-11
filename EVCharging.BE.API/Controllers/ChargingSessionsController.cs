@@ -46,7 +46,7 @@ namespace EVCharging.BE.API.Controllers
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
+                    return BadRequest(new { message = "Dữ liệu yêu cầu không hợp lệ", errors = ModelState.Values.SelectMany(v => v.Errors) });
                 }
 
                 // ✅ Lấy userId từ JWT token
@@ -59,7 +59,7 @@ namespace EVCharging.BE.API.Controllers
                 if (driverProfile == null)
                 {
                     return BadRequest(new { 
-                        message = "Driver profile not found. Please complete your driver profile first." 
+                        message = "Không tìm thấy hồ sơ tài xế. Vui lòng hoàn thiện hồ sơ tài xế trước." 
                     });
                 }
 
@@ -76,14 +76,14 @@ namespace EVCharging.BE.API.Controllers
                     
                     if (chargingPoint == null)
                     {
-                        return NotFound(new { message = $"Charging point with QR code '{request.PointQrCode}' not found." });
+                        return NotFound(new { message = $"Không tìm thấy điểm sạc với mã QR '{request.PointQrCode}'." });
                     }
 
                     // Kiểm tra point có available không
                     if (chargingPoint.Status != "available")
                     {
                         return BadRequest(new { 
-                            message = $"Charging point '{request.PointQrCode}' is currently {chargingPoint.Status}. Please choose another point." 
+                            message = $"Điểm sạc '{request.PointQrCode}' hiện đang ở trạng thái {chargingPoint.Status}. Vui lòng chọn điểm sạc khác." 
                         });
                     }
 
@@ -97,7 +97,7 @@ namespace EVCharging.BE.API.Controllers
                 {
                     // Nếu không có cả PointQrCode và ChargingPointId
                     return BadRequest(new { 
-                        message = "Either PointQrCode or ChargingPointId must be provided." 
+                        message = "Vui lòng cung cấp PointQrCode hoặc ChargingPointId." 
                     });
                 }
 
@@ -105,7 +105,7 @@ namespace EVCharging.BE.API.Controllers
                 var driverIsValid = await _chargingService.ValidateDriverAsync(driverId);
                 if (!driverIsValid)
                 {
-                    return BadRequest(new { message = "Driver profile not found or invalid. Please contact support." });
+                    return BadRequest(new { message = "Hồ sơ tài xế không tìm thấy hoặc không hợp lệ. Vui lòng liên hệ hỗ trợ." });
                 }
 
                 // ✅ Kiểm tra driver có session active không
@@ -113,7 +113,7 @@ namespace EVCharging.BE.API.Controllers
                 var hasActiveDriverSession = activeSessions.Any(s => s.Status == "in_progress");
                 if (hasActiveDriverSession)
                 {
-                    return BadRequest(new { message = "You already have an active charging session. Please complete it first." });
+                    return BadRequest(new { message = "Bạn đã có một phiên sạc đang hoạt động. Vui lòng hoàn thành phiên sạc đó trước." });
                 }
 
                 // ✅ Validate charging point
@@ -121,7 +121,7 @@ namespace EVCharging.BE.API.Controllers
                 if (!pointIsAvailable)
                 {
                     return BadRequest(new { 
-                        message = "The charging point is currently unavailable. It may be in use by another session or under maintenance." 
+                        message = "Điểm sạc hiện không khả dụng. Có thể đang được sử dụng bởi phiên sạc khác hoặc đang bảo trì." 
                     });
                 }
 
@@ -130,7 +130,7 @@ namespace EVCharging.BE.API.Controllers
                 if (!canStart)
                 {
                     return BadRequest(new { 
-                        message = "Cannot start charging session. The charging point may be busy or you have restrictions." 
+                        message = "Không thể bắt đầu phiên sạc. Điểm sạc có thể đang bận hoặc bạn có hạn chế." 
                     });
                 }
 
@@ -167,7 +167,7 @@ namespace EVCharging.BE.API.Controllers
                 {
                     var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
                     return BadRequest(new { 
-                        message = $"Cannot start walk-in session. There is an active reservation (started at {activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) that is still within the grace period. The reservation holder may check in at any time." 
+                        message = $"Không thể bắt đầu phiên sạc walk-in. Có một đặt chỗ đang hoạt động (bắt đầu lúc {activeReservation.StartTime:HH:mm}, cách đây {minutesSinceStart:F0} phút) vẫn còn trong thời gian chờ. Người đặt chỗ có thể check-in bất cứ lúc nào." 
                     });
                 }
                 
@@ -180,7 +180,7 @@ namespace EVCharging.BE.API.Controllers
                     if (timeUntilReservation < MINIMUM_TIME_BEFORE_RESERVATION_MINUTES)
                     {
                         return BadRequest(new { 
-                            message = $"Cannot start walk-in session. There is a reservation starting at {upcomingReservation.StartTime:HH:mm} (in {timeUntilReservation:F0} minutes). Please wait or use a different charging point." 
+                            message = $"Không thể bắt đầu phiên sạc walk-in. Có một đặt chỗ sẽ bắt đầu lúc {upcomingReservation.StartTime:HH:mm} (sau {timeUntilReservation:F0} phút). Vui lòng đợi hoặc sử dụng điểm sạc khác." 
                         });
                     }
                     
@@ -188,7 +188,7 @@ namespace EVCharging.BE.API.Controllers
                     var bufferMinutes = 5; // Buffer 5 phút trước khi reservation bắt đầu
                     maxEndTime = upcomingReservation.StartTime.AddMinutes(-bufferMinutes);
                     
-                    warningMessage = $"Warning: There is a reservation starting at {upcomingReservation.StartTime:HH:mm}. Your walk-in session will automatically stop at {maxEndTime.Value:HH:mm} ({timeUntilReservation - bufferMinutes:F0} minutes from now).";
+                    warningMessage = $"Cảnh báo: Có một đặt chỗ sẽ bắt đầu lúc {upcomingReservation.StartTime:HH:mm}. Phiên sạc walk-in của bạn sẽ tự động dừng lúc {maxEndTime.Value:HH:mm} (sau {timeUntilReservation - bufferMinutes:F0} phút nữa).";
                     
                     Console.WriteLine($"[StartWalkInSession] Upcoming reservation found - ReservationId={upcomingReservation.ReservationId}, StartTime={upcomingReservation.StartTime}, MaxEndTime={maxEndTime}, TimeUntilReservation={timeUntilReservation:F0} minutes");
                 }
@@ -211,12 +211,12 @@ namespace EVCharging.BE.API.Controllers
                 if (result == null)
                 {
                     return BadRequest(new { 
-                        message = "Failed to start charging session. Please try again or contact support." 
+                        message = "Không thể bắt đầu phiên sạc. Vui lòng thử lại hoặc liên hệ hỗ trợ." 
                     });
                 }
 
                 // ✅ Build response message với warning nếu có
-                var responseMessage = "Charging session started successfully.";
+                var responseMessage = "Phiên sạc đã được bắt đầu thành công.";
                 if (!string.IsNullOrEmpty(warningMessage))
                 {
                     responseMessage += $" {warningMessage}";
@@ -241,7 +241,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while starting the charging session", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi bắt đầu phiên sạc", error = ex.Message });
             }
         }
 
@@ -258,23 +258,23 @@ namespace EVCharging.BE.API.Controllers
             {
                 if (!ModelState.IsValid)
                 {
-                    return BadRequest(new { message = "Invalid request data", errors = ModelState.Values.SelectMany(v => v.Errors) });
+                    return BadRequest(new { message = "Dữ liệu yêu cầu không hợp lệ", errors = ModelState.Values.SelectMany(v => v.Errors) });
                 }
 
                 var result = await _chargingService.StopSessionAsync(request);
                 if (result == null)
                 {
-                    return BadRequest(new { message = "Failed to stop charging session. Session may not exist or already completed." });
+                    return BadRequest(new { message = "Không thể dừng phiên sạc. Phiên sạc có thể không tồn tại hoặc đã hoàn thành." });
                 }
 
                 // Send real-time notification
                 await _signalRService.NotifySessionCompletedAsync(result.SessionId, result);
 
-                return Ok(new { message = "Charging session stopped successfully", data = result });
+                return Ok(new { message = "Phiên sạc đã được dừng thành công", data = result });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while stopping the charging session", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi dừng phiên sạc", error = ex.Message });
             }
         }
 
@@ -292,14 +292,14 @@ namespace EVCharging.BE.API.Controllers
                 var result = await _chargingService.GetSessionByIdAsync(sessionId);
                 if (result == null)
                 {
-                    return NotFound(new { message = "Charging session not found" });
+                    return NotFound(new { message = "Không tìm thấy phiên sạc" });
                 }
 
                 return Ok(new { data = result });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving the charging session", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy thông tin phiên sạc", error = ex.Message });
             }
         }
 
@@ -317,7 +317,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving active sessions", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy danh sách phiên sạc đang hoạt động", error = ex.Message });
             }
         }
 
@@ -336,7 +336,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving driver sessions", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy danh sách phiên sạc của tài xế", error = ex.Message });
             }
         }
 
@@ -355,7 +355,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving station sessions", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy danh sách phiên sạc của trạm", error = ex.Message });
             }
         }
 
@@ -379,7 +379,7 @@ namespace EVCharging.BE.API.Controllers
                 if (driverProfile == null)
                 {
                     return BadRequest(new { 
-                        message = "Driver profile not found. Please complete your driver profile first." 
+                        message = "Không tìm thấy hồ sơ tài xế. Vui lòng hoàn thiện hồ sơ tài xế trước." 
                     });
                 }
 
@@ -403,7 +403,7 @@ namespace EVCharging.BE.API.Controllers
                 if (activeSession == null)
                 {
                     return NotFound(new { 
-                        message = "No charging session found for this user." 
+                        message = "Không tìm thấy phiên sạc cho người dùng này." 
                     });
                 }
 
@@ -436,7 +436,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving session logs", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy logs phiên sạc", error = ex.Message });
             }
         }
 
@@ -455,7 +455,7 @@ namespace EVCharging.BE.API.Controllers
                 
                 if (session == null)
                 {
-                    return NotFound(new { message = "Session not found" });
+                    return NotFound(new { message = "Không tìm thấy phiên sạc" });
                 }
                 
                 return Ok(new { 
@@ -465,7 +465,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while retrieving monitoring status", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi lấy trạng thái monitoring", error = ex.Message });
             }
         }
 
@@ -495,7 +495,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while estimating remaining time", error = ex.Message });
+                return StatusCode(500, new { message = "Đã xảy ra lỗi khi ước tính thời gian còn lại", error = ex.Message });
             }
         }
     }

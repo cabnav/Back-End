@@ -152,6 +152,7 @@ builder.Services.AddScoped<EVCharging.BE.Services.Services.Payment.IMomoService,
 // Notifications
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ISignalRNotificationService, SignalRNotificationService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // Admin
 builder.Services.AddScoped<IAdminService, AdminService>();

@@ -38,6 +38,21 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 throw new InvalidOperationException($"Cannot book in the past. Selected time slot ends at {endUtc:yyyy-MM-dd HH:mm}, but current time is {now:yyyy-MM-dd HH:mm}. Please select a future time slot.");
             }
 
+            // ✅ Giới hạn đặt trước tối đa 1 tuần (7 ngày)
+            const int MAX_BOOKING_ADVANCE_DAYS = 7;
+            var maxBookingDate = now.AddDays(MAX_BOOKING_ADVANCE_DAYS);
+            
+            if (startUtc > maxBookingDate)
+            {
+                var daysAhead = (startUtc - now).TotalDays;
+                throw new InvalidOperationException(
+                    $"Không thể đặt chỗ quá 1 tuần trước. " +
+                    $"Thời gian đặt chỗ: {startUtc:yyyy-MM-dd HH:mm} UTC, " +
+                    $"Thời gian hiện tại: {now:yyyy-MM-dd HH:mm} UTC, " +
+                    $"Bạn đang đặt trước {daysAhead:F1} ngày. " +
+                    $"Chỉ cho phép đặt trước tối đa {MAX_BOOKING_ADVANCE_DAYS} ngày.");
+            }
+
             // Không cho đặt khi đã quá BookingCutoff kể từ start (ví dụ 15 phút)
             if (now > startUtc.AddMinutes(_opt.BookingCutoffMinutes))
             {

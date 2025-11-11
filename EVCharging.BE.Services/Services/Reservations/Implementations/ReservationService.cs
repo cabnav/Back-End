@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
+using NotificationEntity = EVCharging.BE.DAL.Entities.Notification;
 
 namespace EVCharging.BE.Services.Services.Reservations.Implementations
 {
@@ -424,6 +425,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 var cancelBeforeStart = reservation.StartTime - now;
                 const int REFUND_DEADLINE_MINUTES = 30; // 30 phút
 
+                // Load thông tin reservation để gửi thông báo
+                var reservationWithDetails = await _db.Reservations
+                    .Include(r => r.Point)
+                        .ThenInclude(p => p.Station)
+                    .FirstOrDefaultAsync(r => r.ReservationId == reservation.ReservationId);
+
                 if (cancelBeforeStart.TotalMinutes >= REFUND_DEADLINE_MINUTES)
                 {
                     // Hủy trước 30 phút → hoàn cọc vào ví
@@ -438,8 +445,11 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 }
                 else
                 {
-                    // Hủy dưới 30 phút → không hoàn cọc
+                    // Hủy dưới 30 phút → không hoàn cọc → gửi thông báo
                     Console.WriteLine($"⚠️ Không hoàn cọc cho reservation {reservation.ReservationId} (hủy chỉ còn {cancelBeforeStart.TotalMinutes:F0} phút, yêu cầu tối thiểu {REFUND_DEADLINE_MINUTES} phút)");
+                    
+                    // Gửi thông báo cho user về việc không hoàn cọc
+                    await SendNoRefundNotificationAsync(userId, reservationWithDetails ?? reservation, cancelBeforeStart.TotalMinutes);
                 }
             }
             catch (Exception ex)
@@ -447,6 +457,48 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 // Log lỗi nhưng không throw để reservation vẫn được hủy
                 Console.WriteLine($"❌ Lỗi khi xử lý hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
                 Console.WriteLine($"   StackTrace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hủy reservation trong vòng 30 phút (không hoàn cọc)
+        /// </summary>
+        private async Task SendNoRefundNotificationAsync(int userId, DAL.Entities.Reservation reservation, double minutesBeforeStart)
+        {
+            try
+            {
+                var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                var startTime = reservation.StartTime;
+                var depositAmount = DEPOSIT_AMOUNT;
+
+                var title = "Hủy đặt chỗ - Không hoàn cọc";
+                var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
+                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                             $"Mã đặt chỗ: {reservation.ReservationCode}\n" +
+                             $"Thời gian hủy: Còn {minutesBeforeStart:F0} phút trước giờ đặt chỗ\n" +
+                             $"Lưu ý: Do bạn hủy trong vòng 30 phút trước giờ đặt chỗ, cọc {depositAmount:N0} VND sẽ không được hoàn lại.";
+
+                // Tạo notification entity trực tiếp
+                var notification = new NotificationEntity
+                {
+                    UserId = userId,
+                    Title = title,
+                    Message = message,
+                    Type = "reservation_cancelled_no_refund",
+                    RelatedId = reservation.ReservationId,
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _db.Notifications.Add(notification);
+                await _db.SaveChangesAsync();
+
+                Console.WriteLine($"✅ Đã gửi thông báo không hoàn cọc cho user {userId}, reservation {reservation.ReservationId}");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow chính
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo không hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
             }
         }
 
