@@ -13,13 +13,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         private readonly EvchargingManagementContext _db;
         private readonly IConfiguration _configuration;
 
-        // Pricing rules - có thể lưu trong database hoặc config
+        // Pricing rules - lấy từ database (PricingPlan)
+        // Fallback dictionary nếu không tìm thấy trong database
         private readonly Dictionary<string, decimal> _membershipDiscounts = new()
         {
-            { "basic", 0.00m },
-            { "silver", 0.05m },
-            { "gold", 0.10m },
-            { "platinum", 0.15m }
+            { "basic", 0.00m }
         };
 
         private readonly decimal _peakHourSurchargeRate = 0.20m; // 20% surcharge during peak hours
@@ -39,6 +37,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// </summary>
         public async Task<CostCalculationResponse> CalculateCostAsync(CostCalculationRequest request)
         {
+            string? membershipTier = null;
             try
             {
                 // Get base price per kWh
@@ -58,9 +57,18 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 // Calculate membership discount
                 var membershipDiscount = 0m;
-                if (!string.IsNullOrEmpty(request.MembershipTier))
+                membershipTier = request.MembershipTier;
+                
+                // Nếu không có MembershipTier trong request nhưng có UserId, lấy từ User
+                if (string.IsNullOrEmpty(membershipTier) && request.UserId.HasValue)
                 {
-                    var discountRate = await GetMembershipDiscountRateAsync(request.MembershipTier);
+                    var user = await _db.Users.FindAsync(request.UserId.Value);
+                    membershipTier = user?.MembershipTier;
+                }
+                
+                if (!string.IsNullOrEmpty(membershipTier))
+                {
+                    var discountRate = await GetMembershipDiscountRateAsync(membershipTier);
                     membershipDiscount = baseCost * discountRate;
                 }
 
@@ -90,7 +98,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     FinalCost = Math.Max(0, finalCost), // Ensure non-negative cost
                     Currency = "VND",
                     CalculatedAt = DateTime.UtcNow,
-                    Notes = GenerateCostNotes(isPeakHours, request.MembershipTier, request.CustomDiscountRate)
+                    Notes = GenerateCostNotes(isPeakHours, membershipTier, request.CustomDiscountRate)
                 };
             }
             catch (Exception ex)
@@ -161,12 +169,23 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// <summary>
         /// Lấy tỷ lệ giảm giá theo membership
         /// </summary>
-        public Task<decimal> GetMembershipDiscountRateAsync(string membershipTier)
+        public async Task<decimal> GetMembershipDiscountRateAsync(string membershipTier)
         {
-            var discount = _membershipDiscounts.TryGetValue(membershipTier?.ToLower() ?? "basic", out var rate) 
-                ? rate 
+            if (string.IsNullOrEmpty(membershipTier) || membershipTier.ToLower() == "basic")
+                return 0m;
+
+            // Lấy discount từ PricingPlan trong database
+            var plan = await _db.PricingPlans
+                .Where(p => p.Name.ToLower() == membershipTier.ToLower() && p.IsActive == true)
+                .FirstOrDefaultAsync();
+
+            if (plan != null && plan.DiscountRate.HasValue)
+                return plan.DiscountRate.Value;
+
+            // Fallback về dictionary nếu không tìm thấy
+            return _membershipDiscounts.TryGetValue(membershipTier?.ToLower() ?? "basic", out var discount) 
+                ? discount 
                 : 0m;
-            return Task.FromResult(discount);
         }
 
         /// <summary>

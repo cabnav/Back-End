@@ -225,7 +225,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
         }
 
         /// <summary>
-        /// Thanh toán phiên sạc bằng tiền mặt
+        /// Thanh toán phiên sạc bằng tiền mặt (tạo payment pending, chờ staff xác nhận)
         /// </summary>
         public async Task<PaymentResultDto> PayByCashAsync(int sessionId, int userId)
         {
@@ -252,32 +252,58 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             if (!session.FinalCost.HasValue || session.FinalCost.Value <= 0)
                 throw new InvalidOperationException("Phiên sạc chưa có chi phí cuối cùng.");
 
-            // Kiểm tra đã thanh toán chưa
+            // Kiểm tra đã thanh toán chưa (check cả pending và success)
             var existingPayment = await _db.Payments
                 .Where(p => p.SessionId == sessionId
-                    && p.PaymentStatus == "success"
+                    && (p.PaymentStatus == "success" || p.PaymentStatus == "pending")
                     && p.PaymentType == "session_payment")
                 .OrderByDescending(p => p.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (existingPayment != null)
             {
+                // Nếu payment đã success -> đã thanh toán rồi
+                if (existingPayment.PaymentStatus == "success")
+                {
+                    return new PaymentResultDto
+                    {
+                        Success = false,
+                        AlreadyPaid = true,
+                        Message = "Phiên sạc đã được thanh toán rồi",
+                        ExistingPaymentInfo = new PaymentInfoDto
+                        {
+                            PaymentId = existingPayment.PaymentId,
+                            PaymentMethod = existingPayment.PaymentMethod ?? "",
+                            Amount = existingPayment.Amount,
+                            PaymentStatus = existingPayment.PaymentStatus ?? "",
+                            InvoiceNumber = existingPayment.InvoiceNumber,
+                            PaidAt = existingPayment.CreatedAt,
+                            SessionId = existingPayment.SessionId,
+                            ReservationId = existingPayment.ReservationId,
+                            UserId = userId
+                        }
+                    };
+                }
+                
+                // Nếu payment đang pending -> trả về thông tin payment pending
                 return new PaymentResultDto
                 {
-                    Success = false,
-                    AlreadyPaid = true,
-                    Message = "Phiên sạc đã được thanh toán rồi",
-                    ExistingPaymentInfo = new PaymentInfoDto
+                    Success = true,
+                    AlreadyPaid = false,
+                    Message = "Đang chờ thanh toán. Vui lòng thanh toán tại trạm.",
+                    PaymentInfo = new PaymentInfoDto
                     {
                         PaymentId = existingPayment.PaymentId,
                         PaymentMethod = existingPayment.PaymentMethod ?? "",
                         Amount = existingPayment.Amount,
+                        PaymentStatus = existingPayment.PaymentStatus ?? "",
                         InvoiceNumber = existingPayment.InvoiceNumber,
-                        PaidAt = existingPayment.CreatedAt,
+                        PaidAt = null,
                         SessionId = existingPayment.SessionId,
                         ReservationId = existingPayment.ReservationId,
                         UserId = userId
-                    }
+                    },
+                    Invoice = null
                 };
             }
 
@@ -297,15 +323,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 reservationId = reservation.ReservationId;
             }
 
-            // Tạo invoice
-            var invoice = await _invoiceService.CreateInvoiceForSessionAsync(
-                sessionId,
-                userId,
-                session.FinalCost.Value,
-                "cash"
-            );
-
-            // Tạo bản ghi Payment
+            // Tạo bản ghi Payment với status = "pending"
+            // Không tạo invoice ngay, invoice sẽ được tạo khi staff xác nhận thanh toán
             var payment = new PaymentEntity
             {
                 UserId = userId,
@@ -313,9 +332,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 ReservationId = reservationId,
                 Amount = session.FinalCost.Value,
                 PaymentMethod = "cash",
-                PaymentStatus = "success",
-                PaymentType = "session_payment", // ⭐ Quan trọng
-                InvoiceNumber = invoice.InvoiceNumber,
+                PaymentStatus = "pending", // ⭐ Đang chờ thanh toán
+                PaymentType = "session_payment",
+                InvoiceNumber = null, // Invoice sẽ được tạo khi staff xác nhận
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -325,7 +344,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             return new PaymentResultDto
             {
                 Success = true,
-                Message = "Thanh toán tiền mặt thành công",
+                Message = "Đang chờ thanh toán. Vui lòng thanh toán tại trạm.",
                 PaymentInfo = new PaymentInfoDto
                 {
                     PaymentId = payment.PaymentId,
@@ -334,11 +353,11 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     UserId = userId,
                     Amount = session.FinalCost.Value,
                     PaymentMethod = "cash",
-                    PaymentStatus = "success",
-                    InvoiceNumber = invoice.InvoiceNumber,
-                    PaidAt = payment.CreatedAt
+                    PaymentStatus = "pending",
+                    InvoiceNumber = null,
+                    PaidAt = null
                 },
-                Invoice = invoice
+                Invoice = null // Invoice sẽ được tạo khi staff xác nhận
             };
         }
     }

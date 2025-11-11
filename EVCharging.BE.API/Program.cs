@@ -17,6 +17,8 @@ using EVCharging.BE.Services.Services.Payment;
 using EVCharging.BE.Services.Services.Payment.Implementations;
 using EVCharging.BE.Services.Services.Reservations;
 using EVCharging.BE.Services.Services.Reservations.Implementations;
+using EVCharging.BE.Services.Services.Subscriptions;
+using EVCharging.BE.Services.Services.Subscriptions.Implementations;
 using EVCharging.BE.Services.Services.Users;
 using EVCharging.BE.Services.Services.Users.Implementations;
 
@@ -107,6 +109,10 @@ builder.Services.AddScoped<IEmailOTPService, EmailOTPService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IDriverProfileService, DriverProfileService>();
 builder.Services.AddScoped<ICorporateAccountService, CorporateAccountService>();
+
+// Subscriptions
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<IPricingPlanService, PricingPlanService>();
 
 // Charging
 builder.Services.AddScoped<IChargingService, ChargingService>();
@@ -324,11 +330,13 @@ if (app.Environment.IsDevelopment())
     }}
     .button-group {{
       display: flex;
+      flex-direction: column;
+      align-items: center;
       gap: 15px;
       margin-top: 20px;
     }}
     button {{
-      flex: 1;
+      width: 100%;
       padding: 16px 24px;
       border: none;
       border-radius: 12px;
@@ -352,16 +360,23 @@ if (app.Environment.IsDevelopment())
       transform: translateY(0);
     }}
     button[name='success'][value='false'] {{
-      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-      color: white;
-      box-shadow: 0 4px 15px rgba(245, 87, 108, 0.4);
+      background: transparent;
+      color: #999;
+      font-size: 14px;
+      font-weight: 500;
+      text-transform: none;
+      letter-spacing: 0;
+      padding: 8px 16px;
+      width: auto;
+      box-shadow: none;
     }}
     button[name='success'][value='false']:hover {{
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(245, 87, 108, 0.6);
+      color: #666;
+      text-decoration: underline;
+      transform: none;
     }}
     button[name='success'][value='false']:active {{
-      transform: translateY(0);
+      color: #555;
     }}
     .footer {{
       text-align: center;
@@ -372,9 +387,6 @@ if (app.Environment.IsDevelopment())
     @media (max-width: 480px) {{
       .container {{
         padding: 30px 20px;
-      }}
-      .button-group {{
-        flex-direction: column;
       }}
     }}
   </style>
@@ -400,8 +412,8 @@ if (app.Environment.IsDevelopment())
       <input type='hidden' name='code' value='{code}' />
       <div class='form-group'>
         <div class='button-group'>
-          <button type='submit' name='success' value='true'>✅ Xác nhận thanh toán</button>
-          <button type='submit' name='success' value='false'>❌ Hủy thanh toán</button>
+          <button type='submit' name='success' value='true'>XÁC NHẬN THANH TOÁN</button>
+          <button type='submit' name='success' value='false'>Hủy thanh toán</button>
         </div>
       </div>
     </form>
