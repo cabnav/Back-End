@@ -17,14 +17,14 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
-        /// Lấy tất cả pricing plans (active only)
+        /// Lấy tất cả pricing plans (bao gồm cả active và inactive)
         /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetAllPlans([FromQuery] bool activeOnly = true)
+        public async Task<IActionResult> GetAllPlans()
         {
             try
             {
-                var plans = await _pricingPlanService.GetAllPlansAsync(activeOnly);
+                var plans = await _pricingPlanService.GetAllPlansAsync(activeOnly: false);
                 return Ok(new
                 {
                     message = "Lấy danh sách gói thành công",
