@@ -30,8 +30,18 @@ namespace EVCharging.BE.Common.DTOs.Payments
     public class SessionInfoDto
     {
         public int SessionId { get; set; }
+        public int DriverId { get; set; }
+        public int PointId { get; set; }
+        public int? ReservationId { get; set; }
+        public string? Status { get; set; }
+        public int? StationId { get; set; }
         public string? StationName { get; set; }
         public string? StationAddress { get; set; }
+        public string? ConnectorType { get; set; }
+        public int? PowerOutput { get; set; }
+        public decimal? PricePerKwh { get; set; }
+        public int InitialSoc { get; set; }
+        public int? FinalSoc { get; set; }
         public decimal? EnergyUsed { get; set; }
         public int? DurationMinutes { get; set; }
         public decimal? CostBeforeDiscount { get; set; }
@@ -39,6 +49,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public decimal? FinalCost { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime? EndTime { get; set; }
+        public string? Notes { get; set; }
     }
 }
 
