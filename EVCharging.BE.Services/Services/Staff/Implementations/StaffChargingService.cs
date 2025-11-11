@@ -19,19 +19,22 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly ICostCalculationService _costCalculationService;
         private readonly IPaymentService _paymentService;
+        private readonly IInvoiceService _invoiceService;
 
         public StaffChargingService(
             EvchargingManagementContext db,
             IChargingService chargingService,
             ISessionMonitorService sessionMonitorService,
             ICostCalculationService costCalculationService,
-            IPaymentService paymentService)
+            IPaymentService paymentService,
+            IInvoiceService invoiceService)
         {
             _db = db;
             _chargingService = chargingService;
             _sessionMonitorService = sessionMonitorService;
             _costCalculationService = costCalculationService;
             _paymentService = paymentService;
+            _invoiceService = invoiceService;
         }
 
         // ========== STATION ASSIGNMENT & VERIFICATION ==========
@@ -793,17 +796,33 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 // 5. Update payment status
                 payment.PaymentStatus = request.Status.ToLower();
 
-                // 6. Update invoice status if exists
-                if (!string.IsNullOrEmpty(payment.InvoiceNumber))
+                // 6. Tạo hoặc update invoice khi staff confirm thành công
+                if (request.Status.ToLower() == "success")
                 {
-                    var invoice = await _db.Invoices
-                        .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
-
-                    if (invoice != null && request.Status.ToLower() == "success")
+                    // Nếu chưa có invoice (InvoiceNumber = null) -> tạo mới giống như PayByWalletAsync
+                    if (string.IsNullOrEmpty(payment.InvoiceNumber) && payment.SessionId.HasValue)
                     {
-                        invoice.Status = "paid";
-                        invoice.PaidAt = DateTime.UtcNow;
-                        Console.WriteLine($"Updated invoice {payment.InvoiceNumber} status to paid");
+                        var invoice = await _invoiceService.CreateInvoiceForSessionAsync(
+                            payment.SessionId.Value,
+                            payment.UserId,
+                            payment.Amount,
+                            payment.PaymentMethod ?? "cash"
+                        );
+                        payment.InvoiceNumber = invoice.InvoiceNumber;
+                        Console.WriteLine($"Created invoice {invoice.InvoiceNumber} for payment {paymentId}");
+                    }
+                    // Nếu đã có invoice -> update status
+                    else if (!string.IsNullOrEmpty(payment.InvoiceNumber))
+                    {
+                        var invoice = await _db.Invoices
+                            .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
+
+                        if (invoice != null)
+                        {
+                            invoice.Status = "paid";
+                            invoice.PaidAt = DateTime.UtcNow;
+                            Console.WriteLine($"Updated invoice {payment.InvoiceNumber} status to paid");
+                        }
                     }
                 }
 

@@ -360,6 +360,195 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 Invoice = null // Invoice sẽ được tạo khi staff xác nhận
             };
         }
+
+        /// <summary>
+        /// Lấy danh sách sessions chưa thanh toán của user (để user check và bấm thanh toán)
+        /// </summary>
+        public async Task<UnpaidSessionsResponse> GetUnpaidSessionsAsync(int userId, int skip = 0, int take = 20)
+        {
+            // Lấy sessions chưa thanh toán (completed nhưng chưa có payment success)
+            var paidSessionIds = await _db.Payments
+                .Where(p => p.PaymentStatus == "success" 
+                    && p.PaymentType == "session_payment"
+                    && p.SessionId.HasValue)
+                .Select(p => p.SessionId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var unpaidSessions = await _db.ChargingSessions
+                .Include(s => s.Driver)
+                .Include(s => s.Point)
+                    .ThenInclude(p => p.Station)
+                .Where(s => s.Driver.UserId == userId
+                    && s.Status == "completed"
+                    && s.FinalCost.HasValue
+                    && s.FinalCost.Value > 0
+                    && !paidSessionIds.Contains(s.SessionId))
+                .OrderByDescending(s => s.EndTime ?? s.StartTime)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync();
+
+            var unpaidTotal = await _db.ChargingSessions
+                .Where(s => s.Driver.UserId == userId
+                    && s.Status == "completed"
+                    && s.FinalCost.HasValue
+                    && s.FinalCost.Value > 0
+                    && !paidSessionIds.Contains(s.SessionId))
+                .CountAsync();
+
+            // Lấy pending payments cho các unpaid sessions
+            var unpaidSessionIds = unpaidSessions.Select(s => s.SessionId).ToList();
+            var pendingPayments = await _db.Payments
+                .Where(p => unpaidSessionIds.Contains(p.SessionId!.Value)
+                    && p.PaymentStatus == "pending"
+                    && p.PaymentType == "session_payment")
+                .ToListAsync();
+            var pendingPaymentsDict = pendingPayments
+                .GroupBy(p => p.SessionId!.Value)
+                .ToDictionary(g => g.Key, g => g.First());
+
+            // Map unpaid sessions
+            var unpaidSessionsList = unpaidSessions.Select(s =>
+            {
+                var pendingPayment = pendingPaymentsDict.GetValueOrDefault(s.SessionId);
+
+                return new UnpaidSessionDto
+                {
+                    SessionId = s.SessionId,
+                    DriverId = s.DriverId,
+                    PointId = s.PointId,
+                    ReservationId = s.ReservationId,
+                    Status = s.Status,
+                    StationId = s.Point?.StationId,
+                    StationName = s.Point?.Station?.Name,
+                    StationAddress = s.Point?.Station?.Address,
+                    ConnectorType = s.Point?.ConnectorType,
+                    PowerOutput = s.Point?.PowerOutput,
+                    PricePerKwh = s.Point?.PricePerKwh,
+                    InitialSoc = s.InitialSoc,
+                    FinalSoc = s.FinalSoc,
+                    EnergyUsed = s.EnergyUsed,
+                    DurationMinutes = s.DurationMinutes,
+                    CostBeforeDiscount = s.CostBeforeDiscount,
+                    AppliedDiscount = s.AppliedDiscount,
+                    FinalCost = s.FinalCost,
+                    StartTime = s.StartTime,
+                    EndTime = s.EndTime,
+                    Notes = s.Notes,
+                    PaymentId = pendingPayment?.PaymentId,
+                    PaymentMethod = pendingPayment?.PaymentMethod,
+                    PaymentStatus = pendingPayment?.PaymentStatus ?? "none",
+                    HasPendingPayment = pendingPayment != null
+                };
+            }).ToList();
+
+            return new UnpaidSessionsResponse
+            {
+                Total = unpaidTotal,
+                Skip = skip,
+                Take = take,
+                Items = unpaidSessionsList
+            };
+        }
+
+        /// <summary>
+        /// Lấy danh sách invoices đã thanh toán của user
+        /// </summary>
+        public async Task<PaidInvoicesResponse> GetPaidInvoicesAsync(int userId, int skip = 0, int take = 20)
+        {
+            // Lấy danh sách invoiceNumbers của user có payment success
+            var paidInvoiceNumbers = await _db.Payments
+                .Where(p => p.UserId == userId
+                    && p.PaymentStatus == "success"
+                    && !string.IsNullOrEmpty(p.InvoiceNumber))
+                .Select(p => p.InvoiceNumber!)
+                .Distinct()
+                .ToListAsync();
+
+            var paidInvoices = await _db.Invoices
+                .Include(i => i.InvoiceItems)
+                    .ThenInclude(item => item.Session!)
+                        .ThenInclude(s => s.Point)
+                            .ThenInclude(p => p.Station)
+                .Include(i => i.InvoiceItems)
+                    .ThenInclude(item => item.Session!)
+                        .ThenInclude(s => s.Driver)
+                .Where(i => i.UserId == userId
+                    && paidInvoiceNumbers.Contains(i.InvoiceNumber))
+                .OrderByDescending(i => i.CreatedAt)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync();
+
+            var paidTotal = await _db.Invoices
+                .Where(i => i.UserId == userId
+                    && paidInvoiceNumbers.Contains(i.InvoiceNumber))
+                .CountAsync();
+
+            // Lấy payments cho các invoices (tối ưu query)
+            var invoiceNumbers = paidInvoices.Select(i => i.InvoiceNumber).ToList();
+            var payments = await _db.Payments
+                .Where(p => invoiceNumbers.Contains(p.InvoiceNumber!) 
+                    && p.PaymentStatus == "success")
+                .ToListAsync();
+            var paymentsDict = payments
+                .GroupBy(p => p.InvoiceNumber!)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.CreatedAt).First());
+
+            // Map paid invoices
+            var paidInvoicesList = paidInvoices.Select(invoice =>
+            {
+                var firstItem = invoice.InvoiceItems.FirstOrDefault();
+                var session = firstItem?.Session;
+                var payment = paymentsDict.GetValueOrDefault(invoice.InvoiceNumber);
+
+                return new PaidInvoiceDto
+                {
+                    InvoiceId = invoice.InvoiceId,
+                    InvoiceNumber = invoice.InvoiceNumber,
+                    TotalAmount = invoice.TotalAmount,
+                    Status = invoice.Status,
+                    PaymentMethod = payment?.PaymentMethod,
+                    PaymentStatus = payment?.PaymentStatus,
+                    PaymentId = payment?.PaymentId,
+                    CreatedAt = invoice.CreatedAt,
+                    PaidAt = invoice.PaidAt,
+                    SessionInfo = session != null ? new SessionInfoDto
+                    {
+                        SessionId = session.SessionId,
+                        DriverId = session.DriverId,
+                        PointId = session.PointId,
+                        ReservationId = session.ReservationId,
+                        Status = session.Status,
+                        StationId = session.Point?.StationId,
+                        StationName = session.Point?.Station?.Name,
+                        StationAddress = session.Point?.Station?.Address,
+                        ConnectorType = session.Point?.ConnectorType,
+                        PowerOutput = session.Point?.PowerOutput,
+                        PricePerKwh = session.Point?.PricePerKwh,
+                        InitialSoc = session.InitialSoc,
+                        FinalSoc = session.FinalSoc,
+                        EnergyUsed = session.EnergyUsed,
+                        DurationMinutes = session.DurationMinutes,
+                        CostBeforeDiscount = session.CostBeforeDiscount,
+                        AppliedDiscount = session.AppliedDiscount,
+                        FinalCost = session.FinalCost,
+                        StartTime = session.StartTime,
+                        EndTime = session.EndTime,
+                        Notes = session.Notes
+                    } : null
+                };
+            }).ToList();
+
+            return new PaidInvoicesResponse
+            {
+                Total = paidTotal,
+                Skip = skip,
+                Take = take,
+                Items = paidInvoicesList
+            };
+        }
     }
 }
 

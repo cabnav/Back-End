@@ -20,15 +20,18 @@ namespace EVCharging.BE.API.Controllers
     {
         private readonly IPaymentService _paymentService;
         private readonly IMomoService _momoService;
+        private readonly IInvoiceService _invoiceService;
         private readonly EvchargingManagementContext _db;
 
         public PaymentsController(
             IPaymentService paymentService,
             IMomoService momoService,
+            IInvoiceService invoiceService,
             EvchargingManagementContext db)
         {
             _paymentService = paymentService;
             _momoService = momoService;
+            _invoiceService = invoiceService;
             _db = db;
         }
 
@@ -607,6 +610,80 @@ namespace EVCharging.BE.API.Controllers
                     message = "Đã xảy ra lỗi khi tạo payment URL",
                     error = ex.Message,
                     stackTrace = ex.StackTrace // Thêm stack trace để debug
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách sessions chưa thanh toán của user (để user check và bấm thanh toán)
+        /// </summary>
+        /// <param name="skip">Số bản ghi bỏ qua</param>
+        /// <param name="take">Số bản ghi lấy</param>
+        /// <returns>Danh sách sessions chưa thanh toán với đầy đủ thông tin ChargingSession</returns>
+        [HttpGet("unpaid-sessions")]
+        public async Task<IActionResult> GetUnpaidSessions([FromQuery] int skip = 0, [FromQuery] int take = 20)
+        {
+            try
+            {
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+                }
+
+                // Gọi service để lấy unpaid sessions
+                var result = await _paymentService.GetUnpaidSessionsAsync(currentUserId, skip, take);
+
+                return Ok(new
+                {
+                    message = "Lấy danh sách sessions chưa thanh toán thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi lấy danh sách sessions chưa thanh toán",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách invoices đã thanh toán của user
+        /// </summary>
+        /// <param name="skip">Số bản ghi bỏ qua</param>
+        /// <param name="take">Số bản ghi lấy</param>
+        /// <returns>Danh sách invoices đã thanh toán với đầy đủ thông tin ChargingSession</returns>
+        [HttpGet("paid-invoices")]
+        public async Task<IActionResult> GetPaidInvoices([FromQuery] int skip = 0, [FromQuery] int take = 20)
+        {
+            try
+            {
+                // Lấy userId từ JWT token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var currentUserId))
+                {
+                    return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+                }
+
+                // Gọi service để lấy paid invoices
+                var result = await _paymentService.GetPaidInvoicesAsync(currentUserId, skip, take);
+
+                return Ok(new
+                {
+                    message = "Lấy danh sách invoices đã thanh toán thành công",
+                    data = result
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi lấy danh sách invoices đã thanh toán",
+                    error = ex.Message
                 });
             }
         }
