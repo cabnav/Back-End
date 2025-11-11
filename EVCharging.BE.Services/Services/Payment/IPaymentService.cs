@@ -18,5 +18,15 @@ namespace EVCharging.BE.Services.Services.Payment
         /// </summary>
         Task<PaymentResultDto> PayByCashAsync(int sessionId, int userId);
 
+        /// <summary>
+        /// Lấy danh sách sessions chưa thanh toán của user (để user check và bấm thanh toán)
+        /// </summary>
+        Task<UnpaidSessionsResponse> GetUnpaidSessionsAsync(int userId, int skip = 0, int take = 20);
+
+        /// <summary>
+        /// Lấy danh sách invoices đã thanh toán của user
+        /// </summary>
+        Task<PaidInvoicesResponse> GetPaidInvoicesAsync(int userId, int skip = 0, int take = 20);
+
     }
 }
