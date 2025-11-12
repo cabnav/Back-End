@@ -27,7 +27,7 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
 
             var list = await _db.DriverProfiles
                                 .AsNoTracking()
-                                .OrderBy(x => x.DriverId)
+                                .OrderBy(x => x.UserId)
                                 .Skip((page - 1) * pageSize).Take(pageSize)
                                 .ToListAsync();
             return list.Select(Map);
@@ -36,7 +36,7 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
         public async Task<DriverProfileDTO?> GetByIdAsync(int id)
         {
             var d = await _db.DriverProfiles.AsNoTracking()
-                                            .FirstOrDefaultAsync(x => x.DriverId == id);
+                                            .FirstOrDefaultAsync(x => x.UserId == id);
             return d == null ? null : Map(d);
         }
 
@@ -75,20 +75,34 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             return Map(entity);
         }
 
-        public async Task<bool> UpdateAsync(int id, DriverProfileUpdateRequest req)
+        public async Task<bool> UpdateAsync(int userId, DriverProfileUpdateRequest req)
         {
-            var d = await _db.DriverProfiles.FindAsync(id);
-            if (d == null) return false;
+            var d = await _db.DriverProfiles.FirstOrDefaultAsync(x => x.UserId == userId);
+            if (d == null)
+                return false; // Không có profile cho user này
 
             // Validate BatteryCapacity > 0 nếu có value
             if (req.BatteryCapacity.HasValue && req.BatteryCapacity.Value <= 0)
                 throw new ArgumentException("BatteryCapacity must be greater than 0");
 
-            if (!string.IsNullOrWhiteSpace(req.LicenseNumber)) d.LicenseNumber = req.LicenseNumber;
-            if (!string.IsNullOrWhiteSpace(req.VehicleModel)) d.VehicleModel = req.VehicleModel;
-            if (!string.IsNullOrWhiteSpace(req.VehiclePlate)) d.VehiclePlate = req.VehiclePlate;
-            if (req.BatteryCapacity.HasValue) d.BatteryCapacity = req.BatteryCapacity.Value;
-            if (req.CorporateId.HasValue) d.CorporateId = req.CorporateId.Value;
+            // Cập nhật các trường có giá trị hợp lệ
+            if (!string.IsNullOrWhiteSpace(req.LicenseNumber))
+                d.LicenseNumber = req.LicenseNumber;
+
+            if (!string.IsNullOrWhiteSpace(req.VehicleModel))
+                d.VehicleModel = req.VehicleModel;
+
+            if (!string.IsNullOrWhiteSpace(req.VehiclePlate))
+                d.VehiclePlate = req.VehiclePlate;
+
+            if (req.BatteryCapacity.HasValue)
+                d.BatteryCapacity = req.BatteryCapacity.Value;
+
+            if (req.CorporateId.HasValue)
+                d.CorporateId = req.CorporateId.Value;
+
+            // Gợi ý thêm: cập nhật timestamp nếu có cột UpdatedAt
+            // d.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
             return true;
