@@ -130,5 +130,39 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
 
             return staffData;
         }
+
+        // ✅ 6. Tổng doanh thu theo trạm & phương thức thanh toán
+        public async Task<object> GetRevenueByStationAndMethodAsync()
+        {
+            var data = await _db.Payments
+                .Where(p => p.PaymentStatus == "completed") // chỉ tính thanh toán thành công
+                .Include(p => p.Session)
+                    .ThenInclude(s => s.Point)
+                    .ThenInclude(pt => pt.Station)
+                .GroupBy(p => new
+                {
+                    p.Session.Point.Station.StationId,
+                    StationName = p.Session.Point.Station.Name,
+                    p.PaymentMethod
+                })
+                .Select(g => new
+                {
+                    g.Key.StationId,
+                    g.Key.StationName,
+                    g.Key.PaymentMethod,
+                    TotalAmount = Math.Round(g.Sum(x => x.Amount), 2)
+                })
+                .OrderBy(x => x.StationId)
+                .ToListAsync();
+
+            var totalRevenue = data.Sum(x => x.TotalAmount);
+
+            return new
+            {
+                TotalRevenue = totalRevenue,
+                Breakdown = data
+            };
+        }
+
     }
 }

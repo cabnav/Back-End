@@ -9,5 +9,7 @@ namespace EVCharging.BE.Services.Services.Admin
         Task<object> GetRevenueAnalyticsAsync(DateTime? from = null, DateTime? to = null);
         Task<object> GetUsagePatternAsync();
         Task<object> GetStaffPerformanceAsync();
+        Task<object> GetRevenueByStationAndMethodAsync();
+
     }
 }
