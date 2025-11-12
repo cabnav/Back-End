@@ -103,7 +103,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 session.EnergyUsed = (decimal)energyUsed;
                 session.DurationMinutes = (int)(DateTime.UtcNow - session.StartTime).TotalMinutes;
 
-                // Calculate costs
+                // Calculate costs (chỉ cập nhật CostBeforeDiscount, không ghi đè FinalCost)
+                // FinalCost sẽ được tính chính xác khi session kết thúc với đầy đủ discount và peak hour surcharge
                 var currentCost = CalculateCurrentCost(session);
                 session.CostBeforeDiscount = currentCost;
                 session.FinalCost = currentCost; // Simplified - no discount applied
@@ -205,7 +206,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             var currentSOC = session.InitialSoc; // This would be actual current SOC from charging data
             if (session.FinalSoc.HasValue && currentSOC >= session.FinalSoc.Value)
             {
-                // Charging complete
+                // ⚠️ KHÔNG tự tính FinalCost ở đây - để StopSessionAsync tính chính xác với discount và peak hour
+                // Chỉ cập nhật status và data, cost sẽ được tính trong StopSessionAsync
                 session.Status = "completed";
                 session.EndTime = DateTime.UtcNow;
                 session.FinalSoc = currentSOC;

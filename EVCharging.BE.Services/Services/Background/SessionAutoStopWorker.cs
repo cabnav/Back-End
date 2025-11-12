@@ -186,4 +186,3 @@ namespace EVCharging.BE.Services.Services.Background
         }
     }
 }
-

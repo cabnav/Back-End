@@ -22,5 +22,11 @@ namespace EVCharging.BE.Common.DTOs.Charging
         public string? MembershipTier { get; set; }
         public bool IsPeakHours { get; set; } = false;
         public decimal? CustomDiscountRate { get; set; }
+        
+        /// <summary>
+        /// Thời điểm bắt đầu session (để tính phụ thu giờ cao điểm chính xác)
+        /// Nếu không có, sẽ dùng DateTime.UtcNow (không chính xác)
+        /// </summary>
+        public DateTime? StartTime { get; set; }
     }
 }

@@ -46,14 +46,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Calculate base cost
                 var baseCost = request.EnergyUsed * basePricePerKwh;
 
-                // Check if it's peak hours
-                var isPeakHours = await IsPeakHoursAsync(DateTime.UtcNow);
+                // ⚠️ Đã bỏ phụ thu giờ cao điểm theo yêu cầu
                 var peakHourSurcharge = 0m;
-                
-                if (isPeakHours)
-                {
-                    peakHourSurcharge = baseCost * _peakHourSurchargeRate;
-                }
 
                 // Calculate membership discount
                 var membershipDiscount = 0m;
@@ -82,8 +76,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Calculate total discount
                 var totalDiscount = membershipDiscount + customDiscount;
 
-                // Calculate final cost
-                var finalCost = baseCost + peakHourSurcharge - totalDiscount;
+                // Calculate final cost (không cộng peak hour surcharge)
+                var finalCost = baseCost - totalDiscount;
 
                 return new CostCalculationResponse
                 {
@@ -98,7 +92,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     FinalCost = Math.Max(0, finalCost), // Ensure non-negative cost
                     Currency = "VND",
                     CalculatedAt = DateTime.UtcNow,
-                    Notes = GenerateCostNotes(isPeakHours, membershipTier, request.CustomDiscountRate)
+                    Notes = GenerateCostNotes(false, membershipTier, request.CustomDiscountRate) // Không còn peak hour
                 };
             }
             catch (Exception ex)
@@ -341,8 +335,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         {
             var notes = new List<string>();
             
-            if (isPeakHours)
-                notes.Add("Peak hours surcharge applied");
+            // ⚠️ Đã bỏ peak hour surcharge
             
             if (!string.IsNullOrEmpty(membershipTier) && membershipTier != "basic")
                 notes.Add($"{membershipTier.ToUpper()} membership discount applied");

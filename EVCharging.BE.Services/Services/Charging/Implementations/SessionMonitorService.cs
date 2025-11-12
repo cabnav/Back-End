@@ -71,7 +71,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 _logger.LogError(ex, "❌ [StartMonitoring] Error starting monitoring for session {SessionId}: {Error}", sessionId, ex.Message);
             }
-            
+
             return Task.CompletedTask;
         }
 
@@ -97,7 +97,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 _logger.LogError(ex, "Error stopping monitoring for session {SessionId}", sessionId);
             }
-            
+
             return Task.CompletedTask;
         }
 
@@ -110,7 +110,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 using var scope = _serviceProvider.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<EvchargingManagementContext>();
-                
+
                 var session = await db.ChargingSessions.FindAsync(sessionId);
                 return session?.Status == "in_progress";
             }
@@ -148,9 +148,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 using var scope = _serviceProvider.CreateScope();
                 var chargingService = scope.ServiceProvider.GetRequiredService<IChargingService>();
-                
+
                 var success = await chargingService.UpdateSessionProgressAsync(sessionId, soc, power, voltage, temperature);
-                
+
                 if (success)
                 {
                     // Update cached session data
@@ -175,9 +175,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             try
             {
                 // TODO: Implement SignalR notification in API layer
-                _logger.LogInformation("Session {SessionId} updated: SOC={SOC}%, Power={Power}kW", 
+                _logger.LogInformation("Session {SessionId} updated: SOC={SOC}%, Power={Power}kW",
                     sessionId, sessionData.CurrentSOC, sessionData.CurrentPower);
-                
+
                 // Update cached data
                 _activeSessions[sessionId] = sessionData;
             }
@@ -185,7 +185,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 _logger.LogError(ex, "Error notifying session update for session {SessionId}", sessionId);
             }
-            
+
             return Task.CompletedTask;
         }
 
@@ -280,12 +280,12 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                              $"Chi phí: {finalCost:N0} VND";
 
                 _logger.LogInformation("Session {SessionId} completed: {Message}", sessionId, message);
-                
+
                 await notificationService.SendNotificationAsync(
-                    userId, 
-                    title, 
-                    message, 
-                    "charging_complete", 
+                    userId,
+                    title,
+                    message,
+                    "charging_complete",
                     sessionId);
             }
             catch (Exception ex)
@@ -323,12 +323,12 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                              $"Vui lòng kiểm tra hoặc liên hệ hỗ trợ nếu cần thiết.";
 
                 _logger.LogWarning("Session {SessionId} error: {ErrorMessage}", sessionId, errorMessage);
-                
+
                 await notificationService.SendNotificationAsync(
-                    userId, 
-                    title, 
-                    message, 
-                    "charging_alert", 
+                    userId,
+                    title,
+                    message,
+                    "charging_alert",
                     sessionId);
             }
             catch (Exception ex)
@@ -355,27 +355,27 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return new Dictionary<string, object>();
 
                 var logs = session.SessionLogs.OrderBy(sl => sl.LogTime).ToList();
-                
-                                var analytics = new Dictionary<string, object>
+
+                var analytics = new Dictionary<string, object>
                 {
                     ["sessionId"] = sessionId,
                     ["totalEnergy"] = session.EnergyUsed ?? 0,
                     ["totalCost"] = session.FinalCost ?? 0,
                     ["duration"] = session.DurationMinutes ?? 0,
-                    ["averagePower"] = logs.Any(l => l.CurrentPower.HasValue) 
-                        ? logs.Where(l => l.CurrentPower.HasValue).Average(l => l.CurrentPower!.Value) 
-                        : 0,
+                    ["averagePower"] = logs.Any(l => l.CurrentPower.HasValue)
+        ? logs.Where(l => l.CurrentPower.HasValue).Average(l => l.CurrentPower!.Value)
+        : 0,
                     ["maxPower"] = logs.Any(l => l.CurrentPower.HasValue)
-                        ? logs.Where(l => l.CurrentPower.HasValue).Max(l => l.CurrentPower!.Value)
-                        : 0,
+        ? logs.Where(l => l.CurrentPower.HasValue).Max(l => l.CurrentPower!.Value)
+        : 0,
                     ["averageTemperature"] = logs.Any(l => l.Temperature.HasValue)
-                        ? logs.Where(l => l.Temperature.HasValue).Average(l => l.Temperature!.Value)
-                        : 0,
+        ? logs.Where(l => l.Temperature.HasValue).Average(l => l.Temperature!.Value)
+        : 0,
                     ["maxTemperature"] = logs.Any(l => l.Temperature.HasValue)
-                        ? logs.Where(l => l.Temperature.HasValue).Max(l => l.Temperature!.Value)
-                        : 0,
-                    ["socIncrease"] = (session.FinalSoc ?? session.InitialSoc) - session.InitialSoc,                                                            
-                    ["efficiency"] = await CalculateEfficiencyAsync(sessionId)  
+        ? logs.Where(l => l.Temperature.HasValue).Max(l => l.Temperature!.Value)
+        : 0,
+                    ["socIncrease"] = (session.FinalSoc ?? session.InitialSoc) - session.InitialSoc,
+                    ["efficiency"] = await CalculateEfficiencyAsync(sessionId)
                 };
 
                 return analytics;
@@ -387,10 +387,10 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             }
         }
 
-                /// <summary>
+        /// <summary>
         /// Tính hiệu suất sạc
         /// </summary>
-        public async Task<decimal> CalculateEfficiencyAsync(int sessionId)      
+        public async Task<decimal> CalculateEfficiencyAsync(int sessionId)
         {
             try
             {
@@ -400,7 +400,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var session = await db.ChargingSessions
                     .Include(s => s.Point)
                     .Include(s => s.SessionLogs)
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);        
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
                 if (session == null || session.Point == null)
                     return 0;
@@ -412,10 +412,10 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 var durationHours = (session.DurationMinutes ?? 0) / 60.0;
                 var theoreticalEnergy = (decimal)(powerOutput * durationHours);
-                
+
                 // Tính actual energy từ session (nếu có) hoặc từ logs
                 var actualEnergy = session.EnergyUsed;
-                
+
                 // Nếu chưa có EnergyUsed, tính từ logs
                 if (!actualEnergy.HasValue && session.SessionLogs != null && session.SessionLogs.Any())
                 {
@@ -429,15 +429,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error calculating efficiency for session {SessionId}", sessionId);                                                                               
+                _logger.LogError(ex, "Error calculating efficiency for session {SessionId}", sessionId);
                 return 0;
             }
         }
 
-                /// <summary>
+        /// <summary>
         /// Ước tính thời gian còn lại
         /// </summary>
-        public async Task<TimeSpan> EstimateRemainingTimeAsync(int sessionId, int targetSOC)                                                                    
+        public async Task<TimeSpan> EstimateRemainingTimeAsync(int sessionId, int targetSOC)
         {
             try
             {
@@ -447,7 +447,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var session = await db.ChargingSessions
                     .Include(s => s.Point)
                     .Include(s => s.Driver)
-                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);        
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
                 if (session == null || session.Point == null)
                     return TimeSpan.Zero;
@@ -484,7 +484,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error estimating remaining time for session {SessionId}", sessionId);                                                                            
+                _logger.LogError(ex, "Error estimating remaining time for session {SessionId}", sessionId);
                 return TimeSpan.Zero;
             }
         }
@@ -513,14 +513,14 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var sessionDuration = DateTime.UtcNow - session.StartTime;
                 if (sessionDuration.TotalMinutes < 2)
                 {
-                    _logger.LogDebug("Session {SessionId} is too new ({Duration:F1} minutes), skipping auto-stop check", 
+                    _logger.LogDebug("Session {SessionId} is too new ({Duration:F1} minutes), skipping auto-stop check",
                         sessionId, sessionDuration.TotalMinutes);
                     return false;
                 }
 
                 // ✅ Tính SOC hiện tại từ session đã load (không gọi GetCurrentSOCAsync để tránh duplicate query)
                 int currentSOC;
-                
+
                 // Nếu có log, lấy từ log mới nhất
                 var latestLog = session.SessionLogs?
                     .OrderByDescending(sl => sl.LogTime)
@@ -530,8 +530,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 {
                     currentSOC = latestLog.SocPercentage.Value;
                 }
-                else if (session.Driver?.BatteryCapacity.HasValue == true && 
-                         session.EnergyUsed.HasValue && 
+                else if (session.Driver?.BatteryCapacity.HasValue == true &&
+                         session.EnergyUsed.HasValue &&
                          session.Driver.BatteryCapacity.Value > 0)
                 {
                     // Tính từ EnergyUsed và BatteryCapacity
@@ -560,7 +560,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // 1. Đã có log (chứng tỏ đã sạc được một lúc), HOẶC
                 // 2. Đã có EnergyUsed > 0 (đã sạc được năng lượng), HOẶC  
                 // 3. SOC đã tăng so với InitialSOC (chứng tỏ đã sạc được)
-                bool hasActualChargingProgress = latestLog != null || 
+                bool hasActualChargingProgress = latestLog != null ||
                                                  (session.EnergyUsed.HasValue && session.EnergyUsed.Value > 0) ||
                                                  (currentSOC > session.InitialSoc);
 
@@ -568,7 +568,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // (tránh auto-stop ngay khi start nếu InitialSOC đã = target)
                 if (!hasActualChargingProgress && currentSOC == session.InitialSoc && currentSOC >= targetSOC)
                 {
-                    _logger.LogDebug("Session {SessionId} just started with SOC={SOC}% (already at target), waiting for actual charging progress before auto-stop", 
+                    _logger.LogDebug("Session {SessionId} just started with SOC={SOC}% (already at target), waiting for actual charging progress before auto-stop",
                         sessionId, currentSOC);
                     return false;
                 }
@@ -588,19 +588,19 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     };
 
                     var result = await chargingService.StopSessionAsync(stopRequest);
-                    
+
                     if (result != null)
                     {
                         _logger.LogInformation(
                             "Session {SessionId} auto-stopped successfully. FinalSOC={FinalSOC}%, FinalCost={FinalCost} VND, Duration={Duration} minutes",
                             sessionId, currentSOC, result.FinalCost, (int)sessionDuration.TotalMinutes);
-                        
+
                         // Dừng monitoring
                         await StopMonitoringAsync(sessionId);
-                        
+
                         // Gửi thông báo hoàn thành
                         await SendSessionCompleteNotificationAsync(sessionId);
-                        
+
                         return true;
                     }
                     else
@@ -658,8 +658,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 {
                     currentSOC = latestLog.SocPercentage.Value;
                 }
-                else if (session.Driver?.BatteryCapacity.HasValue == true && 
-                         session.EnergyUsed.HasValue && 
+                else if (session.Driver?.BatteryCapacity.HasValue == true &&
+                         session.EnergyUsed.HasValue &&
                          session.Driver.BatteryCapacity.Value > 0)
                 {
                     var batteryCapacity = session.Driver.BatteryCapacity.Value;
@@ -688,14 +688,14 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                                  $"Trạm sạc: {stationName}";
 
                     await notificationService.SendNotificationAsync(
-                        userId, 
-                        title, 
-                        message, 
-                        "charging_near_complete", 
+                        userId,
+                        title,
+                        message,
+                        "charging_near_complete",
                         sessionId);
 
                     _nearTargetSocNotified[sessionId] = true;
-                    _logger.LogInformation("Sent near target SOC notification for session {SessionId}: {CurrentSOC}% -> {TargetSOC}%", 
+                    _logger.LogInformation("Sent near target SOC notification for session {SessionId}: {CurrentSOC}% -> {TargetSOC}%",
                         sessionId, currentSOC, targetSOC);
                 }
             }
@@ -743,7 +743,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var upcomingReservation = await db.Reservations
                     .Include(r => r.Point)
                         .ThenInclude(p => p.Station)
-                    .Where(r => r.DriverId == session.DriverId 
+                    .Where(r => r.DriverId == session.DriverId
                         && r.ReservationId != session.ReservationId
                         && r.Status == "booked"
                         && r.StartTime > now
@@ -764,14 +764,14 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                                  $"Vui lòng chuẩn bị để đến đúng giờ.";
 
                     await notificationService.SendNotificationAsync(
-                        userId, 
-                        title, 
-                        message, 
-                        "reservation_reminder", 
+                        userId,
+                        title,
+                        message,
+                        "reservation_reminder",
                         upcomingReservation.ReservationId);
 
                     _reservationReminderNotified[sessionId] = true;
-                    _logger.LogInformation("Sent reservation reminder for session {SessionId}: upcoming reservation {ReservationId} in {Minutes} minutes", 
+                    _logger.LogInformation("Sent reservation reminder for session {SessionId}: upcoming reservation {ReservationId} in {Minutes} minutes",
                         sessionId, upcomingReservation.ReservationId, minutesUntil);
                 }
             }
@@ -808,8 +808,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return latestLog.SocPercentage.Value;
 
                 // Nếu chưa có log, tính từ EnergyUsed và BatteryCapacity
-                if (session.Driver?.BatteryCapacity.HasValue == true && 
-                    session.EnergyUsed.HasValue && 
+                if (session.Driver?.BatteryCapacity.HasValue == true &&
+                    session.EnergyUsed.HasValue &&
                     session.Driver.BatteryCapacity.Value > 0)
                 {
                     var batteryCapacity = session.Driver.BatteryCapacity.Value;
@@ -827,7 +827,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             }
         }
 
-                /// <summary>
+        /// <summary>
         /// Monitor session (called by timer)
         /// </summary>
         private async Task MonitorSessionAsync(int sessionId)
@@ -873,15 +873,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 await CheckSessionAlertsAsync(sessionId);
 
                 // Update session data if needed
-                var sessionData = await GetSessionStatusAsync(sessionId);       
+                var sessionData = await GetSessionStatusAsync(sessionId);
                 if (sessionData != null)
                 {
-                    await NotifySessionUpdateAsync(sessionId, sessionData);     
+                    await NotifySessionUpdateAsync(sessionId, sessionData);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error monitoring session {SessionId}", sessionId);                                                                       
+                _logger.LogError(ex, "Error monitoring session {SessionId}", sessionId);
             }
             finally
             {
@@ -909,36 +909,36 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return;
 
                 var now = DateTime.UtcNow;
-                
+
                 // Kiểm tra log cuối cùng
                 var lastLog = session.SessionLogs?
                     .OrderByDescending(l => l.LogTime)
                     .FirstOrDefault();
 
                 // Nếu log cuối cùng quá cũ (> 30 giây) hoặc chưa có log, tạo log mới
-                var shouldCreateLog = lastLog == null || 
+                var shouldCreateLog = lastLog == null ||
                                       !lastLog.LogTime.HasValue ||
                                       (now - lastLog.LogTime!.Value).TotalSeconds > 30;
 
                 if (!shouldCreateLog)
                 {
                     _logger.LogDebug("⏭️ [AutoCreateSessionLog] Session {SessionId} - Skipping log creation (last log is {SecondsSinceLastLog:F0}s old, threshold: 30s)",
-                        sessionId, lastLog != null && lastLog.LogTime.HasValue 
-                            ? (now - lastLog.LogTime.Value).TotalSeconds 
+                        sessionId, lastLog != null && lastLog.LogTime.HasValue
+                            ? (now - lastLog.LogTime.Value).TotalSeconds
                             : 0);
                     return;
                 }
-                
+
                 _logger.LogDebug("📝 [AutoCreateSessionLog] Session {SessionId} - Creating new log (last log: {LastLogTime}, time since: {SecondsSinceLastLog:F0}s)",
-                    sessionId, 
+                    sessionId,
                     lastLog?.LogTime?.ToString("HH:mm:ss") ?? "N/A",
-                    lastLog != null && lastLog.LogTime.HasValue 
-                        ? (now - lastLog.LogTime.Value).TotalSeconds 
+                    lastLog != null && lastLog.LogTime.HasValue
+                        ? (now - lastLog.LogTime.Value).TotalSeconds
                         : 0);
 
                 // Tính toán SOC hiện tại
                 var currentSOC = CalculateCurrentSOCFromLogs(session, lastLog);
-                
+
                 // Tính current power (dùng từ log cuối hoặc PowerOutput)
                 var currentPower = lastLog?.CurrentPower ?? (decimal)(session.Point.PowerOutput ?? 50);
 
@@ -954,7 +954,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 };
 
                 db.SessionLogs.Add(newLog);
-                
+
                 // Cập nhật FinalSoc nếu SOC đã tăng
                 if (currentSOC > session.InitialSoc)
                 {
@@ -962,7 +962,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 }
 
                 await db.SaveChangesAsync();
-                
+
                 // Log thông tin khi tạo log mới
                 _logger.LogInformation(
                     "✅ [AutoCreateSessionLog] Session {SessionId} - Created new log: SOC={SOC}%, Power={Power}kW, Voltage={Voltage}V, Temp={Temp}°C, Time={LogTime}",
@@ -987,15 +987,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 {
                     var batteryCapacity = session.Driver.BatteryCapacity.Value;
                     var energyUsed = session.EnergyUsed.Value;
-                    
+
                     // Tính SOC từ energy
                     var socFromEnergy = session.InitialSoc + (int)((energyUsed / batteryCapacity) * 100);
                     var socFromLog = lastLog.SocPercentage.Value;
-                    
+
                     // Dùng giá trị cao hơn (đảm bảo SOC không giảm)
                     return Math.Min(Math.Max(socFromLog, socFromEnergy), 100);
                 }
-                
+
                 return lastLog.SocPercentage.Value;
             }
 
@@ -1004,11 +1004,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             {
                 var batteryCapacity = session.Driver.BatteryCapacity.Value;
                 var energyUsed = session.EnergyUsed.Value;
-                
+
                 // Tính % SOC tăng thêm
                 var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
                 var currentSOC = session.InitialSoc + socIncrease;
-                
+
                 return Math.Min(currentSOC, 100); // Không vượt quá 100%
             }
 
@@ -1039,7 +1039,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var calculatedEnergy = CalculateEnergyUsedFromLogs(session);
 
                 // Cập nhật EnergyUsed
-                if (!session.EnergyUsed.HasValue || 
+                if (!session.EnergyUsed.HasValue ||
                     Math.Abs(session.EnergyUsed.Value - calculatedEnergy) > 0.01m)
                 {
                     session.EnergyUsed = calculatedEnergy;
@@ -1051,7 +1051,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         var batteryCapacity = session.Driver.BatteryCapacity.Value;
                         var socIncrease = (int)((calculatedEnergy / batteryCapacity) * 100);
                         var newSOC = session.InitialSoc + socIncrease;
-                        
+
                         session.FinalSoc = Math.Min(newSOC, 100);
                     }
 
@@ -1155,7 +1155,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 var isMonitoring = _monitoringTimers.ContainsKey(sessionId);
                 var isMonitoringInProgress = _monitoringInProgress.ContainsKey(sessionId);
-                
+
                 // Lấy log cuối cùng
                 var lastLog = session.SessionLogs?
                     .OrderByDescending(l => l.LogTime)
@@ -1248,4 +1248,3 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             _logger.LogInformation("SessionMonitorService disposed");
         }
     }
-}

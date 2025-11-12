@@ -99,7 +99,7 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
 
                 // Verify OTP
                 var isValidOTP = await _emailOTPService.VerifyOTPAsync(request.Email, request.OtpCode);
-                
+
                 if (!isValidOTP)
                 {
                     return new VerifyOTPResponse
