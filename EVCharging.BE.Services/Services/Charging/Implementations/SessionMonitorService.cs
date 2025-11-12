@@ -1177,7 +1177,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     ["isMonitoringInProgress"] = isMonitoringInProgress,
                     ["totalLogs"] = totalLogs,
                     ["lastLogTime"] = lastLog?.LogTime ?? (DateTime?)null,
-                    ["timeSinceLastLog"] = timeSinceLastLog.HasValue 
+                    ["timeSinceLastLog"] = timeSinceLastLog.HasValue
                         ? $"{timeSinceLastLog.Value.TotalSeconds:F0} seconds"
                         : "N/A",
                     ["lastLog"] = lastLog != null ? new Dictionary<string, object?>
@@ -1248,3 +1248,4 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             _logger.LogInformation("SessionMonitorService disposed");
         }
     }
+}
