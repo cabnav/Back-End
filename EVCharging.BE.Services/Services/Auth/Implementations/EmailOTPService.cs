@@ -22,24 +22,27 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
         {
             try
             {
-                Console.WriteLine($"[OTP] Starting SendOTP for email: {email}");
+                Console.WriteLine($"[OTP] Starting SendOTP for email: {email}, purpose: {purpose}");
                 
                 // Normalize email (trim and lowercase)
                 var normalizedEmail = email.Trim().ToLowerInvariant();
                 
-                // Check if email already registered (case-insensitive comparison)
-                // Load all emails and compare normalized versions to handle case/whitespace differences
-                var existingEmails = await _db.Users.Select(u => u.Email).ToListAsync();
-                var emailExists = existingEmails.Any(e => e.Trim().ToLowerInvariant() == normalizedEmail);
-                
-                if (emailExists)
+                // Check if email already registered (only for registration purpose)
+                if (purpose == "registration")
                 {
-                    var foundEmail = existingEmails.First(e => e.Trim().ToLowerInvariant() == normalizedEmail);
-                    Console.WriteLine($"[OTP] Email already registered: {email} (found in DB: {foundEmail})");
-                    return false; // Email already registered
+                    var existingEmails = await _db.Users.Select(u => u.Email).ToListAsync();
+                    var emailExists = existingEmails.Any(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                    
+                    if (emailExists)
+                    {
+                        var foundEmail = existingEmails.First(e => e.Trim().ToLowerInvariant() == normalizedEmail);
+                        Console.WriteLine($"[OTP] Email already registered: {email} (found in DB: {foundEmail})");
+                        return false; // Email already registered
+                    }
                 }
+                // For password-reset purpose, we allow sending OTP to existing emails
 
-                Console.WriteLine($"[OTP] Email not registered, generating OTP...");
+                Console.WriteLine($"[OTP] Generating OTP for purpose: {purpose}...");
 
                 // Generate 6-digit OTP
                 var otpCode = _random.Next(100000, 999999).ToString();
@@ -82,9 +85,12 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 Console.WriteLine($"[OTP] OTP saved to database successfully");
 
                 // Send email (use original email for display)
-                var subject = purpose == "registration" 
-                    ? "Mã xác nhận đăng ký - EV Charging System"
-                    : "Mã xác nhận - EV Charging System";
+                var subject = purpose switch
+                {
+                    "registration" => "Mã xác nhận đăng ký - EV Charging System",
+                    "password-reset" => "Mã xác nhận đặt lại mật khẩu - EV Charging System",
+                    _ => "Mã xác nhận - EV Charging System"
+                };
 
                 var body = $@"
                     <html>
@@ -94,7 +100,7 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                             
                             <p>Xin chào,</p>
                             
-                            <p>Chúng tôi nhận được yêu cầu xác nhận email <strong>{email}</strong>.</p>
+                            <p>Chúng tôi nhận được yêu cầu {(purpose == "password-reset" ? "đặt lại mật khẩu" : "xác nhận email")} cho <strong>{email}</strong>.</p>
                             
                             <div style='background-color: #f8f9fa; border: 2px solid #3498db; border-radius: 10px; padding: 20px; text-align: center; margin: 30px 0;'>
                                 <p style='font-size: 14px; color: #666; margin: 0 0 10px 0;'>Mã xác nhận của bạn:</p>

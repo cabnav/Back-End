@@ -60,4 +60,15 @@ namespace EVCharging.BE.Common.DTOs.Auth
         public bool Success { get; set; }
         public string Message { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// DTO cho response verify OTP
+    /// </summary>
+    public class VerifyOTPResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string? ResetToken { get; set; } // Token để reset password sau khi verify OTP thành công
+        public DateTime ExpiresAt { get; set; }
+    }
 }

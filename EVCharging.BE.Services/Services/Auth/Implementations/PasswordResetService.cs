@@ -16,17 +16,19 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
     {
         private readonly EvchargingManagementContext _db;
         private readonly IConfiguration _configuration;
+        private readonly IEmailOTPService _emailOTPService;
         private readonly IEmailService _emailService;
 
-        public PasswordResetService(EvchargingManagementContext db, IConfiguration configuration, IEmailService emailService)
+        public PasswordResetService(EvchargingManagementContext db, IConfiguration configuration, IEmailOTPService emailOTPService, IEmailService emailService)
         {
             _db = db;
             _configuration = configuration;
+            _emailOTPService = emailOTPService;
             _emailService = emailService;
         }
 
         /// <summary>
-        /// Tạo token đặt lại mật khẩu
+        /// Gửi OTP để đặt lại mật khẩu
         /// </summary>
         public async Task<CreatePasswordResetTokenResponse> CreatePasswordResetTokenAsync(CreatePasswordResetTokenRequest request)
         {
@@ -43,12 +45,76 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                     };
                 }
 
+                // Gửi OTP qua email
+                var otpSent = await _emailOTPService.SendOTPAsync(request.Email, "password-reset");
+                
+                if (!otpSent)
+                {
+                    return new CreatePasswordResetTokenResponse
+                    {
+                        Success = false,
+                        Message = "Không thể gửi mã OTP. Vui lòng thử lại sau."
+                    };
+                }
+
+                // OTP hết hạn sau 30 phút (theo EmailOTPService)
+                var expiresAt = DateTime.UtcNow.AddMinutes(30);
+
+                return new CreatePasswordResetTokenResponse
+                {
+                    Success = true,
+                    Message = "Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra email và nhập mã OTP để tiếp tục.",
+                    Token = null, // Không trả về token ở bước này
+                    ExpiresAt = expiresAt
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error sending password reset OTP: {ex.Message}");
+                return new CreatePasswordResetTokenResponse
+                {
+                    Success = false,
+                    Message = "Có lỗi xảy ra khi gửi mã OTP đặt lại mật khẩu"
+                };
+            }
+        }
+
+        /// <summary>
+        /// Verify OTP và tạo token để reset password
+        /// </summary>
+        public async Task<VerifyOTPResponse> VerifyOTPAndCreateResetTokenAsync(VerifyOTPRequest request)
+        {
+            try
+            {
+                // Tìm user theo email
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+                if (user == null)
+                {
+                    return new VerifyOTPResponse
+                    {
+                        Success = false,
+                        Message = "Email không tồn tại trong hệ thống"
+                    };
+                }
+
+                // Verify OTP
+                var isValidOTP = await _emailOTPService.VerifyOTPAsync(request.Email, request.OtpCode);
+                
+                if (!isValidOTP)
+                {
+                    return new VerifyOTPResponse
+                    {
+                        Success = false,
+                        Message = "Mã OTP không hợp lệ hoặc đã hết hạn"
+                    };
+                }
+
                 // Revoke tất cả token cũ của user này
                 await RevokeAllTokensForUserAsync(user.UserId);
 
-                // Tạo token mới
+                // Tạo token mới để reset password (token này sẽ được dùng trong ResetPasswordAsync)
                 var token = GenerateSecureToken();
-                var expiresAt = DateTime.UtcNow.AddHours(1); // Token hết hạn sau 1 giờ
+                var expiresAt = DateTime.UtcNow.AddMinutes(15); // Token hết hạn sau 15 phút
 
                 var passwordResetToken = new PasswordResetToken
                 {
@@ -62,34 +128,21 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 _db.PasswordResetTokens.Add(passwordResetToken);
                 await _db.SaveChangesAsync();
 
-                // Gửi email chứa token
-                try
-                {
-                    var baseUrl = _configuration["AppSettings:BaseUrl"] ?? "https://localhost:7035";
-                    var resetUrl = $"{baseUrl}/reset-password?token={token}";
-                    await _emailService.SendPasswordResetEmailAsync(user.Email, user.Name ?? user.Email, token, resetUrl);
-                }
-                catch (Exception emailEx)
-                {
-                    Console.WriteLine($"Error sending password reset email: {emailEx.Message}");
-                    // Không throw exception để không làm fail việc tạo token
-                }
-
-                return new CreatePasswordResetTokenResponse
+                return new VerifyOTPResponse
                 {
                     Success = true,
-                    Message = "Email đặt lại mật khẩu đã được gửi thành công",
-                    Token = _configuration["Environment"] == "Development" ? token : null, // Chỉ hiển thị token trong development
+                    Message = "Xác thực OTP thành công. Bạn có thể đặt lại mật khẩu.",
+                    ResetToken = token,
                     ExpiresAt = expiresAt
                 };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error creating password reset token: {ex.Message}");
-                return new CreatePasswordResetTokenResponse
+                Console.WriteLine($"Error verifying OTP and creating reset token: {ex.Message}");
+                return new VerifyOTPResponse
                 {
                     Success = false,
-                    Message = "Có lỗi xảy ra khi tạo token đặt lại mật khẩu"
+                    Message = "Có lỗi xảy ra khi xác thực OTP"
                 };
             }
         }

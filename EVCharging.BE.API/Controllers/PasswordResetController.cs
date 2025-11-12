@@ -20,7 +20,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
-        /// Tạo token đặt lại mật khẩu
+        /// Gửi OTP để đặt lại mật khẩu
         /// </summary>
         [HttpPost("request")]
         public async Task<IActionResult> RequestPasswordReset([FromBody] CreatePasswordResetTokenRequest request)
@@ -43,7 +43,35 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "Có lỗi xảy ra khi tạo token đặt lại mật khẩu", error = ex.Message });
+                return StatusCode(500, new { message = "Có lỗi xảy ra khi gửi mã OTP", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Xác thực OTP và tạo token để đặt lại mật khẩu
+        /// </summary>
+        [HttpPost("verify-otp")]
+        public async Task<IActionResult> VerifyOTP([FromBody] VerifyOTPRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                    return BadRequest(new { message = "Dữ liệu không hợp lệ", errors = ModelState });
+
+                var result = await _passwordResetService.VerifyOTPAndCreateResetTokenAsync(request);
+
+                if (result.Success)
+                {
+                    return Ok(result);
+                }
+                else
+                {
+                    return BadRequest(result);
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Có lỗi xảy ra khi xác thực OTP", error = ex.Message });
             }
         }
 
@@ -76,7 +104,7 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
-        /// Validate token đặt lại mật khẩu
+        /// Validate token đặt lại mật khẩu (sau khi verify OTP)
         /// </summary>
         [HttpGet("validate/{token}")]
         public async Task<IActionResult> ValidateToken(string token)

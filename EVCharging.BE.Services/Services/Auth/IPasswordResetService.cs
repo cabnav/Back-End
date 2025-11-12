@@ -7,8 +7,11 @@ namespace EVCharging.BE.Services.Services.Auth
     /// </summary>
     public interface IPasswordResetService
     {
-        // Token Management
+        // OTP Management
         Task<CreatePasswordResetTokenResponse> CreatePasswordResetTokenAsync(CreatePasswordResetTokenRequest request);
+        Task<VerifyOTPResponse> VerifyOTPAndCreateResetTokenAsync(VerifyOTPRequest request);
+        
+        // Token Management
         Task<ResetPasswordResponse> ResetPasswordAsync(ResetPasswordRequest request);
         Task<bool> ValidateTokenAsync(string token);
         Task<bool> RevokeTokenAsync(string token);
