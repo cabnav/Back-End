@@ -30,6 +30,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj" />
 		<ProjectReference Include="..\EVCharging.BE.Services\EVCharging.BE.Services.csproj">
 		  <Private>True</Private>
 		</ProjectReference>
@@ -52,7 +53,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\EVCharging.BE.Services\EVCharging.BE.Services.csproj" />
-		<ProjectReference Include="..\EVCharging.BE.DAL\EVCharging.BE.DAL.csproj" />
 	</ItemGroup>
 
 

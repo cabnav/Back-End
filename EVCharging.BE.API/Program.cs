@@ -162,6 +162,10 @@ builder.Services.AddHttpClient<ILocationService, LocationService>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IInteractiveMapService, InteractiveMapService>();
 
+// Analytics
+builder.Services.AddScoped<EVCharging.BE.Services.AnalyticsService>();
+
+
 
 // ------------------------------
 // 5) AuthN/AuthZ (JWT)
@@ -196,7 +200,7 @@ builder.Services.AddAuthorization(options =>
     // Add case-insensitive role policy for Staff
     options.AddPolicy("StaffPolicy", policy =>
         policy.RequireAssertion(context =>
-            context.User.IsInRole("Staff") || 
+            context.User.IsInRole("Staff") ||
             context.User.IsInRole("staff") ||
             context.User.IsInRole("STAFF")));
 
@@ -224,6 +228,15 @@ builder.Services.AddSignalR();
 // ------------------------------
 // 7) Build app
 // ------------------------------
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 var app = builder.Build();
 
 // ------------------------------
@@ -435,6 +448,7 @@ if (app.Environment.IsDevelopment())
 // ------------------------------
 // 9) Middlewares
 // ------------------------------
+app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -444,4 +458,4 @@ app.MapHub<ChargingSessionHub>("/chargingHub");
 // Controllers
 app.MapControllers();
 
-    app.Run();
+app.Run();
