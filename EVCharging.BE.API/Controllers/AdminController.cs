@@ -55,5 +55,14 @@ namespace EVCharging.BE.API.Controllers
             var result = await _service.GetStaffPerformanceAsync();
             return Ok(result);
         }
+
+        // ✅ Doanh thu theo trạm và phương thức thanh toán
+        [HttpGet("revenue-by-station-method")]
+        public async Task<IActionResult> GetRevenueByStationAndMethod()
+        {
+            var result = await _service.GetRevenueByStationAndMethodAsync();
+            return Ok(result);
+        }
+
     }
 }
