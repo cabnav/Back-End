@@ -71,10 +71,15 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
             catch (Exception ex)
             {
                 Console.WriteLine($"Error sending password reset OTP: {ex.Message}");
+                Console.WriteLine($"Stack trace: {ex.StackTrace}");
+                if (ex.InnerException != null)
+                {
+                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                }
                 return new CreatePasswordResetTokenResponse
                 {
                     Success = false,
-                    Message = "Có lỗi xảy ra khi gửi mã OTP đặt lại mật khẩu"
+                    Message = $"Có lỗi xảy ra khi gửi mã OTP đặt lại mật khẩu: {ex.Message}"
                 };
             }
         }

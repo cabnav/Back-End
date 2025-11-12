@@ -138,7 +138,11 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                 Console.WriteLine($"[OTP ERROR] Error in SendOTPAsync: {ex.Message}");
                 Console.WriteLine($"[OTP ERROR] Inner Exception: {ex.InnerException?.Message}");
                 Console.WriteLine($"[OTP ERROR] StackTrace: {ex.StackTrace}");
-                return false;
+                Console.WriteLine($"[OTP ERROR] Full exception details: {ex}");
+                
+                // Re-throw để PasswordResetService có thể catch và xử lý với message chi tiết
+                // Thay vì return false (mất thông tin lỗi)
+                throw;
             }
         }
 
