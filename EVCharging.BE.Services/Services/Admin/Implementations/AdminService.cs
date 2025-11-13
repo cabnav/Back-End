@@ -1,5 +1,11 @@
-﻿using EVCharging.BE.DAL;
+﻿using EVCharging.BE.Common.DTOs.Shared;
+using EVCharging.BE.Common.DTOs.Staff;
+using EVCharging.BE.DAL;
+using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace EVCharging.BE.Services.Services.Admin.Implementations
 {
@@ -162,6 +168,233 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                 TotalRevenue = totalRevenue,
                 Breakdown = data
             };
+        }
+
+        // ========== INCIDENT REPORT MANAGEMENT ==========
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố (cho admin)
+        /// </summary>
+        public async Task<object> GetIncidentReportsAsync(IncidentReportFilter filter)
+        {
+            try
+            {
+                // 1. Build query
+                var query = _db.IncidentReports
+                    .Include(ir => ir.Point)
+                    .ThenInclude(p => p.Station)
+                    .Include(ir => ir.Reporter)
+                    .Include(ir => ir.ResolvedByNavigation)
+                    .AsQueryable();
+
+                // 2. Apply filters
+                if (filter.Status != "all" && !string.IsNullOrEmpty(filter.Status))
+                {
+                    query = query.Where(ir => ir.Status != null && ir.Status.ToLower() == filter.Status.ToLower());
+                }
+
+                if (filter.Priority != "all" && !string.IsNullOrEmpty(filter.Priority))
+                {
+                    query = query.Where(ir => ir.Priority != null && ir.Priority.ToLower() == filter.Priority.ToLower());
+                }
+
+                if (filter.StationId.HasValue && filter.StationId.Value > 0)
+                {
+                    query = query.Where(ir => ir.Point != null && ir.Point.StationId == filter.StationId.Value);
+                }
+
+                if (filter.ReporterId.HasValue && filter.ReporterId.Value > 0)
+                {
+                    query = query.Where(ir => ir.ReporterId == filter.ReporterId.Value);
+                }
+
+                if (filter.FromDate.HasValue)
+                {
+                    query = query.Where(ir => ir.ReportedAt >= filter.FromDate.Value);
+                }
+
+                if (filter.ToDate.HasValue)
+                {
+                    query = query.Where(ir => ir.ReportedAt <= filter.ToDate.Value);
+                }
+
+                // 3. Get total count
+                var totalCount = await query.CountAsync();
+
+                // 4. Apply pagination
+                var incidents = await query
+                    .OrderByDescending(ir => ir.ReportedAt ?? DateTime.MinValue)
+                    .Skip((filter.Page - 1) * filter.PageSize)
+                    .Take(filter.PageSize)
+                    .ToListAsync();
+
+                // 5. Map to DTOs
+                var reports = incidents.Select(ir => new IncidentReportResponse
+                {
+                    ReportId = ir.ReportId,
+                    ReporterId = ir.ReporterId,
+                    ReporterName = ir.Reporter?.Name ?? "Unknown",
+                    PointId = ir.PointId,
+                    StationId = ir.Point?.StationId ?? 0,
+                    StationName = ir.Point?.Station?.Name ?? "Unknown",
+                    Title = ir.Title,
+                    Description = ir.Description,
+                    Priority = ir.Priority,
+                    Status = ir.Status,
+                    ReportedAt = ir.ReportedAt,
+                    ResolvedAt = ir.ResolvedAt,
+                    ResolvedBy = ir.ResolvedBy,
+                    ResolvedByName = ir.ResolvedByNavigation?.Name
+                }).ToList();
+
+                return new
+                {
+                    Reports = reports,
+                    TotalCount = totalCount,
+                    Page = filter.Page,
+                    PageSize = filter.PageSize,
+                    TotalPages = (int)Math.Ceiling(totalCount / (double)filter.PageSize)
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting incident reports: {ex.Message}");
+                return new
+                {
+                    Reports = new List<IncidentReportResponse>(),
+                    TotalCount = 0,
+                    Page = filter.Page,
+                    PageSize = filter.PageSize,
+                    TotalPages = 0
+                };
+            }
+        }
+
+        /// <summary>
+        /// Lấy chi tiết báo cáo sự cố
+        /// </summary>
+        public async Task<IncidentReportResponse?> GetIncidentReportByIdAsync(int reportId)
+        {
+            try
+            {
+                var incident = await _db.IncidentReports
+                    .Include(ir => ir.Point)
+                    .ThenInclude(p => p.Station)
+                    .Include(ir => ir.Reporter)
+                    .Include(ir => ir.ResolvedByNavigation)
+                    .FirstOrDefaultAsync(ir => ir.ReportId == reportId);
+
+                if (incident == null)
+                    return null;
+
+                return new IncidentReportResponse
+                {
+                    ReportId = incident.ReportId,
+                    ReporterId = incident.ReporterId,
+                    ReporterName = incident.Reporter?.Name ?? "Unknown",
+                    PointId = incident.PointId,
+                    StationId = incident.Point?.StationId ?? 0,
+                    StationName = incident.Point?.Station?.Name ?? "Unknown",
+                    Title = incident.Title,
+                    Description = incident.Description,
+                    Priority = incident.Priority,
+                    Status = incident.Status,
+                    ReportedAt = incident.ReportedAt,
+                    ResolvedAt = incident.ResolvedAt,
+                    ResolvedBy = incident.ResolvedBy,
+                    ResolvedByName = incident.ResolvedByNavigation?.Name
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting incident report by id: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật trạng thái báo cáo sự cố
+        /// </summary>
+        public async Task<IncidentReportResponse?> UpdateIncidentReportStatusAsync(int reportId, int adminId, UpdateIncidentStatusRequest request)
+        {
+            try
+            {
+                // 1. Get incident report
+                var incident = await _db.IncidentReports
+                    .Include(ir => ir.Point)
+                    .ThenInclude(p => p.Station)
+                    .Include(ir => ir.Reporter)
+                    .Include(ir => ir.ResolvedByNavigation)
+                    .FirstOrDefaultAsync(ir => ir.ReportId == reportId);
+
+                if (incident == null)
+                {
+                    Console.WriteLine($"Incident report {reportId} not found");
+                    return null;
+                }
+
+                // 2. Verify admin user
+                var adminUser = await _db.Users.FindAsync(adminId);
+                if (adminUser == null || !adminUser.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine($"User {adminId} is not an admin");
+                    return null;
+                }
+
+                // 3. Update status
+                var newStatus = request.Status.ToLower();
+                incident.Status = newStatus;
+
+                // 4. Handle status transitions
+                if (newStatus == "resolved")
+                {
+                    // Mark as resolved - set who and when
+                    incident.ResolvedBy = adminId;
+                    incident.ResolvedAt = DateTime.UtcNow;
+                }
+                else if (newStatus == "open")
+                {
+                    // If reopening, clear resolved info
+                    incident.ResolvedBy = null;
+                    incident.ResolvedAt = null;
+                }
+                else if (newStatus == "in_progress")
+                {
+                    // If moving to in_progress from resolved, keep resolved info for history
+                    // But if moving from open, no change needed
+                    // This preserves the resolution history even if reopened
+                }
+
+                // 5. Save changes
+                await _db.SaveChangesAsync();
+
+                // 6. Reload to get updated ResolvedByNavigation
+                await _db.Entry(incident).Reference(ir => ir.ResolvedByNavigation).LoadAsync();
+
+                // 7. Return updated report
+                return new IncidentReportResponse
+                {
+                    ReportId = incident.ReportId,
+                    ReporterId = incident.ReporterId,
+                    ReporterName = incident.Reporter?.Name ?? "Unknown",
+                    PointId = incident.PointId,
+                    StationId = incident.Point?.StationId ?? 0,
+                    StationName = incident.Point?.Station?.Name ?? "Unknown",
+                    Title = incident.Title,
+                    Description = incident.Description,
+                    Priority = incident.Priority,
+                    Status = incident.Status,
+                    ReportedAt = incident.ReportedAt,
+                    ResolvedAt = incident.ResolvedAt,
+                    ResolvedBy = incident.ResolvedBy,
+                    ResolvedByName = incident.ResolvedByNavigation?.Name
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error updating incident report status: {ex.Message}");
+                return null;
+            }
         }
 
     }
