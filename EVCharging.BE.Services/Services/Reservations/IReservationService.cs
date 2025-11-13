@@ -16,6 +16,9 @@ namespace EVCharging.BE.Services.Services.Reservations
         // 🟢 Lấy các đặt chỗ sắp tới của tài xế
         Task<IEnumerable<ReservationDTO>> GetUpcomingReservationsAsync(int userId, TimeSpan horizon);
 
+        // 🟢 Lấy lịch sử đặt chỗ của tài xế (tất cả trạng thái, có filter)
+        Task<IEnumerable<ReservationDTO>> GetReservationHistoryAsync(int userId, string? status = null, DateTime? fromDate = null, DateTime? toDate = null, int? stationId = null, string? stationName = null, string? stationAddress = null, int? pointId = null, int page = 1, int pageSize = 20);
+
         // 🟠 Huỷ đặt chỗ
         Task<bool> CancelReservationAsync(int userId, int reservationId, string? reason = null);
 

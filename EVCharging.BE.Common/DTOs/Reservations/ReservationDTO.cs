@@ -13,6 +13,8 @@ namespace EVCharging.BE.Common.DTOs.Reservations
 
         public int ReservationId { get; set; }
         public int DriverId { get; set; }
+         public string? StationName { get; set; }
+        public string? StationAddress { get; set; }
         public int PointId { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime EndTime { get; set; }
@@ -22,6 +24,8 @@ namespace EVCharging.BE.Common.DTOs.Reservations
         public ChargingPointDTO ChargingPoint { get; set; }
         public UserDTO Driver { get; set; }
         public string? ReservationCode { get; set; }
+        
+       
 
     }
 }
