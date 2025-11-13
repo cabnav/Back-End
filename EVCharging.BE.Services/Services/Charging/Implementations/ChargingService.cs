@@ -730,6 +730,93 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         /// <summary>
+        /// Lấy lịch sử phiên sạc của tài xế (tự động lấy từ userId, có filter và pagination)
+        /// </summary>
+        public async Task<IEnumerable<ChargingSessionResponse>> GetSessionHistoryAsync(int userId, string? status = null, DateTime? fromDate = null, DateTime? toDate = null, int? stationId = null, string? stationName = null, string? stationAddress = null, int? pointId = null, int page = 1, int pageSize = 20)
+        {
+            // Lấy driverId từ userId
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return Enumerable.Empty<ChargingSessionResponse>();
+
+            // Bắt đầu query với driverId
+            var q = _db.ChargingSessions
+                .Include(s => s.Point)
+                    .ThenInclude(p => p.Station)
+                .Include(s => s.Driver)
+                    .ThenInclude(d => d.User)
+                .Include(s => s.Reservation)
+                .Where(s => s.DriverId == driverId)
+                .AsQueryable();
+
+            // Filter theo trạng thái (status)
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                q = q.Where(s => s.Status == status);
+            }
+
+            // Filter theo khoảng thời gian (fromDate)
+            if (fromDate.HasValue)
+            {
+                var fromUtc = DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Utc);
+                q = q.Where(s => s.StartTime >= fromUtc);
+            }
+
+            // Filter theo khoảng thời gian (toDate)
+            if (toDate.HasValue)
+            {
+                var toUtc = DateTime.SpecifyKind(toDate.Value, DateTimeKind.Utc);
+                q = q.Where(s => s.StartTime <= toUtc);
+            }
+
+            // Filter theo trạm sạc (stationId) - ưu tiên stationId nếu có
+            if (stationId.HasValue)
+            {
+                q = q.Where(s => s.Point.StationId == stationId.Value);
+            }
+            else
+            {
+                // Ưu tiên filter theo tên trạm (dễ nhớ, ngắn gọn)
+                if (!string.IsNullOrWhiteSpace(stationName))
+                {
+                    q = q.Where(s => s.Point.Station != null && 
+                        EF.Functions.Like(s.Point.Station.Name, $"%{stationName}%"));
+                }
+                // Địa chỉ chỉ là bổ sung (optional), không bắt buộc
+                // Nếu có cả tên và địa chỉ, sẽ tìm trạm thỏa mãn cả hai
+                if (!string.IsNullOrWhiteSpace(stationAddress))
+                {
+                    q = q.Where(s => s.Point.Station != null && 
+                        EF.Functions.Like(s.Point.Station.Address, $"%{stationAddress}%"));
+                }
+            }
+
+            // Filter theo điểm sạc (pointId)
+            if (pointId.HasValue)
+            {
+                q = q.Where(s => s.PointId == pointId.Value);
+            }
+
+            // Phân trang (pagination)
+            if (page < 1) page = 1;
+            if (pageSize <= 0 || pageSize > 200) pageSize = 20;
+
+            var skip = (page - 1) * pageSize;
+
+            // Sắp xếp theo StartTime descending (mới nhất trước)
+            q = q.OrderByDescending(s => s.StartTime)
+                 .Skip(skip)
+                 .Take(pageSize);
+
+            var list = await q.ToListAsync();
+            return list.Select(MapToResponse);
+        }
+
+        /// <summary>
         /// Tạo log cho phiên sạc
         /// </summary>
         public async Task<bool> CreateSessionLogAsync(SessionLogCreateRequest request)
@@ -1052,6 +1139,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     AppliedDiscount = session.AppliedDiscount ?? 0,
                     FinalCost = session.FinalCost ?? 0,
                     Status = session.Status ?? "unknown",
+                    ReservationId = session.ReservationId,
                 ChargingPoint = new ChargingPointDTO
                 {
                     PointId = session.Point?.PointId ?? 0,

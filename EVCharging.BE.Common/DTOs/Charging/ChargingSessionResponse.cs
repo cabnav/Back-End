@@ -23,6 +23,7 @@ namespace EVCharging.BE.Common.DTOs.Charging
         public string Status { get; set; } = string.Empty;
         public string? Notes { get; set; }
         public string? Reason { get; set; }
+        public int? ReservationId { get; set; }
         
         // Navigation properties
         public ChargingPointDTO ChargingPoint { get; set; } = new();

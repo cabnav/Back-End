@@ -44,6 +44,11 @@ namespace EVCharging.BE.Services.Services.Charging
         /// </summary>
         Task<IEnumerable<ChargingSessionResponse>> GetSessionsByStationAsync(int stationId);
 
+        /// <summary>
+        /// Lấy lịch sử phiên sạc của tài xế (tự động lấy từ userId, có filter và pagination)
+        /// </summary>
+        Task<IEnumerable<ChargingSessionResponse>> GetSessionHistoryAsync(int userId, string? status = null, DateTime? fromDate = null, DateTime? toDate = null, int? stationId = null, string? stationName = null, string? stationAddress = null, int? pointId = null, int page = 1, int pageSize = 20);
+
         // ========== SESSION LOGS ==========
         
         /// <summary>
