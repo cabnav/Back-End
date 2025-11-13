@@ -67,6 +67,15 @@ namespace EVCharging.BE.API.Controllers
             if (reservation == null)
                 return NotFound(new { message = "Reservation not found or no permission" });
 
+            // ✅ Kiểm tra status của reservation - không cho check-in nếu đã bị hủy, hoàn thành, hoặc no-show
+            if (reservation.Status is "cancelled" or "completed" or "no_show")
+            {
+                return BadRequest(new { 
+                    message = $"Cannot check in. This reservation has been {reservation.Status}. " +
+                              $"Please create a new reservation or contact support if you believe this is an error." 
+                });
+            }
+
             // 2) Kiểm tra thời gian check-in hợp lệ
             var now = DateTime.UtcNow;
             

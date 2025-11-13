@@ -113,8 +113,17 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                             .FirstOrDefaultAsync(r => r.ReservationCode == request.ReservationCode && r.DriverId == request.DriverId);
                         if (reservation != null)
                         {
+                            // ✅ Kiểm tra status của reservation - không cho tạo session nếu đã bị hủy, hoàn thành, hoặc no-show
+                            if (reservation.Status is "cancelled" or "completed" or "no_show")
+                            {
+                                throw new InvalidOperationException(
+                                    $"Cannot start session. This reservation has been {reservation.Status}. " +
+                                    "Please create a new reservation or contact support."
+                                );
+                            }
+                            
                             reservationId = reservation.ReservationId;
-                            Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}, StartTime={reservation.StartTime}");
+                            Console.WriteLine($"[StartSessionAsync] Found reservation - ReservationId={reservationId}, ReservationCode={request.ReservationCode}, StartTime={reservation.StartTime}, Status={reservation.Status}");
                         }
                     }
                     
