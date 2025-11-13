@@ -334,6 +334,92 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         }
 
         /// <summary>
+        /// Get reservation history for a user (lịch sử đặt chỗ của tài xế - tất cả trạng thái)
+        /// </summary>
+        public async Task<IEnumerable<ReservationDTO>> GetReservationHistoryAsync(int userId, string? status = null, DateTime? fromDate = null, DateTime? toDate = null, int? stationId = null, string? stationName = null, string? stationAddress = null, int? pointId = null, int page = 1, int pageSize = 20)
+        {
+            // Lấy driverId từ userId
+            var driverId = await _db.DriverProfiles
+                .Where(d => d.UserId == userId)
+                .Select(d => d.DriverId)
+                .FirstOrDefaultAsync();
+
+            if (driverId == 0)
+                return Enumerable.Empty<ReservationDTO>();
+
+            // Bắt đầu query với driverId
+            var q = _db.Reservations
+                .Include(r => r.Point)
+                    .ThenInclude(p => p.Station)
+                .Include(r => r.Driver)
+                    .ThenInclude(d => d.User)
+                .Where(r => r.DriverId == driverId)
+                .AsQueryable();
+
+            // Filter theo trạng thái (status)
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                q = q.Where(r => r.Status == status);
+            }
+
+            // Filter theo khoảng thời gian (fromDate)
+            if (fromDate.HasValue)
+            {
+                var fromUtc = DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Utc);
+                q = q.Where(r => r.StartTime >= fromUtc);
+            }
+
+            // Filter theo khoảng thời gian (toDate)
+            if (toDate.HasValue)
+            {
+                var toUtc = DateTime.SpecifyKind(toDate.Value, DateTimeKind.Utc);
+                q = q.Where(r => r.StartTime <= toUtc);
+            }
+
+            // Filter theo trạm sạc (stationId) - ưu tiên stationId nếu có
+            if (stationId.HasValue)
+            {
+                q = q.Where(r => r.Point.StationId == stationId.Value);
+            }
+            else
+            {
+                // Ưu tiên filter theo tên trạm (dễ nhớ, ngắn gọn)
+                if (!string.IsNullOrWhiteSpace(stationName))
+                {
+                    q = q.Where(r => r.Point.Station != null && 
+                        EF.Functions.Like(r.Point.Station.Name, $"%{stationName}%"));
+                }
+                // Địa chỉ chỉ là bổ sung (optional), không bắt buộc
+                // Nếu có cả tên và địa chỉ, sẽ tìm trạm thỏa mãn cả hai
+                if (!string.IsNullOrWhiteSpace(stationAddress))
+                {
+                    q = q.Where(r => r.Point.Station != null && 
+                        EF.Functions.Like(r.Point.Station.Address, $"%{stationAddress}%"));
+                }
+            }
+
+            // Filter theo điểm sạc (pointId)
+            if (pointId.HasValue)
+            {
+                q = q.Where(r => r.PointId == pointId.Value);
+            }
+
+            // Phân trang (pagination)
+            if (page < 1) page = 1;
+            if (pageSize <= 0 || pageSize > 200) pageSize = 20;
+
+            var skip = (page - 1) * pageSize;
+
+            // Sắp xếp theo StartTime descending (mới nhất trước)
+            q = q.OrderByDescending(r => r.StartTime)
+                 .Skip(skip)
+                 .Take(pageSize);
+
+            var list = await q.ToListAsync();
+            return list.Select(MapToDto);
+        }
+
+        /// <summary>
         /// Cancel reservation (huỷ đặt chỗ)
         /// </summary>
         public async Task<bool> CancelReservationAsync(int userId, int reservationId, string? reason = null)
@@ -606,7 +692,10 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     Name = r.Driver.User.Name,
                     Email = r.Driver.User.Email,
                     Phone = r.Driver.User.Phone
-                }
+                },
+                // Thông tin trạm sạc (để dễ truy cập)
+                StationName = r.Point?.Station?.Name,
+                StationAddress = r.Point?.Station?.Address
             };
         }
 

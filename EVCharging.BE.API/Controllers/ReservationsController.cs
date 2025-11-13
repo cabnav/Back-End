@@ -400,6 +400,62 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
+        // 6️⃣.5 GET my-history (lịch sử đặt chỗ của tài xế)
+        // -------------------------------
+        [HttpGet("my-history")]
+        public async Task<IActionResult> GetMyHistory(
+            [FromQuery] string? status = null,
+            [FromQuery] DateTime? fromDate = null,
+            [FromQuery] DateTime? toDate = null,
+            [FromQuery] int? stationId = null,
+            [FromQuery] string? stationName = null,
+            [FromQuery] string? stationAddress = null,
+            [FromQuery] int? pointId = null,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                // Lấy userId từ JWT token
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+                // Validation
+                if (page < 1) page = 1;
+                if (pageSize <= 0 || pageSize > 200) pageSize = 20;
+
+                // Gọi service để lấy lịch sử đặt chỗ
+                var history = await _reservationService.GetReservationHistoryAsync(
+                    userId,
+                    status,
+                    fromDate,
+                    toDate,
+                    stationId,
+                    stationName,
+                    stationAddress,
+                    pointId,
+                    page,
+                    pageSize
+                );
+
+                return Ok(new
+                {
+                    data = history,
+                    page = page,
+                    pageSize = pageSize,
+                    count = history.Count()
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Đã xảy ra lỗi khi lấy lịch sử đặt chỗ",
+                    error = ex.Message
+                });
+            }
+        }
+
+        // -------------------------------
         // 7️⃣ CANCEL reservation (huỷ đặt chỗ bằng mã)
         // -------------------------------
         [HttpDelete("{reservationCode}")]
