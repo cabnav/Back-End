@@ -335,6 +335,94 @@ namespace EVCharging.BE.API.Controllers
             }
         }
 
+        /// <summary>
+        /// Tạo báo cáo sự cố
+        /// POST /api/staff/charging/incidents
+        /// </summary>
+        [HttpPost("incidents")]
+        public async Task<IActionResult> CreateIncidentReport([FromBody] CreateIncidentReportRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { 
+                        message = "Invalid request data", 
+                        errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage)) 
+                    });
+                }
+
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                var result = await _staffChargingService.CreateIncidentReportAsync(staffId, request);
+                if (result == null)
+                {
+                    return BadRequest(new { 
+                        message = "Failed to create incident report. Charging point may not exist or you don't have access to this station." 
+                    });
+                }
+
+                return Ok(new { 
+                    message = "Incident report created successfully", 
+                    data = result 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while creating incident report", 
+                    error = ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố tại trạm của staff
+        /// GET /api/staff/charging/incidents?status={status}&priority={priority}&page={page}&pageSize={pageSize}
+        /// </summary>
+        [HttpGet("incidents")]
+        public async Task<IActionResult> GetMyStationIncidentReports(
+            [FromQuery] string status = "all",
+            [FromQuery] string priority = "all",
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                // Validate pagination
+                if (page < 1) page = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+                var reports = await _staffChargingService.GetMyStationIncidentReportsAsync(staffId, status, priority, page, pageSize);
+                
+                return Ok(new { 
+                    message = "Incident reports retrieved successfully", 
+                    data = reports,
+                    count = reports.Count,
+                    page = page,
+                    pageSize = pageSize,
+                    filters = new
+                    {
+                        status = status,
+                        priority = priority
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while retrieving incident reports", 
+                    error = ex.Message 
+                });
+            }
+        }
+
         // ========== HELPER METHODS ==========
 
         /// <summary>

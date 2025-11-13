@@ -858,6 +858,167 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        // ========== INCIDENT REPORTING ==========
+
+        /// <summary>
+        /// Tạo báo cáo sự cố
+        /// </summary>
+        public async Task<IncidentReportResponse?> CreateIncidentReportAsync(int staffId, CreateIncidentReportRequest request)
+        {
+            try
+            {
+                // 1. Verify charging point exists
+                var chargingPoint = await _db.ChargingPoints
+                    .Include(cp => cp.Station)
+                    .FirstOrDefaultAsync(cp => cp.PointId == request.PointId);
+
+                if (chargingPoint == null)
+                {
+                    Console.WriteLine($"Charging point {request.PointId} not found");
+                    return null;
+                }
+
+                // 2. Verify staff assignment to this station
+                var hasAccess = await VerifyStaffAssignmentAsync(staffId, chargingPoint.StationId);
+                if (!hasAccess)
+                {
+                    Console.WriteLine($"Staff {staffId} does not have access to station {chargingPoint.StationId}");
+                    return null;
+                }
+
+                // 3. Get staff user info
+                var staffUser = await _db.Users.FindAsync(staffId);
+                if (staffUser == null)
+                {
+                    Console.WriteLine($"Staff user {staffId} not found");
+                    return null;
+                }
+
+                // 4. Create incident report
+                var incident = new IncidentReport
+                {
+                    ReporterId = staffId,
+                    PointId = request.PointId,
+                    Title = request.Title,
+                    Description = request.Description,
+                    Priority = request.Priority,
+                    Status = "open",
+                    ReportedAt = DateTime.UtcNow
+                };
+
+                _db.IncidentReports.Add(incident);
+                await _db.SaveChangesAsync();
+
+                // 5. Mark charging point as maintenance if required
+                if (request.RequiresMaintenance)
+                {
+                    chargingPoint.Status = "maintenance";
+                    await _db.SaveChangesAsync();
+                }
+
+                // 6. Log staff action (using pointId as sessionId for logging purposes)
+                await LogStaffActionAsync(staffId, "create_incident_report", request.PointId,
+                    $"Title: {request.Title}, Priority: {request.Priority}");
+
+                // 7. TODO: Notify admin if required (implement with SignalR or notification service)
+                if (request.NotifyAdmin)
+                {
+                    // await _notificationService.NotifyAdminIncidentAsync(incident.ReportId, request.Title);
+                    Console.WriteLine($"[ADMIN ALERT] New incident report created: {incident.ReportId} - {request.Title}");
+                }
+
+                // 8. Return response
+                return new IncidentReportResponse
+                {
+                    ReportId = incident.ReportId,
+                    ReporterId = incident.ReporterId,
+                    ReporterName = staffUser.Name ?? "Unknown",
+                    PointId = incident.PointId,
+                    StationId = chargingPoint.StationId,
+                    StationName = chargingPoint.Station?.Name ?? "Unknown",
+                    Title = incident.Title,
+                    Description = incident.Description,
+                    Priority = incident.Priority,
+                    Status = incident.Status,
+                    ReportedAt = incident.ReportedAt
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating incident report: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố tại trạm của staff
+        /// </summary>
+        public async Task<List<IncidentReportResponse>> GetMyStationIncidentReportsAsync(int staffId, string status = "all", string priority = "all", int page = 1, int pageSize = 20)
+        {
+            try
+            {
+                // 1. Get assigned stations
+                var stationIds = await GetAssignedStationsAsync(staffId);
+                if (!stationIds.Any())
+                {
+                    return new List<IncidentReportResponse>();
+                }
+
+                // 2. Build query
+                var query = _db.IncidentReports
+                    .Include(ir => ir.Point)
+                    .ThenInclude(p => p.Station)
+                    .Include(ir => ir.Reporter)
+                    .Include(ir => ir.ResolvedByNavigation)
+                    .Where(ir => stationIds.Contains(ir.Point.StationId));
+
+                // 3. Apply status filter
+                if (status != "all" && !string.IsNullOrEmpty(status))
+                {
+                    query = query.Where(ir => ir.Status != null && ir.Status.ToLower() == status.ToLower());
+                }
+
+                // 4. Apply priority filter
+                if (priority != "all" && !string.IsNullOrEmpty(priority))
+                {
+                    query = query.Where(ir => ir.Priority != null && ir.Priority.ToLower() == priority.ToLower());
+                }
+
+                // 5. Apply pagination
+                var incidents = await query
+                    .OrderByDescending(ir => ir.ReportedAt)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+
+                // 6. Map to DTOs
+                var result = incidents.Select(ir => new IncidentReportResponse
+                {
+                    ReportId = ir.ReportId,
+                    ReporterId = ir.ReporterId,
+                    ReporterName = ir.Reporter?.Name ?? "Unknown",
+                    PointId = ir.PointId,
+                    StationId = ir.Point?.StationId ?? 0,
+                    StationName = ir.Point?.Station?.Name ?? "Unknown",
+                    Title = ir.Title,
+                    Description = ir.Description,
+                    Priority = ir.Priority,
+                    Status = ir.Status,
+                    ReportedAt = ir.ReportedAt,
+                    ResolvedAt = ir.ResolvedAt,
+                    ResolvedBy = ir.ResolvedBy,
+                    ResolvedByName = ir.ResolvedByNavigation?.Name
+                }).ToList();
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting incident reports: {ex.Message}");
+                return new List<IncidentReportResponse>();
+            }
+        }
+
         // ========== LOGGING & AUDIT ==========
 
         /// <summary>

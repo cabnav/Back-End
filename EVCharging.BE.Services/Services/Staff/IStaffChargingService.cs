@@ -113,6 +113,27 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <returns>Thông tin payment đã cập nhật</returns>
         Task<PaymentResponse?> ConfirmCashPaymentAsync(int staffId, int paymentId, UpdatePaymentStatusRequest request);
 
+        // ========== INCIDENT REPORTING ==========
+
+        /// <summary>
+        /// Tạo báo cáo sự cố
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <param name="request">Thông tin báo cáo sự cố</param>
+        /// <returns>Thông tin báo cáo đã tạo</returns>
+        Task<IncidentReportResponse?> CreateIncidentReportAsync(int staffId, CreateIncidentReportRequest request);
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố tại trạm của staff
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <param name="status">Lọc theo trạng thái (all, open, in_progress, resolved) - mặc định "all"</param>
+        /// <param name="priority">Lọc theo mức độ ưu tiên (all, low, medium, high, critical) - mặc định "all"</param>
+        /// <param name="page">Số trang (mặc định 1)</param>
+        /// <param name="pageSize">Số bản ghi mỗi trang (mặc định 20)</param>
+        /// <returns>Danh sách báo cáo sự cố</returns>
+        Task<List<IncidentReportResponse>> GetMyStationIncidentReportsAsync(int staffId, string status = "all", string priority = "all", int page = 1, int pageSize = 20);
+
         // ========== LOGGING & AUDIT ==========
 
         /// <summary>
