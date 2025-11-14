@@ -82,5 +82,17 @@ namespace EVCharging.BE.Services.Services.Charging
         /// Kiểm tra có thể bắt đầu phiên sạc không (driver không có session active, point available)
         /// </summary>
         Task<bool> CanStartSessionAsync(int chargingPointId, int driverId, DateTime? scheduledStartTime = null);
+
+        // ========== INCIDENT REPORTS (DRIVER) ==========
+        
+        /// <summary>
+        /// Tạo báo cáo sự cố cho driver
+        /// </summary>
+        Task<EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse?> CreateIncidentReportAsync(int userId, EVCharging.BE.Common.DTOs.Staff.CreateIncidentReportRequest request);
+        
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố của driver (tự động lấy từ userId)
+        /// </summary>
+        Task<IEnumerable<EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse>> GetDriverIncidentReportsAsync(int userId, string status = "all", string priority = "all", int page = 1, int pageSize = 20);
     }
 }

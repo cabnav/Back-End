@@ -228,12 +228,13 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     .Take(filter.PageSize)
                     .ToListAsync();
 
-                // 5. Map to DTOs
+                // 5. Map to DTOs (bao gồm thông tin role của reporter)
                 var reports = incidents.Select(ir => new IncidentReportResponse
                 {
                     ReportId = ir.ReportId,
                     ReporterId = ir.ReporterId,
                     ReporterName = ir.Reporter?.Name ?? "Unknown",
+                    ReporterRole = ir.Reporter?.Role ?? "Unknown", // Thêm role của người báo cáo
                     PointId = ir.PointId,
                     StationId = ir.Point?.StationId ?? 0,
                     StationName = ir.Point?.Station?.Name ?? "Unknown",
@@ -292,6 +293,7 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     ReportId = incident.ReportId,
                     ReporterId = incident.ReporterId,
                     ReporterName = incident.Reporter?.Name ?? "Unknown",
+                    ReporterRole = incident.Reporter?.Role ?? "Unknown",
                     PointId = incident.PointId,
                     StationId = incident.Point?.StationId ?? 0,
                     StationName = incident.Point?.Station?.Name ?? "Unknown",
@@ -377,6 +379,7 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     ReportId = incident.ReportId,
                     ReporterId = incident.ReporterId,
                     ReporterName = incident.Reporter?.Name ?? "Unknown",
+                    ReporterRole = incident.Reporter?.Role ?? "Unknown",
                     PointId = incident.PointId,
                     StationId = incident.Point?.StationId ?? 0,
                     StationName = incident.Point?.Station?.Name ?? "Unknown",

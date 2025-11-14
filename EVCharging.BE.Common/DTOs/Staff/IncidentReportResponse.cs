@@ -8,6 +8,7 @@ namespace EVCharging.BE.Common.DTOs.Staff
         public int ReportId { get; set; }
         public int ReporterId { get; set; }
         public string ReporterName { get; set; } = string.Empty;
+        public string? ReporterRole { get; set; } // Role của người báo cáo (Driver, Staff, Admin)
         public int PointId { get; set; }
         public int StationId { get; set; }
         public string StationName { get; set; } = string.Empty;

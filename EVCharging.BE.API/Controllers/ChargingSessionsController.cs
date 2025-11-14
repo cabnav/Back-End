@@ -1,4 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Charging;
+using EVCharging.BE.Common.DTOs.Staff;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using EVCharging.BE.Services.Services.Charging;
@@ -561,6 +562,103 @@ namespace EVCharging.BE.API.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Đã xảy ra lỗi khi ước tính thời gian còn lại", error = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Tạo báo cáo sự cố (cho driver)
+        /// POST /api/chargingsessions/incidents
+        /// </summary>
+        [HttpPost("incidents")]
+        public async Task<IActionResult> CreateIncidentReport([FromBody] CreateIncidentReportRequest request)
+        {
+            try
+            {
+                if (!ModelState.IsValid)
+                {
+                    return BadRequest(new { 
+                        message = "Dữ liệu yêu cầu không hợp lệ", 
+                        errors = ModelState.Values.SelectMany(v => v.Errors.Select(e => e.ErrorMessage)) 
+                    });
+                }
+
+                // Lấy userId từ JWT token
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+                // Lấy driverId từ userId để đảm bảo user là driver
+                var driverProfile = await _db.DriverProfiles
+                    .FirstOrDefaultAsync(d => d.UserId == userId);
+                
+                if (driverProfile == null)
+                {
+                    return BadRequest(new { 
+                        message = "Không tìm thấy hồ sơ tài xế. Vui lòng hoàn thiện hồ sơ tài xế trước." 
+                    });
+                }
+
+                var result = await _chargingService.CreateIncidentReportAsync(userId, request);
+                if (result == null)
+                {
+                    return BadRequest(new { 
+                        message = "Không thể tạo báo cáo sự cố. Điểm sạc có thể không tồn tại hoặc đã xảy ra lỗi." 
+                    });
+                }
+
+                return Ok(new { 
+                    message = "Báo cáo sự cố đã được tạo thành công", 
+                    data = result 
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "Đã xảy ra lỗi khi tạo báo cáo sự cố", 
+                    error = ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố của driver (tự động lấy từ JWT token)
+        /// GET /api/chargingsessions/incidents?status={status}&priority={priority}&page={page}&pageSize={pageSize}
+        /// </summary>
+        [HttpGet("incidents")]
+        public async Task<IActionResult> GetMyIncidentReports(
+            [FromQuery] string status = "all",
+            [FromQuery] string priority = "all",
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20)
+        {
+            try
+            {
+                // Lấy userId từ JWT token
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+                // Validate pagination
+                if (page < 1) page = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+                var reports = await _chargingService.GetDriverIncidentReportsAsync(userId, status, priority, page, pageSize);
+                
+                return Ok(new { 
+                    message = "Danh sách báo cáo sự cố đã được lấy thành công", 
+                    data = reports,
+                    count = reports.Count(),
+                    page = page,
+                    pageSize = pageSize,
+                    filters = new
+                    {
+                        status = status,
+                        priority = priority
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "Đã xảy ra lỗi khi lấy danh sách báo cáo sự cố", 
+                    error = ex.Message 
+                });
             }
         }
     }
