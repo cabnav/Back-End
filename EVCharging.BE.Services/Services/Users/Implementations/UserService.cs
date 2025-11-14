@@ -45,10 +45,82 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             var user = await _db.Users.FindAsync(id);
             if (user == null) return false;
 
-            // Xóa tất cả DriverProfile liên quan trước
-            var relatedProfiles = _db.DriverProfiles.Where(dp => dp.UserId == id);
-            _db.DriverProfiles.RemoveRange(relatedProfiles);
+            // Tìm DriverProfile liên quan
+            var driverProfile = await _db.DriverProfiles
+                .FirstOrDefaultAsync(dp => dp.UserId == id);
 
+            if (driverProfile != null)
+            {
+                var driverId = driverProfile.DriverId;
+
+                // 1. Xóa tất cả Reservation của driver (có foreign key đến DriverProfile)
+                var reservations = await _db.Reservations
+                    .Where(r => r.DriverId == driverId)
+                    .ToListAsync();
+                _db.Reservations.RemoveRange(reservations);
+
+                // 2. Xóa tất cả ChargingSession của driver (có foreign key đến DriverProfile)
+                var sessions = await _db.ChargingSessions
+                    .Where(s => s.DriverId == driverId)
+                    .ToListAsync();
+                _db.ChargingSessions.RemoveRange(sessions);
+
+                // 3. Xóa DriverProfile
+                _db.DriverProfiles.Remove(driverProfile);
+            }
+
+            // 4. Xóa các bản ghi khác liên quan đến User
+            // Xóa hoặc cập nhật IncidentReport (nơi user là reporter hoặc resolved by)
+            // Option 1: Xóa luôn các báo cáo sự cố (nếu không cần giữ lịch sử)
+            var incidentReportsAsReporter = await _db.IncidentReports
+                .Where(ir => ir.ReporterId == id)
+                .ToListAsync();
+            _db.IncidentReports.RemoveRange(incidentReportsAsReporter);
+
+            // Set null cho ResolvedBy (vì có thể null)
+            var incidentReportsAsResolver = await _db.IncidentReports
+                .Where(ir => ir.ResolvedBy == id)
+                .ToListAsync();
+            foreach (var report in incidentReportsAsResolver)
+            {
+                report.ResolvedBy = null; // Set null vì có thể null
+            }
+
+            // Xóa các bản ghi khác (có thể set null hoặc xóa tùy business logic)
+            var payments = await _db.Payments
+                .Where(p => p.UserId == id)
+                .ToListAsync();
+            // Payments thường nên giữ lại cho lịch sử, nhưng nếu cần xóa:
+            // _db.Payments.RemoveRange(payments);
+
+            var subscriptions = await _db.Subscriptions
+                .Where(s => s.UserId == id)
+                .ToListAsync();
+            _db.Subscriptions.RemoveRange(subscriptions);
+
+            var notifications = await _db.Notifications
+                .Where(n => n.UserId == id)
+                .ToListAsync();
+            _db.Notifications.RemoveRange(notifications);
+
+            var passwordResetTokens = await _db.PasswordResetTokens
+                .Where(prt => prt.UserId == id)
+                .ToListAsync();
+            _db.PasswordResetTokens.RemoveRange(passwordResetTokens);
+
+            var walletTransactions = await _db.WalletTransactions
+                .Where(wt => wt.UserId == id)
+                .ToListAsync();
+            // WalletTransactions thường nên giữ lại cho lịch sử
+            // _db.WalletTransactions.RemoveRange(walletTransactions);
+
+            var invoices = await _db.Invoices
+                .Where(i => i.UserId == id)
+                .ToListAsync();
+            // Invoices thường nên giữ lại cho lịch sử
+            // _db.Invoices.RemoveRange(invoices);
+
+            // 5. Cuối cùng mới xóa User
             _db.Users.Remove(user);
             await _db.SaveChangesAsync();
             return true;
