@@ -4,6 +4,7 @@ using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
+using IncidentReport = EVCharging.BE.DAL.Entities.IncidentReport;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
 {
@@ -1235,6 +1236,165 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
             // Nếu chưa có log, dùng PowerOutput của điểm sạc
             return session.Point?.PowerOutput;
+        }
+
+        // ========== INCIDENT REPORTS (DRIVER) ==========
+
+        /// <summary>
+        /// Tạo báo cáo sự cố cho driver
+        /// </summary>
+        public async Task<EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse?> CreateIncidentReportAsync(int userId, EVCharging.BE.Common.DTOs.Staff.CreateIncidentReportRequest request)
+        {
+            try
+            {
+                // 1. Lấy driverId từ userId
+                var driverProfile = await _db.DriverProfiles
+                    .FirstOrDefaultAsync(d => d.UserId == userId);
+
+                if (driverProfile == null)
+                {
+                    Console.WriteLine($"Driver profile not found for userId {userId}");
+                    return null;
+                }
+
+                // 2. Verify charging point exists
+                var chargingPoint = await _db.ChargingPoints
+                    .Include(cp => cp.Station)
+                    .FirstOrDefaultAsync(cp => cp.PointId == request.PointId);
+
+                if (chargingPoint == null)
+                {
+                    Console.WriteLine($"Charging point {request.PointId} not found");
+                    return null;
+                }
+
+                // 3. Get driver user info
+                var driverUser = await _db.Users.FindAsync(userId);
+                if (driverUser == null)
+                {
+                    Console.WriteLine($"Driver user {userId} not found");
+                    return null;
+                }
+
+                // 4. Create incident report
+                var incident = new IncidentReport
+                {
+                    ReporterId = userId, // Driver's userId
+                    PointId = request.PointId,
+                    Title = request.Title,
+                    Description = request.Description,
+                    Priority = request.Priority,
+                    Status = "open",
+                    ReportedAt = DateTime.UtcNow
+                };
+
+                _db.IncidentReports.Add(incident);
+                await _db.SaveChangesAsync();
+
+                // 5. Mark charging point as maintenance if required (driver can suggest, but staff/admin decides)
+                // Note: Driver reports don't automatically put point in maintenance, that's for staff/admin to decide
+                if (request.RequiresMaintenance)
+                {
+                    // Just log the suggestion, don't change status automatically
+                    Console.WriteLine($"[DRIVER REPORT] Maintenance suggested for Point {request.PointId} by Driver {userId}");
+                }
+
+                // 6. TODO: Notify admin/staff if required (implement with SignalR or notification service)
+                if (request.NotifyAdmin)
+                {
+                    // await _notificationService.NotifyAdminIncidentAsync(incident.ReportId, request.Title);
+                    Console.WriteLine($"[ADMIN ALERT] New incident report from driver: {incident.ReportId} - {request.Title} by User {userId}");
+                }
+
+                // 7. Return response
+                return new EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse
+                {
+                    ReportId = incident.ReportId,
+                    ReporterId = incident.ReporterId,
+                    ReporterName = driverUser.Name ?? "Unknown",
+                    ReporterRole = driverUser.Role ?? "Driver",
+                    PointId = incident.PointId,
+                    StationId = chargingPoint.StationId,
+                    StationName = chargingPoint.Station?.Name ?? "Unknown",
+                    Title = incident.Title,
+                    Description = incident.Description,
+                    Priority = incident.Priority,
+                    Status = incident.Status,
+                    ReportedAt = incident.ReportedAt
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error creating incident report for driver: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Lấy danh sách báo cáo sự cố của driver (tự động lấy từ userId)
+        /// </summary>
+        public async Task<IEnumerable<EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse>> GetDriverIncidentReportsAsync(int userId, string status = "all", string priority = "all", int page = 1, int pageSize = 20)
+        {
+            try
+            {
+                // Validate pagination
+                if (page < 1) page = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+                // Build query
+                var query = _db.IncidentReports
+                    .Include(ir => ir.Point)
+                        .ThenInclude(p => p.Station)
+                    .Include(ir => ir.Reporter)
+                    .Include(ir => ir.ResolvedByNavigation)
+                    .Where(ir => ir.ReporterId == userId); // Only driver's own reports
+
+                // Apply status filter
+                if (!string.IsNullOrEmpty(status) && status.ToLower() != "all")
+                {
+                    query = query.Where(ir => ir.Status != null && ir.Status.ToLower() == status.ToLower());
+                }
+
+                // Apply priority filter
+                if (!string.IsNullOrEmpty(priority) && priority.ToLower() != "all")
+                {
+                    query = query.Where(ir => ir.Priority != null && ir.Priority.ToLower() == priority.ToLower());
+                }
+
+                // Order by most recent first
+                query = query.OrderByDescending(ir => ir.ReportedAt ?? DateTime.MinValue);
+
+                // Apply pagination
+                var reports = await query
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToListAsync();
+
+                // Map to response
+                return reports.Select(ir => new EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse
+                {
+                    ReportId = ir.ReportId,
+                    ReporterId = ir.ReporterId,
+                    ReporterName = ir.Reporter?.Name ?? "Unknown",
+                    ReporterRole = ir.Reporter?.Role ?? "Unknown",
+                    PointId = ir.PointId,
+                    StationId = ir.Point?.StationId ?? 0,
+                    StationName = ir.Point?.Station?.Name ?? "Unknown",
+                    Title = ir.Title,
+                    Description = ir.Description,
+                    Priority = ir.Priority,
+                    Status = ir.Status,
+                    ReportedAt = ir.ReportedAt,
+                    ResolvedAt = ir.ResolvedAt,
+                    ResolvedBy = ir.ResolvedBy,
+                    ResolvedByName = ir.ResolvedByNavigation?.Name
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting driver incident reports: {ex.Message}");
+                return Enumerable.Empty<EVCharging.BE.Common.DTOs.Staff.IncidentReportResponse>();
+            }
         }
     }
 }
