@@ -245,7 +245,8 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     ReportedAt = ir.ReportedAt,
                     ResolvedAt = ir.ResolvedAt,
                     ResolvedBy = ir.ResolvedBy,
-                    ResolvedByName = ir.ResolvedByNavigation?.Name
+                    ResolvedByName = ir.ResolvedByNavigation?.Name,
+                    AdminNotes = ir.AdminNotes
                 }).ToList();
 
                 return new
@@ -304,7 +305,8 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     ReportedAt = incident.ReportedAt,
                     ResolvedAt = incident.ResolvedAt,
                     ResolvedBy = incident.ResolvedBy,
-                    ResolvedByName = incident.ResolvedByNavigation?.Name
+                    ResolvedByName = incident.ResolvedByNavigation?.Name,
+                    AdminNotes = incident.AdminNotes
                 };
             }
             catch (Exception ex)
@@ -346,6 +348,12 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                 // 3. Update status
                 var newStatus = request.Status.ToLower();
                 incident.Status = newStatus;
+
+                // 3.5. Update admin notes if provided
+                if (!string.IsNullOrWhiteSpace(request.Notes))
+                {
+                    incident.AdminNotes = request.Notes;
+                }
 
                 // 4. Handle status transitions
                 if (newStatus == "resolved")
@@ -390,7 +398,8 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     ReportedAt = incident.ReportedAt,
                     ResolvedAt = incident.ResolvedAt,
                     ResolvedBy = incident.ResolvedBy,
-                    ResolvedByName = incident.ResolvedByNavigation?.Name
+                    ResolvedByName = incident.ResolvedByNavigation?.Name,
+                    AdminNotes = incident.AdminNotes
                 };
             }
             catch (Exception ex)

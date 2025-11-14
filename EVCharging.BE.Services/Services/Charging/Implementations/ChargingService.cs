@@ -1320,7 +1320,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     Description = incident.Description,
                     Priority = incident.Priority,
                     Status = incident.Status,
-                    ReportedAt = incident.ReportedAt
+                    ReportedAt = incident.ReportedAt,
+                    AdminNotes = incident.AdminNotes
                 };
             }
             catch (Exception ex)
@@ -1387,7 +1388,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     ReportedAt = ir.ReportedAt,
                     ResolvedAt = ir.ResolvedAt,
                     ResolvedBy = ir.ResolvedBy,
-                    ResolvedByName = ir.ResolvedByNavigation?.Name
+                    ResolvedByName = ir.ResolvedByNavigation?.Name,
+                    AdminNotes = ir.AdminNotes
                 });
             }
             catch (Exception ex)

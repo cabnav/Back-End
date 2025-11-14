@@ -20,6 +20,7 @@ namespace EVCharging.BE.Common.DTOs.Staff
         public DateTime? ResolvedAt { get; set; }
         public int? ResolvedBy { get; set; }
         public string? ResolvedByName { get; set; }
+        public string? AdminNotes { get; set; } 
     }
 }
 

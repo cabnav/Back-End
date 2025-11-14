@@ -25,6 +25,8 @@ public partial class IncidentReport
 
     public int? ResolvedBy { get; set; }
 
+    public string? AdminNotes { get; set; }
+
     public virtual ChargingPoint Point { get; set; } = null!;
 
     public virtual User Reporter { get; set; } = null!;
