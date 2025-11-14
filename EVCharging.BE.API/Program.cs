@@ -138,6 +138,8 @@ builder.Services.AddScoped<IStaffChargingService, StaffChargingService>();
 
 // Admin - Staff Management
 builder.Services.AddScoped<IAdminStaffService, AdminStaffService>();
+// Admin - Deposit Management
+builder.Services.AddScoped<IDepositService, DepositService>();
 
 // Payments
 builder.Services.AddScoped<IWalletService, WalletService>();

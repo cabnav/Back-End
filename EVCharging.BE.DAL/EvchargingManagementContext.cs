@@ -27,6 +27,8 @@ public partial class EvchargingManagementContext : DbContext
 
     public virtual DbSet<CorporateAccount> CorporateAccounts { get; set; }
 
+    public virtual DbSet<Deposit> Deposits { get; set; }
+
     public virtual DbSet<DriverProfile> DriverProfiles { get; set; }
 
     public virtual DbSet<EmailOTP> EmailOTPs { get; set; }
@@ -274,6 +276,26 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey(d => d.AdminUserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__Corporate__admin__440B1D61");
+        });
+
+        modelBuilder.Entity<Deposit>(entity =>
+        {
+            entity.HasKey(e => e.DepositId).HasName("PK__Deposit__deposit_id");
+
+            entity.ToTable("Deposit");
+
+            entity.Property(e => e.DepositId).HasColumnName("deposit_id");
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("amount");
+            entity.Property(e => e.Description)
+                .HasMaxLength(500)
+                .HasColumnName("description");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasColumnName("status");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<DriverProfile>(entity =>

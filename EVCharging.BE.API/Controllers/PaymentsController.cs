@@ -1,4 +1,5 @@
 ﻿using EVCharging.BE.Common.DTOs.Payments;
+using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Payment;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -22,17 +23,20 @@ namespace EVCharging.BE.API.Controllers
         private readonly IMomoService _momoService;
         private readonly IInvoiceService _invoiceService;
         private readonly EvchargingManagementContext _db;
+        private readonly IDepositService _depositService;
 
         public PaymentsController(
             IPaymentService paymentService,
             IMomoService momoService,
             IInvoiceService invoiceService,
-            EvchargingManagementContext db)
+            EvchargingManagementContext db,
+            IDepositService depositService)
         {
             _paymentService = paymentService;
             _momoService = momoService;
             _invoiceService = invoiceService;
             _db = db;
+            _depositService = depositService;
         }
 
         /// <summary>
@@ -460,11 +464,14 @@ namespace EVCharging.BE.API.Controllers
                     return StatusCode(403, new { message = "Bạn không có quyền thanh toán đặt chỗ này." });
                 }
 
+                // Lấy giá tiền cọc hiện tại
+                var depositAmount = await _depositService.GetCurrentDepositAmountAsync();
+
                 // Kiểm tra đã thanh toán cọc chưa
                 var existingDeposit = await _db.Payments
                     .Where(p => p.ReservationId == reservation.ReservationId && 
                                p.PaymentStatus == "success" &&
-                               p.Amount == 20000)
+                               p.PaymentType == "deposit")
                     .OrderByDescending(p => p.CreatedAt)
                     .FirstOrDefaultAsync();
 
@@ -510,8 +517,6 @@ namespace EVCharging.BE.API.Controllers
                         ? originalTempInvoice + suffixStr
                         : originalTempInvoice.Substring(0, 50 - suffixStr.Length) + suffixStr;
                 }
-                
-                var depositAmount = 20000m;
 
                 var payment = new PaymentEntity
                 {

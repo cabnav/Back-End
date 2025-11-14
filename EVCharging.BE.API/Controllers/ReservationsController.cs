@@ -1,5 +1,6 @@
 ﻿using EVCharging.BE.Common.DTOs.Reservations;
 using EVCharging.BE.Common.DTOs.Charging;
+using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Background;
 using EVCharging.BE.Services.Services.Reservations;
 using Microsoft.AspNetCore.Authorization;
@@ -22,6 +23,7 @@ namespace EVCharging.BE.API.Controllers
         private readonly IStationSearchService _stationSearchService;
         private readonly ReservationBackgroundOptions _opt;
         private readonly EvchargingManagementContext _db;
+        private readonly IDepositService _depositService;
 
         public ReservationsController(
             IReservationService reservationService,
@@ -29,7 +31,8 @@ namespace EVCharging.BE.API.Controllers
             IStationSearchService stationSearchService,
             EVCharging.BE.Services.Services.Charging.IChargingService chargingService,
             IOptions<ReservationBackgroundOptions> opt,
-            EvchargingManagementContext db)
+            EvchargingManagementContext db,
+            IDepositService depositService)
         {
             _reservationService = reservationService;
             _qrCodeService = qrCodeService;
@@ -37,6 +40,7 @@ namespace EVCharging.BE.API.Controllers
             _chargingService = chargingService;
             _opt = opt.Value;
             _db = db;
+            _depositService = depositService;
         }
 
         // -------------------------------
@@ -320,12 +324,15 @@ namespace EVCharging.BE.API.Controllers
                         }
                     }
 
+                    // Lấy giá tiền cọc hiện tại
+                    var depositAmount = await _depositService.GetCurrentDepositAmountAsync();
+
                     // Trả về response yêu cầu thanh toán cọc qua MoMo
                     return BadRequest(new
                     {
                         message = userMessage,
                         requiresDepositPayment = true,
-                        depositAmount = 20000,
+                        depositAmount = depositAmount,
                         reservationId = reservationId,
                         reservationCode = reservationCode, // ✅ Thêm reservationCode để người dùng dùng ngay
                         paymentMethod = "momo",

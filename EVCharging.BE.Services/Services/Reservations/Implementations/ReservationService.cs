@@ -3,6 +3,7 @@ using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Payment;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -22,17 +23,18 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         private readonly EvchargingManagementContext _db;   
         private readonly ITimeValidationService _timeValidator;
         private readonly IWalletService _walletService;
-
-        private const decimal DEPOSIT_AMOUNT = 20000m; // Cọc 20,000 VNĐ
+        private readonly IDepositService _depositService;
 
         public ReservationService(
             EvchargingManagementContext db,
             ITimeValidationService timeValidator,
-            IWalletService walletService)
+            IWalletService walletService,
+            IDepositService depositService)
         {
             _db = db;
             _timeValidator = timeValidator;
             _walletService = walletService;
+            _depositService = depositService;
         }
 
         /// <summary>
@@ -150,16 +152,17 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
             if (entity.Driver != null)
                 await _db.Entry(entity.Driver).Reference(d => d.User).LoadAsync();
 
-            // Thu cọc 20,000 VNĐ sau khi tạo reservation thành công
+            // Thu cọc sau khi tạo reservation thành công
             try
             {
+                var depositAmount = await _depositService.GetCurrentDepositAmountAsync();
                 var walletBalance = await _walletService.GetBalanceAsync(userId);
-                if (walletBalance >= DEPOSIT_AMOUNT)
+                if (walletBalance >= depositAmount)
                 {
                     // Ví đủ tiền: trừ từ ví và tạo Payment record
                     await _walletService.DebitAsync(
                         userId,
-                        DEPOSIT_AMOUNT,
+                        depositAmount,
                         $"Cọc đặt chỗ #{entity.ReservationCode}",
                         entity.ReservationId
                     );
@@ -188,7 +191,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     {
                         UserId = userId,
                         ReservationId = entity.ReservationId,
-                        Amount = DEPOSIT_AMOUNT,
+                        Amount = depositAmount,
                         PaymentMethod = "wallet",
                         PaymentStatus = "success",
                         PaymentType = "deposit", // ⭐ Quan trọng: Phân biệt loại payment
@@ -205,7 +208,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     throw new InvalidOperationException(
                         $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
                         $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
-                        $"Cần: {DEPOSIT_AMOUNT:F0} VNĐ. " +
+                        $"Cần: {depositAmount:F0} VNĐ. " +
                         $"vui lòng nạp thêm tiền vào ví hoặc thanh toán cọc qua Momo.|{entity.ReservationId}"
                     );
                 }
@@ -495,8 +498,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 var depositPayment = await _db.Payments
                     .Where(p => p.ReservationId == reservation.ReservationId &&
                                p.PaymentStatus == "success" &&
-                               p.PaymentType == "deposit" &&
-                               p.Amount == DEPOSIT_AMOUNT)
+                               p.PaymentType == "deposit")
                     .OrderByDescending(p => p.CreatedAt)
                     .FirstOrDefaultAsync();
 
@@ -505,6 +507,8 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     // Không có deposit payment → không cần hoàn cọc
                     return;
                 }
+
+                var depositAmount = depositPayment.Amount;
 
                 // Kiểm tra thời gian hủy: nếu hủy trước 30 phút trước start time → hoàn cọc
                 var now = DateTime.UtcNow;
@@ -522,12 +526,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     // Hủy trước 30 phút → hoàn cọc vào ví
                     await _walletService.CreditAsync(
                         userId,
-                        DEPOSIT_AMOUNT,
+                        depositAmount,
                         $"Hoàn cọc hủy đặt chỗ #{reservation.ReservationCode}",
                         reservation.ReservationId
                     );
 
-                    Console.WriteLine($"✅ Đã hoàn cọc {DEPOSIT_AMOUNT:F0} VNĐ cho reservation {reservation.ReservationId} (hủy trước {cancelBeforeStart.TotalMinutes:F0} phút)");
+                    Console.WriteLine($"✅ Đã hoàn cọc {depositAmount:F0} VNĐ cho reservation {reservation.ReservationId} (hủy trước {cancelBeforeStart.TotalMinutes:F0} phút)");
                 }
                 else
                 {
@@ -535,7 +539,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     Console.WriteLine($"⚠️ Không hoàn cọc cho reservation {reservation.ReservationId} (hủy chỉ còn {cancelBeforeStart.TotalMinutes:F0} phút, yêu cầu tối thiểu {REFUND_DEADLINE_MINUTES} phút)");
                     
                     // Gửi thông báo cho user về việc không hoàn cọc
-                    await SendNoRefundNotificationAsync(userId, reservationWithDetails ?? reservation, cancelBeforeStart.TotalMinutes);
+                    await SendNoRefundNotificationAsync(userId, reservationWithDetails ?? reservation, cancelBeforeStart.TotalMinutes, depositAmount);
                 }
             }
             catch (Exception ex)
@@ -549,13 +553,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         /// <summary>
         /// Gửi thông báo khi hủy reservation trong vòng 30 phút (không hoàn cọc)
         /// </summary>
-        private async Task SendNoRefundNotificationAsync(int userId, DAL.Entities.Reservation reservation, double minutesBeforeStart)
+        private async Task SendNoRefundNotificationAsync(int userId, DAL.Entities.Reservation reservation, double minutesBeforeStart, decimal depositAmount)
         {
             try
             {
                 var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
                 var startTime = reservation.StartTime;
-                var depositAmount = DEPOSIT_AMOUNT;
 
                 var title = "Hủy đặt chỗ - Không hoàn cọc";
                 var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
