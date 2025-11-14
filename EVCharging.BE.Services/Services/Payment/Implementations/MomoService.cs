@@ -9,6 +9,7 @@ using EVCharging.BE.DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
+using EVCharging.BE.Services.Services.Payment;
 
 namespace EVCharging.BE.Services.Services.Payment.Implementations
 {
@@ -21,17 +22,20 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
         private readonly EvchargingManagementContext _db;
         private readonly IInvoiceService _invoiceService;
         private readonly IConfiguration _configuration;
+        private readonly IWalletService _walletService;
 
         public MomoService(
             IOptions<MomoOptionModel> options,
             EvchargingManagementContext db,
             IInvoiceService invoiceService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IWalletService walletService)
         {
             _options = options;
             _db = db;
             _invoiceService = invoiceService;
             _configuration = configuration;
+            _walletService = walletService;
         }
 
         public async Task<MomoCreatePaymentResponseDto> CreatePaymentAsync(MomoCreatePaymentRequestDto model)
@@ -206,18 +210,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                 Console.WriteLine($"✅ Signature verification PASSED for OrderId: {result.OrderId}");
 
-                // Parse orderId để lấy sessionId
-                var orderIdParts = result.OrderId.Split('_');
-                if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
-                {
-                    return new MomoCallbackResultDto
-                    {
-                        Success = false,
-                        ErrorMessage = "Invalid orderId format",
-                        OrderId = result.OrderId
-                    };
-                }
-
                 // Tìm payment record
                 var payment = await _db.Payments
                     .FirstOrDefaultAsync(p => p.InvoiceNumber == result.OrderId);
@@ -240,10 +232,14 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         ?? _configuration["AppSettings:BaseUrl"]
                         ?? "http://localhost:5172";
 
+                    var redirect = (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
+                        ? $"{frontendUrl}/wallet/topup/success?orderId={result.OrderId}"
+                        : $"{frontendUrl}/payment/success?orderId={result.OrderId}";
+
                     return new MomoCallbackResultDto
                     {
                         Success = true,
-                        RedirectUrl = $"{frontendUrl}/payment/success?orderId={result.OrderId}",
+                        RedirectUrl = redirect,
                         OrderId = result.OrderId
                     };
                 }
@@ -252,7 +248,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 // MoMo trả về: 
                 // - resultCode = "0" (thành công) 
                 // - hoặc errorCode = "0" (không có lỗi = thành công)
-                // Nếu không có resultCode trong URL thì kiểm tra errorCode
                 var isSuccess = (!string.IsNullOrEmpty(result.PaymentStatus) && result.PaymentStatus == "0") ||
                                (!string.IsNullOrEmpty(result.ErrorCode) && result.ErrorCode == "0");
 
@@ -290,6 +285,20 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         }
                     }
 
+                    // Nếu đây là top-up (không có SessionId và không có ReservationId) => credit ví
+                    if (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
+                    {
+                        try
+                        {
+                            await _walletService.CreditAsync(payment.UserId, payment.Amount, $"Top-up via momo - Invoice: {payment.InvoiceNumber}", payment.PaymentId);
+                            Console.WriteLine($"✅ Wallet credited for UserId {payment.UserId}, Amount {payment.Amount}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"⚠️ Error crediting wallet for PaymentId {payment.PaymentId}: {ex.Message}");
+                        }
+                    }
+
                     // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
                     var frontendUrl = _configuration["AppSettings:FrontendUrl"]
                         ?? _configuration["AppSettings:BaseUrl"]
@@ -298,7 +307,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     return new MomoCallbackResultDto
                     {
                         Success = true,
-                        RedirectUrl = $"{frontendUrl}/payment/success?orderId={result.OrderId}",
+                        RedirectUrl = (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
+                            ? $"{frontendUrl}/wallet/topup/success?orderId={result.OrderId}"
+                            : $"{frontendUrl}/payment/success?orderId={result.OrderId}",
                         OrderId = result.OrderId
                     };
                 }
@@ -316,7 +327,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     return new MomoCallbackResultDto
                     {
                         Success = false,
-                        RedirectUrl = $"{frontendUrl}/payment/failed?orderId={result.OrderId}&errorCode={result.ErrorCode}",
+                        RedirectUrl = (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
+                            ? $"{frontendUrl}/wallet/topup/failed?orderId={result.OrderId}&errorCode={result.ErrorCode}"
+                            : $"{frontendUrl}/payment/failed?orderId={result.OrderId}&errorCode={result.ErrorCode}",
                         OrderId = result.OrderId,
                         ErrorCode = result.ErrorCode,
                         ErrorMessage = "Payment failed"
@@ -365,18 +378,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
                 Console.WriteLine($"✅ Notify: Signature verification PASSED for OrderId: {result.OrderId}");
 
-                // Parse orderId để lấy sessionId
-                var orderIdParts = result.OrderId.Split('_');
-                if (orderIdParts.Length < 3 || !int.TryParse(orderIdParts[0], out var sessionId))
-                {
-                    return new MomoNotifyResultDto
-                    {
-                        Success = false,
-                        Message = "Invalid orderId format",
-                        OrderId = result.OrderId
-                    };
-                }
-
                 // Tìm payment record
                 var payment = await _db.Payments
                     .FirstOrDefaultAsync(p => p.InvoiceNumber == result.OrderId);
@@ -422,7 +423,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     Console.WriteLine($"✅ Notify: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
                     // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
-                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
                     if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices
@@ -441,6 +441,20 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                             payment.InvoiceNumber = invoice.InvoiceNumber;
                             await _db.SaveChangesAsync();
                             Console.WriteLine($"✅ Notify: Invoice created - InvoiceNumber: {invoice.InvoiceNumber}, SessionId: {payment.SessionId}");
+                        }
+                    }
+
+                    // NEW: Nếu đây là top-up (không có SessionId và không có ReservationId) => credit ví
+                    if (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
+                    {
+                        try
+                        {
+                            await _walletService.CreditAsync(payment.UserId, payment.Amount, $"Top-up via momo - Invoice: {payment.InvoiceNumber}", payment.PaymentId);
+                            Console.WriteLine($"✅ Wallet credited for UserId {payment.UserId}, Amount {payment.Amount}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"⚠️ Error crediting wallet for PaymentId {payment.PaymentId}: {ex.Message}");
                         }
                     }
 
