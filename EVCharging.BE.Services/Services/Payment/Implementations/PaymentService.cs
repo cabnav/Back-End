@@ -115,8 +115,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 depositPayment = await _db.Payments
                     .Where(p => p.ReservationId == reservation.ReservationId
                         && p.PaymentType == "deposit"
-                        && p.PaymentStatus == "success"
-                        && p.Amount == 20000m)
+                        && p.PaymentStatus == "success")
                     .OrderByDescending(p => p.CreatedAt)
                     .FirstOrDefaultAsync();
 

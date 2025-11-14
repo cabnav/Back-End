@@ -112,8 +112,7 @@ namespace EVCharging.BE.Services.Services.Background
                                    r.CreatedAt.Value < depositTimeoutBorder &&
                                    !db.Payments.Any(p => p.ReservationId == r.ReservationId &&
                                                        p.PaymentStatus == "success" &&
-                                                       p.PaymentType == "deposit" &&
-                                                       p.Amount == 20000m))
+                                                       p.PaymentType == "deposit"))
                         .ToListAsync(stoppingToken);
 
                     if (toCancelNoDeposit.Count > 0)
