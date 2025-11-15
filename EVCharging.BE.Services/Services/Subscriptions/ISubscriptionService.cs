@@ -23,6 +23,11 @@ namespace EVCharging.BE.Services.Services.Subscriptions
         /// Lấy discount rate của user (từ MembershipTier)
         /// </summary>
         Task<decimal> GetDiscountRateAsync(int userId);
+
+        /// <summary>
+        /// Kích hoạt subscription từ payment (sau khi thanh toán MoMo thành công)
+        /// </summary>
+        Task<bool> ActivateSubscriptionFromPaymentAsync(int userId, string tier, string billingCycle);
     }
 }
 
