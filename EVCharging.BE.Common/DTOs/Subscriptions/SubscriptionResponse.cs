@@ -12,6 +12,7 @@ namespace EVCharging.BE.Common.DTOs.Subscriptions
         public bool IsActive { get; set; }
         public string? BillingCycle { get; set; }
         public decimal? Price { get; set; }
+        public string? PaymentUrl { get; set; } // URL thanh toán MoMo (nếu payment method là momo)
     }
 }
 
