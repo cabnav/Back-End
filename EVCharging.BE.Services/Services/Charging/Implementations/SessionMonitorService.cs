@@ -1274,14 +1274,27 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     session.EnergyUsed = calculatedEnergy;
                     session.DurationMinutes = (int)(DateTime.UtcNow - session.StartTime).TotalMinutes;
 
-                    // Cập nhật SOC dựa trên EnergyUsed
+                    // ✅ Cập nhật InitialSOC (pin hiện tại) dựa trên EnergyUsed
+                    // InitialSOC = pin hiện tại, cập nhật khi sạc lên 1-2%
                     if (session.Driver?.BatteryCapacity.HasValue == true && session.Driver.BatteryCapacity.Value > 0)
                     {
                         var batteryCapacity = session.Driver.BatteryCapacity.Value;
                         var socIncrease = (int)((calculatedEnergy / batteryCapacity) * 100);
-                        var newSOC = session.InitialSoc + socIncrease;
+                        var currentSOC = session.InitialSoc + socIncrease;
+                        currentSOC = Math.Min(currentSOC, 100); // Không vượt quá 100%
 
-                        session.FinalSoc = Math.Min(newSOC, 100);
+                        // ✅ Cập nhật InitialSOC khi pin tăng 1-2% so với InitialSOC hiện tại
+                        // InitialSOC luôn phản ánh tình trạng pin hiện tại
+                        const int SOC_UPDATE_THRESHOLD = 2; // Cập nhật khi tăng 2% trở lên
+                        if (currentSOC > session.InitialSoc + SOC_UPDATE_THRESHOLD)
+                        {
+                            var oldInitialSOC = session.InitialSoc;
+                            session.InitialSoc = currentSOC;
+                            _logger.LogDebug(
+                                "Session {SessionId} - Cập nhật InitialSOC (pin hiện tại) từ {OldInitialSOC}% lên {NewInitialSOC}% (tăng {Increase}%)",
+                                sessionId, oldInitialSOC, session.InitialSoc, currentSOC - oldInitialSOC);
+                        }
+                        // Nếu không đủ threshold, giữ nguyên InitialSOC (chưa tăng đủ)
                     }
 
                     await db.SaveChangesAsync();
