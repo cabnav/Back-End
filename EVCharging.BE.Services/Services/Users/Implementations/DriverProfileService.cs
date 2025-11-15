@@ -2,6 +2,7 @@ using EVCharging.BE.Common.DTOs.DriverProfiles;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.Services.Services.Users.Implementations
@@ -9,7 +10,13 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
     public class DriverProfileService : IDriverProfileService
     {
         private readonly EvchargingManagementContext _db;
-        public DriverProfileService(EvchargingManagementContext db) { _db = db; }
+        private readonly INotificationService _notificationService;
+
+        public DriverProfileService(EvchargingManagementContext db, INotificationService notificationService)
+        {
+            _db = db;
+            _notificationService = notificationService;
+        }
 
         private static DriverProfileDTO Map(DriverProfile d) => new DriverProfileDTO
         {
@@ -17,7 +24,10 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             LicenseNumber = d.LicenseNumber ?? "",
             VehicleModel = d.VehicleModel ?? "",
             VehiclePlate = d.VehiclePlate ?? "",
-            BatteryCapacity = d.BatteryCapacity
+            BatteryCapacity = d.BatteryCapacity,
+            CorporateId = d.CorporateId,
+            Status = d.Status ?? "active",
+            CreatedAt = d.CreatedAt
         };
 
         public async Task<IEnumerable<DriverProfileDTO>> GetAllAsync(int page = 1, int pageSize = 50)
@@ -60,6 +70,25 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             if (req.BatteryCapacity.HasValue && req.BatteryCapacity.Value <= 0)
                 throw new ArgumentException("BatteryCapacity must be greater than 0");
 
+            // ✅ Xác định Status
+            string status;
+            if (req.CorporateId.HasValue)
+            {
+                // Có CorporateId → Cần approval
+                status = "pending";
+                
+                // ✅ Kiểm tra Corporate có tồn tại không
+                var corporate = await _db.CorporateAccounts
+                    .FirstOrDefaultAsync(c => c.CorporateId == req.CorporateId.Value);
+                if (corporate == null)
+                    throw new KeyNotFoundException("Corporate không tồn tại");
+            }
+            else
+            {
+                // Không có CorporateId → Tự động active
+                status = "active";
+            }
+
             var entity = new DriverProfile
             {
                 UserId = req.UserId,
@@ -67,10 +96,31 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                 VehicleModel = req.VehicleModel,
                 VehiclePlate = req.VehiclePlate,
                 BatteryCapacity = req.BatteryCapacity,
-                CorporateId = req.CorporateId
+                CorporateId = req.CorporateId,
+                Status = status,
+                CreatedAt = DateTime.UtcNow
             };
+            
             _db.DriverProfiles.Add(entity);
             await _db.SaveChangesAsync();
+
+            // ✅ Nếu có CorporateId → Gửi notification cho AdminUserId
+            if (req.CorporateId.HasValue)
+            {
+                var corporate = await _db.CorporateAccounts
+                    .FirstOrDefaultAsync(c => c.CorporateId == req.CorporateId.Value);
+                
+                if (corporate != null)
+                {
+                    await _notificationService.SendNotificationAsync(
+                        corporate.AdminUserId,
+                        "Driver mới xin tham gia công ty",
+                        $"Driver {user.Name} (Email: {user.Email}) đã đăng ký tham gia công ty {corporate.CompanyName}. Vui lòng xác nhận.",
+                        "driver_join_request",
+                        entity.DriverId
+                    );
+                }
+            }
 
             return Map(entity);
         }
@@ -99,10 +149,22 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                 d.BatteryCapacity = req.BatteryCapacity.Value;
 
             if (req.CorporateId.HasValue)
-                d.CorporateId = req.CorporateId.Value;
+            {
+                // Nếu thay đổi CorporateId, reset status về pending nếu có CorporateId mới
+                if (d.CorporateId != req.CorporateId.Value && req.CorporateId.Value > 0)
+                {
+                    d.CorporateId = req.CorporateId.Value;
+                    d.Status = "pending"; // Reset về pending khi đổi corporate
+                    d.ApprovedByUserId = null;
+                    d.ApprovedAt = null;
+                }
+                else
+                {
+                    d.CorporateId = req.CorporateId.Value;
+                }
+            }
 
-            // Gợi ý thêm: cập nhật timestamp nếu có cột UpdatedAt
-            // d.UpdatedAt = DateTime.UtcNow;
+            d.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
             return true;

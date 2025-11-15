@@ -21,7 +21,7 @@ public partial class CorporateAccount
 
     public int AdminUserId { get; set; }
 
-    public string? Status { get; set; }
+    public string? Status { get; set; } 
 
     public DateTime? CreatedAt { get; set; }
 

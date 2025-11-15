@@ -1,4 +1,4 @@
-using EVCharging.BE.Common.DTOs.Auth;
+﻿using EVCharging.BE.Common.DTOs.Auth;
 using EVCharging.BE.Services.Services.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,97 +19,104 @@ namespace EVCharging.BE.API.Controllers
             _emailOTPService = emailOTPService;
         }
 
-        /// <summary>
-        /// User login
-        /// </summary>
-        /// <param name="request">Login credentials</param>
-        /// <returns>Authentication response with token</returns>
+        // -------------------- LOGIN --------------------
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
             try
             {
-                if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
+                if (string.IsNullOrWhiteSpace(request.Email) ||
+                    string.IsNullOrWhiteSpace(request.Password))
                 {
-                    return BadRequest(new { message = "Email and password are required" });
+                    return BadRequest(new { message = "Email và mật khẩu là bắt buộc" });
                 }
 
                 var result = await _authService.LoginAsync(request);
+
                 if (result == null)
                 {
-                    return Unauthorized(new { message = "Invalid email or password" });
+                    return Unauthorized(new { message = "Email hoặc mật khẩu không đúng" });
                 }
 
-                return Ok(result);
+                return Ok(new
+                {
+                    message = "Đăng nhập thành công!",
+                    token = result.Token,
+                    expiresAt = result.ExpiresAt,
+                    user = new
+                    {
+                        id = result.User.UserId,
+                        email = result.User.Email,
+                        name = result.User.Name,
+                        role = result.User.Role
+                    }
+                });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during login", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi xảy ra trong quá trình đăng nhập", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// User registration
-        /// </summary>
-        /// <param name="request">Registration details</param>
-        /// <returns>Authentication response with token</returns>
+        // -------------------- REGISTER --------------------
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             try
             {
-                // Check ModelState for validation errors from Data Annotations
                 if (!ModelState.IsValid)
                 {
                     var errors = ModelState.Values
                         .SelectMany(v => v.Errors)
                         .Select(e => e.ErrorMessage)
                         .ToList();
+
                     return BadRequest(new { message = "Validation failed", errors });
                 }
 
-                // Additional basic validation
-                if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password) || string.IsNullOrEmpty(request.Name))
+                if (string.IsNullOrWhiteSpace(request.Email) ||
+                    string.IsNullOrWhiteSpace(request.Password) ||
+                    string.IsNullOrWhiteSpace(request.Name))
                 {
-                    return BadRequest(new { message = "Name, email, and password are required" });
+                    return BadRequest(new { message = "Tên, email và mật khẩu là bắt buộc" });
                 }
 
-                // Check email format
                 if (!request.Email.Contains("@"))
                 {
-                    return BadRequest(new { message = "Email must contain @ symbol" });
+                    return BadRequest(new { message = "Email phải chứa ký tự @" });
                 }
 
-                // Check password length
                 if (request.Password.Length < 6)
                 {
-                    return BadRequest(new { message = "Password must be at least 6 characters" });
+                    return BadRequest(new { message = "Mật khẩu phải ít nhất 6 ký tự" });
                 }
 
                 var result = await _authService.RegisterAsync(request);
+
                 if (result == null)
                 {
-                    return BadRequest(new { message = "User with this email already exists" });
+                    return BadRequest(new { message = "Email đã tồn tại" });
                 }
 
-                return Ok(result);
+                return Ok(new
+                {
+                    message = "Đăng ký thành công!",
+                    token = result.Token,
+                    expiresAt = result.ExpiresAt,
+                    user = result.User
+                });
             }
             catch (InvalidOperationException ex)
             {
-                // Handle validation errors from service
                 return BadRequest(new { message = ex.Message });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during registration", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi xảy ra trong quá trình đăng ký", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// Send OTP to email for verification
-        /// </summary>
-        /// <param name="request">Email address</param>
-        /// <returns>Success status</returns>
+        // -------------------- SEND OTP --------------------
         [HttpPost("send-otp")]
         public async Task<IActionResult> SendOTP([FromBody] SendOTPRequest request)
         {
@@ -121,28 +128,26 @@ namespace EVCharging.BE.API.Controllers
                         .SelectMany(v => v.Errors)
                         .Select(e => e.ErrorMessage)
                         .ToList();
+
                     return BadRequest(new { message = "Validation failed", errors });
                 }
 
                 var result = await _emailOTPService.SendOTPAsync(request.Email, request.Purpose ?? "registration");
+
                 if (!result)
                 {
-                    return BadRequest(new { message = "Failed to send OTP. Email may already be registered." });
+                    return BadRequest(new { message = "Gửi OTP thất bại. Email có thể đã tồn tại." });
                 }
 
-                return Ok(new { message = "OTP sent successfully to your email. Please check your inbox." });
+                return Ok(new { message = "OTP đã được gửi đến email của bạn." });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while sending OTP", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi gửi OTP", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// Verify OTP code
-        /// </summary>
-        /// <param name="request">Email and OTP code</param>
-        /// <returns>Verification result</returns>
+        // -------------------- VERIFY OTP --------------------
         [HttpPost("verify-otp")]
         public async Task<IActionResult> VerifyOTP([FromBody] VerifyOTPRequest request)
         {
@@ -154,28 +159,26 @@ namespace EVCharging.BE.API.Controllers
                         .SelectMany(v => v.Errors)
                         .Select(e => e.ErrorMessage)
                         .ToList();
+
                     return BadRequest(new { message = "Validation failed", errors });
                 }
 
                 var result = await _emailOTPService.VerifyOTPAsync(request.Email, request.OtpCode);
-                
+
                 if (!result)
                 {
-                    return BadRequest(new { message = "Invalid or expired OTP code" });
+                    return BadRequest(new { message = "OTP không đúng hoặc đã hết hạn" });
                 }
 
-                return Ok(new { message = "OTP verified successfully" });
+                return Ok(new { message = "Xác thực OTP thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during verification", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi xác thực OTP", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// User logout
-        /// </summary>
-        /// <returns>Logout confirmation</returns>
+        // -------------------- LOGOUT --------------------
         [HttpPost("logout")]
         [Authorize]
         public async Task<IActionResult> Logout()
@@ -183,59 +186,56 @@ namespace EVCharging.BE.API.Controllers
             try
             {
                 var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+
                 if (string.IsNullOrEmpty(token))
                 {
-                    return BadRequest(new { message = "Token not provided" });
+                    return BadRequest(new { message = "Không tìm thấy token" });
                 }
 
                 var result = await _authService.LogoutAsync(token);
+
                 if (!result)
                 {
-                    return BadRequest(new { message = "Failed to logout" });
+                    return BadRequest(new { message = "Đăng xuất thất bại" });
                 }
 
-                return Ok(new { message = "Successfully logged out" });
+                return Ok(new { message = "Đăng xuất thành công" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during logout", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi đăng xuất", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// Validate token
-        /// </summary>
-        /// <returns>Token validation result</returns>
+        // -------------------- VALIDATE TOKEN --------------------
         [HttpPost("validate")]
         public async Task<IActionResult> ValidateToken()
         {
             try
             {
                 var token = Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+
                 if (string.IsNullOrEmpty(token))
                 {
-                    return BadRequest(new { message = "Token not provided" });
+                    return BadRequest(new { message = "Không tìm thấy token" });
                 }
 
                 var isValid = await _authService.ValidateTokenAsync(token);
+
                 if (!isValid)
                 {
-                    return Unauthorized(new { message = "Invalid or expired token" });
+                    return Unauthorized(new { message = "Token không hợp lệ hoặc đã hết hạn" });
                 }
 
-                return Ok(new { message = "Token is valid" });
+                return Ok(new { message = "Token hợp lệ" });
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during token validation", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi kiểm tra token", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// OAuth login or register (Google, Facebook, etc.)
-        /// </summary>
-        /// <param name="request">OAuth login details</param>
-        /// <returns>Authentication response with token</returns>
+        // -------------------- OAUTH LOGIN --------------------
         [HttpPost("oauth/login")]
         public async Task<IActionResult> OAuthLogin([FromBody] OAuthLoginRequest request)
         {
@@ -247,18 +247,20 @@ namespace EVCharging.BE.API.Controllers
                         .SelectMany(v => v.Errors)
                         .Select(e => e.ErrorMessage)
                         .ToList();
+
                     return BadRequest(new { message = "Validation failed", errors });
                 }
 
                 if (string.IsNullOrEmpty(request.Provider) || string.IsNullOrEmpty(request.ProviderId))
                 {
-                    return BadRequest(new { message = "Provider and ProviderId are required" });
+                    return BadRequest(new { message = "Provider và ProviderId là bắt buộc" });
                 }
 
                 var result = await _authService.OAuthLoginOrRegisterAsync(request);
+
                 if (result == null)
                 {
-                    return BadRequest(new { message = "OAuth login failed" });
+                    return BadRequest(new { message = "Đăng nhập OAuth thất bại" });
                 }
 
                 return Ok(result);
@@ -269,14 +271,11 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred during OAuth login", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi đăng nhập OAuth", error = ex.Message });
             }
         }
 
-        /// <summary>
-        /// Get current user profile
-        /// </summary>
-        /// <returns>Current user information</returns>
+        // -------------------- GET CURRENT PROFILE --------------------
         [HttpGet("profile")]
         [Authorize]
         public IActionResult GetProfile()
@@ -289,7 +288,7 @@ namespace EVCharging.BE.API.Controllers
 
                 if (string.IsNullOrEmpty(userId))
                 {
-                    return Unauthorized(new { message = "User not found" });
+                    return Unauthorized(new { message = "Không tìm thấy người dùng" });
                 }
 
                 return Ok(new
@@ -301,7 +300,7 @@ namespace EVCharging.BE.API.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { message = "An error occurred while getting profile", error = ex.Message });
+                return StatusCode(500, new { message = "Lỗi khi lấy thông tin người dùng", error = ex.Message });
             }
         }
     }

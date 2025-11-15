@@ -24,13 +24,47 @@ namespace EVCharging.BE.API.Controllers
             return dto == null ? NotFound(new { message = "Driver profile not found" }) : Ok(dto);
         }
 
-        // GET: api/DriverProfiles/me?userId=1
-        // (Sau này lấy userId từ JWT)
+        // GET: api/DriverProfiles/me
+        // Lấy userId từ JWT
         [HttpGet("me")]
-        public async Task<IActionResult> GetMyDriverProfile([FromQuery] int userId)
+        [Microsoft.AspNetCore.Authorization.Authorize]
+        public async Task<IActionResult> GetMyDriverProfile()
         {
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+            }
+
             var dto = await _svc.GetByUserIdAsync(userId);
             return dto == null ? NotFound(new { message = "Driver profile not found" }) : Ok(dto);
+        }
+
+        // GET: api/DriverProfiles/status
+        // Xem trạng thái driver của mình
+        [HttpGet("status")]
+        [Microsoft.AspNetCore.Authorization.Authorize]
+        public async Task<IActionResult> GetDriverStatus()
+        {
+            var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
+            }
+
+            var dto = await _svc.GetByUserIdAsync(userId);
+            if (dto == null)
+            {
+                return NotFound(new { message = "Driver profile not found" });
+            }
+
+            return Ok(new
+            {
+                driverId = dto.DriverId,
+                status = dto.Status,
+                corporateId = dto.CorporateId,
+                createdAt = dto.CreatedAt
+            });
         }
 
         /*// POST: api/DriverProfiles

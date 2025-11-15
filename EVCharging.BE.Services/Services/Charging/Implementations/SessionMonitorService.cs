@@ -44,8 +44,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return Task.CompletedTask;
                 }
 
-                // Create timer to check session every 1 minute
-                // ✅ Delay first check by 2 minutes to avoid checking immediately after session start
+                // Create timer to check session every 30 seconds
+                // ✅ Delay first check by 1 minute to avoid checking immediately after session start
                 // This gives the session time to create logs and avoids premature auto-stop checks
                 // Use Task.Run to properly handle async operations in timer callback
                 var timer = new Timer(_ =>
@@ -62,10 +62,10 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                             _logger.LogError(ex, "Error in timer callback for session {SessionId}", sessionId);
                         }
                     });
-                }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(1)); // ✅ First check after 2 minutes, then every 1 minute
+                }, null, TimeSpan.FromMinutes(1), TimeSpan.FromSeconds(30)); // ✅ First check after 1 minute, then every 30 seconds
 
                 _monitoringTimers[sessionId] = timer;
-                _logger.LogInformation("✅ [StartMonitoring] Started monitoring session {SessionId} - First check in 2 minutes, then every 1 minute", sessionId);
+                _logger.LogInformation("✅ [StartMonitoring] Started monitoring session {SessionId} - First check in 1 minute, then every 30 seconds", sessionId);
             }
             catch (Exception ex)
             {
@@ -503,15 +503,16 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var session = await db.ChargingSessions
                     .Include(s => s.Driver)
                     .Include(s => s.SessionLogs)
+                    .Include(s => s.Reservation) // ✅ Load reservation để lấy TargetSoc mới nhất
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
                 if (session == null || session.Status != "in_progress")
                     return false;
 
-                // ✅ Tránh auto-stop ngay khi session vừa start (< 2 phút)
+                // ✅ Tránh auto-stop ngay khi session vừa start (< 1 phút)
                 // Session cần thời gian để sạc và tạo logs
                 var sessionDuration = DateTime.UtcNow - session.StartTime;
-                if (sessionDuration.TotalMinutes < 2)
+                if (sessionDuration.TotalMinutes < 1)
                 {
                     _logger.LogDebug("Session {SessionId} is too new ({Duration:F1} minutes), skipping auto-stop check",
                         sessionId, sessionDuration.TotalMinutes);
@@ -521,14 +522,24 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // ✅ Tính SOC hiện tại từ session đã load (không gọi GetCurrentSOCAsync để tránh duplicate query)
                 int currentSOC;
 
-                // Nếu có log, lấy từ log mới nhất
+                // Nếu có log, lấy từ log mới nhất (chỉ lấy log hợp lệ: LogTime >= StartTime)
                 var latestLog = session.SessionLogs?
+                    .Where(sl => sl.LogTime.HasValue && sl.LogTime.Value >= session.StartTime) // ✅ Chỉ lấy log sau StartTime
                     .OrderByDescending(sl => sl.LogTime)
                     .FirstOrDefault();
 
                 if (latestLog?.SocPercentage.HasValue == true)
                 {
                     currentSOC = latestLog.SocPercentage.Value;
+                    // ✅ Validate: SOC không thể < InitialSOC hoặc > 100
+                    if (currentSOC < session.InitialSoc)
+                    {
+                        _logger.LogWarning(
+                            "Session {SessionId} - CurrentSOC từ log ({CurrentSOC}%) < InitialSOC ({InitialSOC}%), không hợp lệ. Sử dụng InitialSOC.",
+                            sessionId, currentSOC, session.InitialSoc);
+                        currentSOC = session.InitialSoc;
+                    }
+                    currentSOC = Math.Min(currentSOC, 100); // Đảm bảo không vượt quá 100%
                 }
                 else if (session.Driver?.BatteryCapacity.HasValue == true &&
                          session.EnergyUsed.HasValue &&
@@ -537,9 +548,23 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     // Tính từ EnergyUsed và BatteryCapacity
                     var batteryCapacity = session.Driver.BatteryCapacity.Value;
                     var energyUsed = session.EnergyUsed.Value;
-                    var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
-                    currentSOC = session.InitialSoc + socIncrease;
-                    currentSOC = Math.Min(currentSOC, 100);
+                    
+                    // ✅ Validate: EnergyUsed không thể âm
+                    if (energyUsed < 0)
+                    {
+                        _logger.LogWarning(
+                            "Session {SessionId} - EnergyUsed ({EnergyUsed}) < 0, không hợp lệ. Sử dụng InitialSOC.",
+                            sessionId, energyUsed);
+                        currentSOC = session.InitialSoc;
+                    }
+                    else
+                    {
+                        var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
+                        currentSOC = session.InitialSoc + socIncrease;
+                        currentSOC = Math.Min(currentSOC, 100); // Đảm bảo không vượt quá 100%
+                        // ✅ Validate: SOC không thể < InitialSOC (sau khi tính)
+                        currentSOC = Math.Max(currentSOC, session.InitialSoc);
+                    }
                 }
                 else
                 {
@@ -548,43 +573,185 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     currentSOC = session.InitialSoc;
                 }
 
-                // Xác định target SOC
-                // FinalSoc trong session có thể là:
-                // 1. Target SOC từ reservation (được set khi start session từ reservation)
-                // 2. null nếu là walk-in session (không có reservation)
-                // Nếu FinalSoc = null, mặc định target = 100%
-                int targetSOC = session.FinalSoc ?? 100;
+                // ✅ QUAN TRỌNG: Đảm bảo currentSOC >= InitialSOC (double-check)
+                // SOC không thể giảm so với InitialSOC
+                currentSOC = Math.Max(currentSOC, session.InitialSoc);
+
+                // ✅ Xác định target SOC từ reservation (lấy mới nhất từ database)
+                // Logic:
+                // - Mặc định targetSOC = 100% (nếu không có reservation - walk-in)
+                // - Nếu có reservation, lấy TargetSoc từ reservation (có thể thay đổi theo thời gian)
+                // - Nếu reservation.TargetSoc = null, mặc định = 100%
+                // ✅ QUAN TRỌNG: KHÔNG dùng session.FinalSoc làm fallback vì có thể là giá trị cũ không chính xác
+                int targetSOC = 100; // Mặc định 100%
+                string targetSOCSource = "mặc định (100%)"; // Track nguồn targetSOC
+                
+                if (session.ReservationId.HasValue && session.Reservation != null)
+                {
+                    // ✅ CÓ reservation: Lấy TargetSoc từ reservation
+                    if (session.Reservation.TargetSoc.HasValue)
+                    {
+                        targetSOC = session.Reservation.TargetSoc.Value;
+                        targetSOCSource = $"reservation.TargetSoc ({targetSOC}%)";
+                    }
+                    else
+                    {
+                        // reservation.TargetSoc = null, giữ nguyên 100% mặc định
+                        targetSOCSource = "reservation không có TargetSoc, mặc định 100%";
+                    }
+                }
+                else
+                {
+                    // ✅ KHÔNG có reservation (walk-in): Luôn dùng 100% mặc định
+                    // KHÔNG dùng session.FinalSoc vì có thể là giá trị cũ/sai
+                    targetSOCSource = "walk-in, mặc định 100%";
+                }
+
+                // ✅ QUAN TRỌNG: Validation targetSOC
+                // Đảm bảo targetSOC >= InitialSOC, > 0, và >= 50% (giá trị hợp lý tối thiểu)
+                const int MIN_VALID_TARGET_SOC = 50; // Giá trị targetSOC tối thiểu hợp lý (50%)
+                var originalTargetSOC = targetSOC;
+                
+                if (targetSOC <= 0 || targetSOC < session.InitialSoc || targetSOC < MIN_VALID_TARGET_SOC)
+                {
+                    _logger.LogWarning(
+                        "Session {SessionId} - TargetSOC không hợp lệ: TargetSOC={TargetSOC}%, InitialSOC={InitialSOC}%, MinValid={MinValid}%. Nguồn: {Source}. Sử dụng targetSOC={FallbackTarget}% mặc định.",
+                        sessionId, targetSOC, session.InitialSoc, MIN_VALID_TARGET_SOC, targetSOCSource, 100);
+                    
+                    // ✅ Fallback: Nếu targetSOC không hợp lệ, dùng 100% mặc định
+                    // Đảm bảo targetSOC >= InitialSOC và >= MIN_VALID_TARGET_SOC
+                    if (session.InitialSoc >= 100)
+                    {
+                        // Nếu InitialSOC >= 100, dùng InitialSOC (SOC đã đầy)
+                        targetSOC = session.InitialSoc;
+                    }
+                    else if (session.InitialSoc >= MIN_VALID_TARGET_SOC)
+                    {
+                        // Nếu InitialSOC >= 50% nhưng < 100%, dùng 100% (mặc định)
+                        targetSOC = 100;
+                    }
+                    else
+                    {
+                        // Nếu InitialSOC < 50%, dùng 50% (tối thiểu hợp lý)
+                        targetSOC = MIN_VALID_TARGET_SOC;
+                    }
+                    
+                    targetSOCSource = $"fallback sau validation (original: {originalTargetSOC}%)";
+                }
+
+                // Đảm bảo targetSOC không vượt quá 100%
+                targetSOC = Math.Min(targetSOC, 100);
+                
+                // Đảm bảo targetSOC >= InitialSOC (double-check sau khi validation)
+                if (targetSOC < session.InitialSoc)
+                {
+                    _logger.LogWarning(
+                        "Session {SessionId} - TargetSOC ({TargetSOC}%) < InitialSOC ({InitialSOC}%). Điều chỉnh thành InitialSOC.",
+                        sessionId, targetSOC, session.InitialSoc);
+                    targetSOC = session.InitialSoc;
+                    targetSOCSource = $"điều chỉnh từ InitialSOC";
+                }
+                
+                // ✅ Đảm bảo targetSOC >= MIN_VALID_TARGET_SOC (final check)
+                if (targetSOC < MIN_VALID_TARGET_SOC)
+                {
+                    _logger.LogWarning(
+                        "Session {SessionId} - TargetSOC sau validation ({TargetSOC}%) vẫn < MIN_VALID ({MinValid}%). Điều chỉnh thành {MinValid}%.",
+                        sessionId, targetSOC, MIN_VALID_TARGET_SOC, MIN_VALID_TARGET_SOC);
+                    targetSOC = MIN_VALID_TARGET_SOC;
+                    targetSOCSource = $"điều chỉnh thành MIN_VALID ({MIN_VALID_TARGET_SOC}%)";
+                }
+
+                _logger.LogDebug(
+                    "Session {SessionId} - InitialSOC: {InitialSOC}%, CurrentSOC: {CurrentSOC}%, TargetSOC: {TargetSOC}% (nguồn: {Source})",
+                    sessionId, session.InitialSoc, currentSOC, targetSOC, targetSOCSource);
 
                 // ✅ Tránh auto-stop nếu session vừa mới start và SOC chưa thực sự tăng
                 // Chỉ auto-stop nếu:
-                // 1. Đã có log (chứng tỏ đã sạc được một lúc), HOẶC
+                // 1. Đã có log SAU initial log (chứng tỏ đã sạc được một lúc), HOẶC
                 // 2. Đã có EnergyUsed > 0 (đã sạc được năng lượng), HOẶC  
                 // 3. SOC đã tăng so với InitialSOC (chứng tỏ đã sạc được)
-                bool hasActualChargingProgress = latestLog != null ||
-                                                 (session.EnergyUsed.HasValue && session.EnergyUsed.Value > 0) ||
-                                                 (currentSOC > session.InitialSoc);
-
-                // Nếu chưa có progress thực sự và SOC vẫn bằng InitialSOC, không auto-stop
-                // (tránh auto-stop ngay khi start nếu InitialSOC đã = target)
-                if (!hasActualChargingProgress && currentSOC == session.InitialSoc && currentSOC >= targetSOC)
+                // LƯU Ý: latestLog đã được filter chỉ lấy log sau StartTime, nên không cần kiểm tra isInitialLog nữa
+                bool hasActualChargingProgress = false;
+                
+                // ✅ Đếm số log hợp lệ (sau StartTime)
+                var validLogs = session.SessionLogs?
+                    .Where(sl => sl.LogTime.HasValue && sl.LogTime.Value >= session.StartTime)
+                    .ToList() ?? new List<DAL.Entities.SessionLog>();
+                var totalValidLogs = validLogs.Count;
+                
+                if (latestLog != null && totalValidLogs > 0)
                 {
-                    _logger.LogDebug("Session {SessionId} just started with SOC={SOC}% (already at target), waiting for actual charging progress before auto-stop",
-                        sessionId, currentSOC);
+                    // ✅ Kiểm tra xem log này có phải là initial log không
+                    // Initial log thường có LogTime gần StartTime (trong vòng 1 phút)
+                    var isInitialLog = totalValidLogs == 1 || 
+                                       (latestLog.LogTime.HasValue && latestLog.LogTime.Value <= session.StartTime.AddMinutes(1));
+                    
+                    // Chỉ coi là có progress nếu có nhiều hơn 1 log hợp lệ HOẶC log đó không phải là initial log
+                    if (totalValidLogs > 1 || !isInitialLog)
+                    {
+                        hasActualChargingProgress = true;
+                    }
+                }
+                
+                // Hoặc có EnergyUsed > 0 (đã sạc được năng lượng)
+                if (!hasActualChargingProgress && session.EnergyUsed.HasValue && session.EnergyUsed.Value > 0)
+                {
+                    hasActualChargingProgress = true;
+                }
+                
+                // Hoặc SOC đã tăng so với InitialSOC (chứng tỏ đã sạc được)
+                // ✅ QUAN TRỌNG: Chỉ coi là progress nếu currentSOC > InitialSOC (không chỉ >=)
+                if (!hasActualChargingProgress && currentSOC > session.InitialSoc)
+                {
+                    hasActualChargingProgress = true;
+                }
+
+                // ✅ QUAN TRỌNG: Nếu chưa có progress thực sự, KHÔNG auto-stop
+                // Tránh auto-stop ngay khi start nếu InitialSOC đã >= target (chưa sạc được gì)
+                if (!hasActualChargingProgress)
+                {
+                    _logger.LogDebug("Session {SessionId} - InitialSOC: {InitialSOC}%, CurrentSOC: {CurrentSOC}%, TargetSOC: {TargetSOC}%. Chưa có tiến trình sạc thực sự, không auto-stop.",
+                        sessionId, session.InitialSoc, currentSOC, targetSOC);
                     return false;
                 }
 
-                // Kiểm tra xem có đạt target chưa
-                if (currentSOC >= targetSOC)
+                // ✅ Kiểm tra xem có đạt target chưa
+                // ✅ QUAN TRỌNG: Auto-stop khi:
+                // 1. currentSOC >= targetSOC (đã đạt hoặc vượt target từ reservation)
+                // 2. currentSOC > InitialSOC (đã có tiến trình sạc thực sự - SOC đã tăng)
+                // 3. targetSOC >= InitialSOC (đã được validate ở trên)
+                // 4. Có tiến trình sạc thực sự (đã có log hoặc EnergyUsed > 0 hoặc SOC đã tăng)
+                // Logic: Khi InitialSOC sạc tăng lên = FinalSOC (targetSOC), tự động dừng
+                // ✅ QUAN TRỌNG: Thêm điều kiện currentSOC > InitialSOC để đảm bảo đã có tiến trình sạc
+                if (targetSOC >= session.InitialSoc && 
+                    currentSOC >= targetSOC && 
+                    currentSOC > session.InitialSoc && // ✅ Đảm bảo SOC đã tăng so với InitialSOC
+                    hasActualChargingProgress)
                 {
                     _logger.LogInformation(
-                        "Session {SessionId} reached target SOC: Current={CurrentSOC}%, Target={TargetSOC}%, Initial={InitialSOC}%. Auto-stopping...",
-                        sessionId, currentSOC, targetSOC, session.InitialSoc);
+                        "Session {SessionId} đã đạt target SOC: Current={CurrentSOC}%, Target={TargetSOC}% (từ reservation mới nhất), Initial={InitialSOC}%. SOC đã tăng từ {InitialSOC}% lên {CurrentSOC}%. Tự động dừng...",
+                        sessionId, currentSOC, targetSOC, session.InitialSoc, session.InitialSoc, currentSOC);
+
+                    // ✅ QUAN TRỌNG: FinalSOC = targetSOC (từ reservation mới nhất), không phải currentSOC
+                    // Điều này đảm bảo:
+                    // - Nếu reservation.TargetSoc = 100, FinalSOC = 100
+                    // - Nếu reservation.TargetSoc = 80, FinalSOC = 80 (ngay cả khi currentSOC có thể cao hơn một chút)
+                    // - Nếu reservation.TargetSoc thay đổi trong quá trình sạc, FinalSOC sẽ cập nhật theo
+                    // - Đảm bảo FinalSOC phản ánh đúng mục tiêu từ reservation mới nhất
+                    int finalSOCToUse = targetSOC; // Dùng targetSOC từ reservation mới nhất
+                    
+                    // Đảm bảo FinalSOC không vượt quá 100%
+                    finalSOCToUse = Math.Min(finalSOCToUse, 100);
+                    
+                    // Đảm bảo FinalSOC >= InitialSOC (SOC không thể giảm)
+                    finalSOCToUse = Math.Max(finalSOCToUse, session.InitialSoc);
 
                     // Tự động dừng session
                     var stopRequest = new ChargingSessionStopRequest
                     {
                         SessionId = sessionId,
-                        FinalSOC = Math.Min(currentSOC, 100) // Đảm bảo không vượt quá 100%
+                        FinalSOC = finalSOCToUse
                     };
 
                     var result = await chargingService.StopSessionAsync(stopRequest);
@@ -640,13 +807,71 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     .Include(s => s.Point)
                         .ThenInclude(p => p.Station)
                     .Include(s => s.SessionLogs)
+                    .Include(s => s.Reservation) // ✅ Load reservation để lấy TargetSoc mới nhất
                     .FirstOrDefaultAsync(s => s.SessionId == sessionId);
 
                 if (session == null || session.Status != "in_progress" || session.Driver?.User == null)
                     return;
 
-                // Xác định target SOC
-                int targetSOC = session.FinalSoc ?? 100;
+                // ✅ Xác định target SOC từ reservation (lấy mới nhất từ database)
+                // Logic giống CheckAndAutoStopSessionAsync:
+                // - Mặc định targetSOC = 100% (nếu không có reservation - walk-in)
+                // - Nếu có reservation, lấy TargetSoc từ reservation
+                // - Nếu reservation.TargetSoc = null, mặc định = 100%
+                // ✅ QUAN TRỌNG: KHÔNG dùng session.FinalSoc làm fallback
+                int targetSOC = 100; // Mặc định 100%
+                
+                if (session.ReservationId.HasValue && session.Reservation != null)
+                {
+                    // ✅ CÓ reservation: Lấy TargetSoc từ reservation
+                    if (session.Reservation.TargetSoc.HasValue)
+                    {
+                        targetSOC = session.Reservation.TargetSoc.Value;
+                    }
+                    // Nếu reservation.TargetSoc = null, giữ nguyên 100% mặc định
+                }
+                else
+                {
+                    // ✅ KHÔNG có reservation (walk-in): Luôn dùng 100% mặc định
+                    // KHÔNG dùng session.FinalSoc
+                }
+
+                // ✅ QUAN TRỌNG: Validation targetSOC (giống logic trong CheckAndAutoStopSessionAsync)
+                // Đảm bảo targetSOC >= InitialSOC, > 0, và >= 50%
+                const int MIN_VALID_TARGET_SOC = 50;
+                
+                if (targetSOC <= 0 || targetSOC < session.InitialSoc || targetSOC < MIN_VALID_TARGET_SOC)
+                {
+                    _logger.LogWarning(
+                        "Session {SessionId} - TargetSOC không hợp lệ trong CheckAndNotifyNearTargetSocAsync: TargetSOC={TargetSOC}%, InitialSOC={InitialSOC}%. Sử dụng targetSOC mặc định.",
+                        sessionId, targetSOC, session.InitialSoc);
+                    
+                    // Fallback: Đảm bảo targetSOC >= InitialSOC và >= MIN_VALID_TARGET_SOC
+                    if (session.InitialSoc >= 100)
+                    {
+                        targetSOC = session.InitialSoc;
+                    }
+                    else if (session.InitialSoc >= MIN_VALID_TARGET_SOC)
+                    {
+                        targetSOC = 100;
+                    }
+                    else
+                    {
+                        targetSOC = MIN_VALID_TARGET_SOC;
+                    }
+                }
+
+                // Đảm bảo targetSOC không vượt quá 100%
+                targetSOC = Math.Min(targetSOC, 100);
+                
+                // Đảm bảo targetSOC >= InitialSOC (double-check sau khi validation)
+                targetSOC = Math.Max(targetSOC, session.InitialSoc);
+                
+                // Đảm bảo targetSOC >= MIN_VALID_TARGET_SOC (final check)
+                if (targetSOC < MIN_VALID_TARGET_SOC)
+                {
+                    targetSOC = MIN_VALID_TARGET_SOC;
+                }
 
                 // Lấy SOC hiện tại
                 int currentSOC;
@@ -847,7 +1072,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return;
                 }
 
-                _logger.LogDebug("🔍 [MonitorSession] Session {SessionId} - Starting monitoring cycle", sessionId);
+                _logger.LogInformation("🔍 [MonitorSession] Session {SessionId} - Starting monitoring cycle at {Time}", 
+                    sessionId, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
 
                 // Tự động tạo log mới và cập nhật SOC
                 await AutoCreateSessionLogAsync(sessionId);
@@ -878,10 +1104,14 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 {
                     await NotifySessionUpdateAsync(sessionId, sessionData);
                 }
+
+                _logger.LogInformation("✅ [MonitorSession] Session {SessionId} - Completed monitoring cycle at {Time}", 
+                    sessionId, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error monitoring session {SessionId}", sessionId);
+                _logger.LogError(ex, "❌ [MonitorSession] Error monitoring session {SessionId} at {Time}", 
+                    sessionId, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss"));
             }
             finally
             {
@@ -955,11 +1185,10 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 db.SessionLogs.Add(newLog);
 
-                // Cập nhật FinalSoc nếu SOC đã tăng
-                if (currentSOC > session.InitialSoc)
-                {
-                    session.FinalSoc = currentSOC;
-                }
+                // ✅ KHÔNG cập nhật FinalSoc ở đây
+                // FinalSoc đã được set từ reservation.TargetSoc khi start session
+                // FinalSoc sẽ chỉ được cập nhật khi stop session (auto-stop hoặc thủ công)
+                // Giữ nguyên targetSOC từ reservation để đảm bảo logic auto-stop đúng
 
                 await db.SaveChangesAsync();
 
@@ -1130,7 +1359,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         /// <summary>
         /// Lấy trạng thái monitoring của session
         /// </summary>
-        public async Task<Dictionary<string, object>> GetMonitoringStatusAsync(int sessionId)
+        public async Task<Dictionary<string, object?>> GetMonitoringStatusAsync(int sessionId)
         {
             try
             {
@@ -1145,11 +1374,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                 if (session == null)
                 {
-                    return new Dictionary<string, object>
+                    return new Dictionary<string, object?>
                     {
                         ["sessionId"] = sessionId,
                         ["isMonitoring"] = false,
-                        ["error"] = "Session not found"
+                        ["error"] = "Không tìm thấy phiên sạc"
                     };
                 }
 
@@ -1165,30 +1394,38 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var totalLogs = session.SessionLogs?.Count ?? 0;
 
                 // Tính thời gian từ log cuối cùng
-                var timeSinceLastLog = lastLog?.LogTime.HasValue == true
-                    ? (DateTime.UtcNow - lastLog.LogTime!.Value)
-                    : (TimeSpan?)null;
-
-                var status = new Dictionary<string, object>
+                TimeSpan? timeSinceLastLog = null;
+                if (lastLog != null && lastLog.LogTime.HasValue)
                 {
-                    ["sessionId"] = sessionId,
-                    ["sessionStatus"] = session.Status ?? "unknown",
-                    ["isMonitoring"] = isMonitoring,
-                    ["isMonitoringInProgress"] = isMonitoringInProgress,
-                    ["totalLogs"] = totalLogs,
-                    ["lastLogTime"] = lastLog?.LogTime ?? (DateTime?)null,
-                    ["timeSinceLastLog"] = timeSinceLastLog.HasValue
-                        ? $"{timeSinceLastLog.Value.TotalSeconds:F0} seconds"
-                        : "N/A",
-                    ["lastLog"] = lastLog != null ? new Dictionary<string, object?>
+                    timeSinceLastLog = DateTime.UtcNow - lastLog.LogTime.Value;
+                }
+
+                Dictionary<string, object?>? lastLogDict = null;
+                if (lastLog != null)
+                {
+                    lastLogDict = new Dictionary<string, object?>
                     {
                         ["logId"] = lastLog.LogId,
                         ["socPercentage"] = lastLog.SocPercentage,
                         ["currentPower"] = lastLog.CurrentPower,
                         ["voltage"] = lastLog.Voltage,
                         ["temperature"] = lastLog.Temperature,
-                        ["logTime"] = lastLog.LogTime ?? (DateTime?)null
-                    } : (Dictionary<string, object?>?)null,
+                        ["logTime"] = lastLog.LogTime
+                    };
+                }
+
+                var status = new Dictionary<string, object?>
+                {
+                    ["sessionId"] = sessionId,
+                    ["sessionStatus"] = session.Status ?? "unknown",
+                    ["isMonitoring"] = isMonitoring,
+                    ["isMonitoringInProgress"] = isMonitoringInProgress,
+                    ["totalLogs"] = totalLogs,
+                    ["lastLogTime"] = lastLog?.LogTime,
+                    ["timeSinceLastLog"] = timeSinceLastLog.HasValue
+                        ? $"{timeSinceLastLog.Value.TotalSeconds:F0} seconds"
+                        : "N/A",
+                    ["lastLog"] = lastLogDict,
                     ["sessionInfo"] = new Dictionary<string, object?>
                     {
                         ["startTime"] = session.StartTime,
@@ -1206,7 +1443,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting monitoring status for session {SessionId}", sessionId);
-                return new Dictionary<string, object>
+                return new Dictionary<string, object?>
                 {
                     ["sessionId"] = sessionId,
                     ["isMonitoring"] = false,

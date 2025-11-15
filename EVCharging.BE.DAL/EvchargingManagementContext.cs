@@ -306,6 +306,8 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.HasIndex(e => e.CorporateId, "IX_DriverProfile_corporate_id");
 
+            entity.HasIndex(e => new { e.CorporateId, e.Status }, "IX_DriverProfile_CorporateId_Status");
+
             entity.HasIndex(e => e.UserId, "UQ__DriverPr__B9BE370E426023A1").IsUnique();
 
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
@@ -321,6 +323,19 @@ public partial class EvchargingManagementContext : DbContext
             entity.Property(e => e.VehiclePlate)
                 .HasMaxLength(20)
                 .HasColumnName("vehicle_plate");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("active")
+                .HasColumnName("status");
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("(getdate())")
+                .HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt)
+                .HasColumnName("updated_at");
+            entity.Property(e => e.ApprovedByUserId)
+                .HasColumnName("approved_by_user_id");
+            entity.Property(e => e.ApprovedAt)
+                .HasColumnName("approved_at");
 
             entity.HasOne(d => d.Corporate).WithMany(p => p.DriverProfiles)
                 .HasForeignKey(d => d.CorporateId)
@@ -330,6 +345,10 @@ public partial class EvchargingManagementContext : DbContext
                 .HasForeignKey<DriverProfile>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK__DriverPro__user___47DBAE45");
+
+            entity.HasOne(d => d.ApprovedByUser).WithMany()
+                .HasForeignKey(d => d.ApprovedByUserId)
+                .HasConstraintName("FK__DriverPro__approved_by_user_id");
         });
 
         modelBuilder.Entity<EmailOTP>(entity =>

@@ -40,8 +40,31 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
         public async Task<MomoCreatePaymentResponseDto> CreatePaymentAsync(MomoCreatePaymentRequestDto model)
         {
-            // Tạo OrderId từ SessionId và timestamp để đảm bảo unique
-            var orderId = $"{model.SessionId}_{DateTime.UtcNow:yyyyMMddHHmmss}_{model.UserId}";
+            // ✅ Validate amount
+            if (model.Amount <= 0)
+                throw new ArgumentException("Amount must be greater than 0");
+
+            // Momo yêu cầu amount >= 1000 VND
+            if (model.Amount < 1000)
+                throw new ArgumentException("Amount must be at least 1,000 VND");
+
+            // Làm tròn amount về số nguyên (VND không có decimal)
+            var amount = Math.Round(model.Amount, 0, MidpointRounding.AwayFromZero);
+            var amountLong = (long)amount;
+
+            Console.WriteLine($"[MomoService] Creating payment - Amount: {model.Amount}, Rounded: {amount}, Long: {amountLong}");
+
+            // Tạo OrderId: Nếu có InvoiceId (Corporate Invoice) thì dùng format "CORP-INV-{invoiceId}_...", 
+            // nếu không thì dùng format "{SessionId}_..."
+            string orderId;
+            if (model.InvoiceId.HasValue)
+            {
+                orderId = $"CORP-INV-{model.InvoiceId.Value}_{DateTime.UtcNow:yyyyMMddHHmmss}_{model.UserId}";
+            }
+            else
+            {
+                orderId = $"{model.SessionId}_{DateTime.UtcNow:yyyyMMddHHmmss}_{model.UserId}";
+            }
             var requestId = orderId;
 
             // Format OrderInfo
@@ -52,7 +75,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 $"partnerCode={_options.Value.PartnerCode}" +
                 $"&accessKey={_options.Value.AccessKey}" +
                 $"&requestId={requestId}" +
-                $"&amount={(long)model.Amount}" +
+                $"&amount={amountLong}" +
                 $"&orderId={orderId}" +
                 $"&orderInfo={orderInfo}" +
                 $"&returnUrl={_options.Value.ReturnUrl}" +
@@ -76,12 +99,14 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 notifyUrl = _options.Value.NotifyUrl,
                 returnUrl = _options.Value.ReturnUrl,
                 orderId = orderId,
-                amount = ((long)model.Amount).ToString(),
+                amount = amountLong.ToString(),
                 orderInfo = orderInfo,
                 requestId = requestId,
                 extraData = "",
                 signature = signature
             };
+
+            Console.WriteLine($"[MomoService] Request data - OrderId: {orderId}, Amount: {amountLong}, OrderInfo: {orderInfo}");
 
             // MoMo API yêu cầu exact property names (camelCase) - không dùng PropertyNamingPolicy
             var jsonContent = JsonSerializer.Serialize(requestData);
@@ -262,9 +287,32 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Callback: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
+                    // Xử lý Corporate Invoice payment
+                    if (payment.PaymentType == "corporate_invoice" && !string.IsNullOrEmpty(payment.InvoiceNumber))
+                    {
+                        // Parse InvoiceId từ orderId format: "CORP-INV-{invoiceId}_{timestamp}_{userId}"
+                        var invoiceOrderIdParts = payment.InvoiceNumber.Split('_');
+                        if (invoiceOrderIdParts.Length > 0 && invoiceOrderIdParts[0].StartsWith("CORP-INV-"))
+                        {
+                            var invoiceIdStr = invoiceOrderIdParts[0].Replace("CORP-INV-", "");
+                            if (int.TryParse(invoiceIdStr, out var invoiceId))
+                            {
+                                var corporateInvoice = await _db.Invoices
+                                    .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId && i.CorporateId.HasValue);
+
+                                if (corporateInvoice != null && corporateInvoice.Status != "paid")
+                                {
+                                    corporateInvoice.Status = "paid";
+                                    corporateInvoice.PaidAt = DateTime.UtcNow;
+                                    await _db.SaveChangesAsync();
+                                    Console.WriteLine($"✅ Callback: Corporate Invoice updated - InvoiceNumber: {corporateInvoice.InvoiceNumber}, InvoiceId: {corporateInvoice.InvoiceId}");
+                                }
+                            }
+                        }
+                    }
                     // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
                     // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
-                    if (payment.SessionId.HasValue)
+                    else if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices
                             .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);
@@ -422,8 +470,32 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Notify: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
+                    // Xử lý Corporate Invoice payment
+                    if (payment.PaymentType == "corporate_invoice" && !string.IsNullOrEmpty(payment.InvoiceNumber))
+                    {
+                        // Parse InvoiceId từ orderId format: "CORP-INV-{invoiceId}_{timestamp}_{userId}"
+                        var invoiceOrderIdParts = payment.InvoiceNumber.Split('_');
+                        if (invoiceOrderIdParts.Length > 0 && invoiceOrderIdParts[0].StartsWith("CORP-INV-"))
+                        {
+                            var invoiceIdStr = invoiceOrderIdParts[0].Replace("CORP-INV-", "");
+                            if (int.TryParse(invoiceIdStr, out var invoiceId))
+                            {
+                                var corporateInvoice = await _db.Invoices
+                                    .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId && i.CorporateId.HasValue);
+
+                                if (corporateInvoice != null && corporateInvoice.Status != "paid")
+                                {
+                                    corporateInvoice.Status = "paid";
+                                    corporateInvoice.PaidAt = DateTime.UtcNow;
+                                    await _db.SaveChangesAsync();
+                                    Console.WriteLine($"✅ Notify: Corporate Invoice updated - InvoiceNumber: {corporateInvoice.InvoiceNumber}, InvoiceId: {corporateInvoice.InvoiceId}");
+                                }
+                            }
+                        }
+                    }
                     // Tạo invoice nếu có SessionId (chỉ cho session payment, không tạo cho reservation deposit)
-                    if (payment.SessionId.HasValue)
+                    // Với reservation deposit (có ReservationId), chỉ cập nhật payment status là đủ
+                    else if (payment.SessionId.HasValue)
                     {
                         var existingInvoice = await _db.Invoices
                             .FirstOrDefaultAsync(i => i.InvoiceNumber == payment.InvoiceNumber);

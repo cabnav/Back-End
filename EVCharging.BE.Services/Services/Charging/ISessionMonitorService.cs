@@ -28,6 +28,6 @@ namespace EVCharging.BE.Services.Services.Charging
         Task<TimeSpan> EstimateRemainingTimeAsync(int sessionId, int targetSOC);
         
         // Monitoring Status
-        Task<Dictionary<string, object>> GetMonitoringStatusAsync(int sessionId);
+        Task<Dictionary<string, object?>> GetMonitoringStatusAsync(int sessionId);
     }
 }

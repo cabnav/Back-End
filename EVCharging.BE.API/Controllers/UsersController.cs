@@ -73,12 +73,6 @@ namespace EVCharging.BE.API.Controllers
             return Ok(dto);
         }
 
-        public class TopUpRequest
-        {
-            public decimal Amount { get; set; }
-            public string? Description { get; set; }
-        }
-
         // 2) Lịch sử giao dịch ví
         // GET /api/users/{id}/wallet/transactions?page=1&pageSize=50
         [HttpGet("{id:int}/wallet/transactions")]

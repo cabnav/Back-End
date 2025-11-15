@@ -252,11 +252,25 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         }
                     }
 
-                    // Create new charging session
-                    // Nếu có reservation và reservation có TargetSoc, set làm FinalSoc (target SOC)
-                    // FinalSoc sẽ được dùng để auto-stop session khi đạt target
-                    // Nếu không có, FinalSoc = null và session sẽ auto-stop ở 100%
+                    // ✅ Create new charging session
+                    // ✅ LOGIC FINALSOC VÀ INITIALSOC:
+                    // - InitialSOC: SOC ban đầu khi bắt đầu sạc (từ request.InitialSOC)
+                    // - FinalSOC: Target SOC từ reservation (reservation.TargetSoc)
+                    //   + Nếu reservation.TargetSoc = 100 → FinalSOC = 100 → Session sẽ tự động dừng khi đạt 100%
+                    //   + Nếu reservation.TargetSoc = 80 → FinalSOC = 80 → Session sẽ tự động dừng khi đạt 80%
+                    //   + Nếu không có reservation (walk-in) → FinalSOC = null → Session sẽ tự động dừng khi đạt 100%
+                    // - Khi currentSOC >= FinalSOC (targetSOC), session sẽ tự động dừng
+                    // - Khi dừng (auto-stop hoặc thủ công), FinalSOC sẽ được set = targetSOC từ reservation
                     int? targetSocFromReservation = reservation?.TargetSoc;
+                    
+                    // ✅ VALIDATION: Kiểm tra targetSOC không được nhỏ hơn initialSOC
+                    // Logic: SOC không thể giảm, nên targetSOC phải >= initialSOC
+                    if (targetSocFromReservation.HasValue && targetSocFromReservation.Value < request.InitialSOC)
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] TargetSOC ({targetSocFromReservation.Value}%) < InitialSOC ({request.InitialSOC}%). Rolling back transaction.");
+                        await transaction.RollbackAsync();
+                        throw new ArgumentException($"Target SOC ({targetSocFromReservation.Value}%) cannot be less than Initial SOC ({request.InitialSOC}%). Please check your reservation settings or initial SOC value.");
+                    }
                     
                     session = new ChargingSession
                     {
@@ -264,8 +278,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         PointId = chargingPointId, // ✅ Đã validate không null ở đầu method
                         ReservationId = reservationId,
                         StartTime = sessionStartTime, // ✅ Đảm bảo StartTime = reservation.StartTime khi check-in sớm
-                        InitialSoc = request.InitialSOC,
-                        FinalSoc = targetSocFromReservation, // Set target SOC từ reservation (nếu có)
+                        InitialSoc = request.InitialSOC, // SOC ban đầu khi bắt đầu sạc
+                        FinalSoc = targetSocFromReservation, // Target SOC từ reservation (dùng để auto-stop)
                         Status = "in_progress",
                         EnergyUsed = 0,
                         DurationMinutes = 0,
@@ -276,11 +290,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     
                     if (targetSocFromReservation.HasValue)
                     {
-                        Console.WriteLine($"[StartSessionAsync] Session will auto-stop at {targetSocFromReservation.Value}% SOC (from reservation TargetSoc)");
+                        Console.WriteLine($"[StartSessionAsync] Session {session.SessionId} - InitialSOC: {request.InitialSOC}%, FinalSOC (Target): {targetSocFromReservation.Value}% (từ reservation). Session sẽ tự động dừng khi currentSOC >= {targetSocFromReservation.Value}%.");
                     }
                     else
                     {
-                        Console.WriteLine($"[StartSessionAsync] Session will auto-stop at 100% SOC (no target specified)");
+                        Console.WriteLine($"[StartSessionAsync] Session {session.SessionId} - InitialSOC: {request.InitialSOC}%, FinalSOC (Target): 100% (walk-in, không có reservation). Session sẽ tự động dừng khi currentSOC >= 100%.");
                     }
 
                     // ✅ Lưu maxEndTime vào Notes nếu có (vì entity không có field MaxEndTime)
@@ -513,7 +527,23 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Đảm bảo EndTime >= StartTime (safety check)
                 session.EndTime = endTimeToUse.Value < session.StartTime ? session.StartTime : endTimeToUse.Value;
                 
-                session.FinalSoc = request.FinalSOC;
+                // ✅ QUAN TRỌNG: Set FinalSOC từ request
+                // - Nếu auto-stop: FinalSOC = targetSOC từ reservation (đã được set trong CheckAndAutoStopSessionAsync)
+                // - Nếu stop thủ công: FinalSOC = request.FinalSOC từ client
+                // - Đảm bảo FinalSOC >= InitialSOC (SOC không thể giảm)
+                int finalSOC = request.FinalSOC;
+                if (finalSOC < session.InitialSoc)
+                {
+                    Console.WriteLine($"⚠️ [StopSessionAsync] FinalSOC ({finalSOC}%) < InitialSOC ({session.InitialSoc}%). Điều chỉnh thành InitialSOC.");
+                    finalSOC = session.InitialSoc;
+                }
+                
+                // Đảm bảo FinalSOC không vượt quá 100%
+                finalSOC = Math.Min(finalSOC, 100);
+                
+                session.FinalSoc = finalSOC;
+                
+                Console.WriteLine($"[StopSessionAsync] Session {session.SessionId} - InitialSOC: {session.InitialSoc}%, FinalSOC: {finalSOC}%, EnergyUsed: {session.EnergyUsed ?? 0}kWh");
                 
                 // Tính DurationMinutes và đảm bảo >= 0
                 var durationMinutes = (int)(session.EndTime.Value - session.StartTime).TotalMinutes;
