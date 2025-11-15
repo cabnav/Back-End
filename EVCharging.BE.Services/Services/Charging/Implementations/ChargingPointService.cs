@@ -1,8 +1,9 @@
 ﻿using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
-using CP = EVCharging.BE.Common.DTOs.Stations;
+using Org.BouncyCastle.Crypto;
 using System.Linq;
+using CP = EVCharging.BE.Common.DTOs.Stations;
 
 namespace EVCharging.BE.Services.Services.Charging.Implementations
 {
@@ -169,5 +170,27 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             await _db.SaveChangesAsync();
             return true;
         }
+
+        public async Task<CP.ChargingPointDTO?> UpdatePriceAsync(int id, decimal newPricePerKwh)
+        {
+            // 1. Tìm Entity (Mô hình Database) theo ID
+            var entity = await _db.ChargingPoints.FirstOrDefaultAsync(p => p.PointId == id);
+
+            // 2. Kiểm tra nếu không tìm thấy
+            if (entity == null)
+            {
+                return null; // Controller sẽ trả 404
+            }
+
+            // 3. Cập nhật trường giá tiền (PricePerKwh)
+            entity.PricePerKwh = newPricePerKwh;
+
+            // 4. Lưu thay đổi vào Database
+            await _db.SaveChangesAsync();
+
+            // 5. Trả về DTO đã cập nhật bằng cách gọi lại GetByIdAsync
+            return await GetByIdAsync(id);
+        }
+
     }
 }

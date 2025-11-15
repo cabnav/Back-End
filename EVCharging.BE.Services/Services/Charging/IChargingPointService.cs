@@ -11,6 +11,7 @@ namespace EVCharging.BE.Services.Services.Charging
 
         Task<CP.ChargingPointDTO?> UpdateStatusAsync(int id, string newStatus);
         Task<CP.ChargingPointDTO> CreateAsync(CP.ChargingPointCreateRequest req);
+        Task<CP.ChargingPointDTO?> UpdatePriceAsync(int id, decimal newPricePerKwh);
         Task<bool> UpdateAsync(int id, CP.ChargingPointUpdateRequest req);
         Task<bool> DeleteAsync(int id);
     }

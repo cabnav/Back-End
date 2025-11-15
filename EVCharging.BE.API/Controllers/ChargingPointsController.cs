@@ -50,11 +50,30 @@ namespace EVCharging.BE.API.Controllers
             return dto is null ? NotFound() : Ok(dto);
         }
 
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        [HttpPut("{id:int}/price")]
+        public async Task<IActionResult> UpdatePrice(int id, [FromBody] decimal price)
         {
-            var ok = await _service.DeleteAsync(id);
-            return ok ? NoContent() : NotFound();
+            if (price < 0) return BadRequest("Price cannot be negative.");
+
+            try
+            {
+                var dto = await _service.UpdatePriceAsync(id, price);
+
+                // Nếu Service trả về null (thường là không tìm thấy ID)
+                return dto is null ? NotFound() : Ok(dto);
+            }
+            catch (Exception ex)
+            {
+                // Bắt bất kỳ lỗi nào xảy ra trong Service (ví dụ: lỗi DB, lỗi logic)
+
+                // 500 Internal Server Error với thông báo tùy chỉnh
+                // LƯU Ý: Không nên trả về ex.Message cho môi trường Production.
+                return StatusCode(500, new
+                {
+                    message = "An unexpected error occurred while updating the price.",
+                    details = ex.Message
+                });
+            }
         }
     }
 }
