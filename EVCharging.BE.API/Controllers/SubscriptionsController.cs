@@ -27,11 +27,36 @@ namespace EVCharging.BE.API.Controllers
             try
             {
                 var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                
+                // Kiểm tra xem user đã có subscription active chưa
+                var existingSubscription = await _subscriptionService.GetActiveSubscriptionAsync(userId);
+                if (existingSubscription != null && !string.IsNullOrEmpty(existingSubscription.Tier))
+                {
+                    return BadRequest(new 
+                    { 
+                        message = $"Bạn đã đăng ký gói {existingSubscription.Tier.ToUpper()}. Vui lòng hủy gói hiện tại trước khi đăng ký gói mới." 
+                    });
+                }
+                
                 var result = await _subscriptionService.SubscribeAsync(userId, request);
+                
+                // Nếu có PaymentUrl (thanh toán MoMo), trả về message khác
+                if (!string.IsNullOrEmpty(result.PaymentUrl))
+                {
+                    return Ok(new
+                    {
+                        message = $"Vui lòng thanh toán để hoàn tất đăng ký gói {request.Tier.ToUpper()}",
+                        subscription = result,
+                        paymentUrl = result.PaymentUrl,
+                        requiresPayment = true
+                    });
+                }
+                
                 return Ok(new
                 {
                     message = $"Đăng ký gói {request.Tier.ToUpper()} thành công",
-                    subscription = result
+                    subscription = result,
+                    requiresPayment = false
                 });
             }
             catch (ArgumentException ex)
