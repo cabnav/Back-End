@@ -52,7 +52,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 throw new InvalidOperationException($"Phiên sạc chưa hoàn thành. Trạng thái hiện tại: {session.Status}");
 
             // Kiểm tra đã có chi phí cuối cùng chưa
-            if (!session.FinalCost.HasValue || session.FinalCost.Value <= 0)
+            // Lưu ý: final_cost = 0 là hợp lệ khi deposit đã cover hết chi phí
+            if (!session.FinalCost.HasValue)
                 throw new InvalidOperationException("Phiên sạc chưa có chi phí cuối cùng.");
 
             // Kiểm tra đã thanh toán chưa
@@ -125,31 +126,39 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 }
             }
 
-            // Tính số tiền cần thanh toán (FinalCost - Deposit)
-            var amountToPay = session.FinalCost.Value - depositAmount;
-            if (amountToPay < 0)
+            // ✅ FinalCost đã được trừ deposit trong ChargingService, nên sử dụng trực tiếp
+            // Tuy nhiên, nếu deposit > cost_after_discount, cần hoàn tiền dư
+            var amountToPay = session.FinalCost ?? 0m;
+            
+            // Tính cost sau discount (không có deposit)
+            var costAfterDiscount = (session.CostBeforeDiscount ?? 0m) - (session.AppliedDiscount ?? 0m);
+            
+            // Nếu deposit > cost_after_discount, hoàn tiền dư vào ví
+            decimal refundAmount = 0m;
+            if (depositAmount > costAfterDiscount && depositAmount > 0)
             {
-                // Nếu deposit > FinalCost, hoàn tiền dư vào ví
-                var refundAmount = Math.Abs(amountToPay);
+                refundAmount = depositAmount - costAfterDiscount;
                 await _walletService.CreditAsync(
                     userId,
                     refundAmount,
                     $"Hoàn tiền cọc dư cho phiên sạc #{sessionId}",
                     sessionId
                 );
-                amountToPay = 0; // Không cần thanh toán thêm
+                Console.WriteLine($"[PaymentService] Hoàn tiền cọc dư: Deposit={depositAmount}, CostAfterDiscount={costAfterDiscount}, Refund={refundAmount}");
             }
 
             // Kiểm tra số dư ví (chỉ nếu cần thanh toán thêm)
             var currentBalance = await _walletService.GetBalanceAsync(userId);
             if (amountToPay > 0 && currentBalance < amountToPay)
-                throw new InvalidOperationException($"Số dư ví không đủ. Số dư hiện tại: {currentBalance:F0} VND, Cần: {amountToPay:F0} VND (Đã trừ cọc {depositAmount:F0} VND)");
+                throw new InvalidOperationException($"Số dư ví không đủ. Số dư hiện tại: {currentBalance:F0} VND, Cần: {amountToPay:F0} VND {(depositAmount > 0 ? $"(Đã trừ cọc {depositAmount:F0} VND)" : "")}");
 
             // Trừ tiền từ ví (chỉ nếu cần thanh toán thêm)
             decimal newBalance = currentBalance;
             if (amountToPay > 0)
             {
-                var paymentDescription = $"Thanh toán phiên sạc #{sessionId} - Trạm: {session.Point.Station?.Name ?? "N/A"} (Đã trừ cọc {depositAmount:F0} VND)";
+                var paymentDescription = depositAmount > 0
+                    ? $"Thanh toán phiên sạc #{sessionId} - Trạm: {session.Point.Station?.Name ?? "N/A"} (Đã trừ cọc {depositAmount:F0} VND)"
+                    : $"Thanh toán phiên sạc #{sessionId} - Trạm: {session.Point.Station?.Name ?? "N/A"}";
                 await _walletService.DebitAsync(
                     userId,
                     amountToPay,
@@ -163,7 +172,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             var invoice = await _invoiceService.CreateInvoiceForSessionAsync(
                 sessionId,
                 userId,
-                amountToPay > 0 ? amountToPay : session.FinalCost.Value,
+                amountToPay,
                 "wallet"
             );
 
@@ -173,7 +182,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 UserId = userId,
                 SessionId = sessionId,
                 ReservationId = reservationId,
-                Amount = amountToPay > 0 ? amountToPay : session.FinalCost.Value,
+                Amount = amountToPay,
                 PaymentMethod = "wallet",
                 PaymentStatus = "success",
                 PaymentType = "session_payment", // ⭐ Quan trọng
@@ -192,9 +201,33 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .OrderByDescending(wt => wt.CreatedAt)
                 .FirstOrDefaultAsync();
 
-            var successMessage = depositAmount > 0
-                ? $"Thanh toán thành công. Đã trừ cọc {depositAmount:F0} VND, thanh toán thêm {amountToPay:F0} VND"
-                : "Thanh toán thành công";
+            // Tạo success message với thông báo hoàn cọc rõ ràng
+            string successMessage;
+            if (depositAmount > 0)
+            {
+                if (refundAmount > 0)
+                {
+                    // Trường hợp hoàn cọc dư
+                    successMessage = $"Thanh toán thành công. Đã trừ cọc {depositAmount:F0} VND. Hoàn lại {refundAmount:F0} VND vào ví (Không cần thanh toán thêm).";
+                }
+                else if (amountToPay == 0)
+                {
+                    // Deposit đủ cover chi phí, không cần trả thêm, không hoàn
+                    successMessage = $"Thanh toán thành công. Đã trừ cọc {depositAmount:F0} VND. Không cần thanh toán thêm.";
+                }
+                else
+                {
+                    // Deposit không đủ, cần trả thêm
+                    successMessage = $"Thanh toán thành công. Đã trừ cọc {depositAmount:F0} VND, thanh toán thêm {amountToPay:F0} VND.";
+                }
+            }
+            else
+            {
+                // Không có deposit
+                successMessage = amountToPay > 0 
+                    ? $"Thanh toán thành công. Số tiền: {amountToPay:F0} VND."
+                    : "Thanh toán thành công.";
+            }
 
             return new PaymentResultDto
             {
@@ -206,7 +239,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     SessionId = sessionId,
                     ReservationId = reservationId,
                     UserId = userId,
-                    Amount = amountToPay > 0 ? amountToPay : session.FinalCost.Value,
+                    Amount = amountToPay,
                     PaymentMethod = "wallet",
                     PaymentStatus = "success",
                     InvoiceNumber = invoice.InvoiceNumber,
@@ -248,7 +281,8 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 throw new InvalidOperationException($"Phiên sạc chưa hoàn thành. Trạng thái hiện tại: {session.Status}");
 
             // Kiểm tra đã có chi phí cuối cùng chưa
-            if (!session.FinalCost.HasValue || session.FinalCost.Value <= 0)
+            // Lưu ý: final_cost = 0 là hợp lệ khi deposit đã cover hết chi phí
+            if (!session.FinalCost.HasValue)
                 throw new InvalidOperationException("Phiên sạc chưa có chi phí cuối cùng.");
 
             // Kiểm tra đã thanh toán chưa (check cả pending và success)
