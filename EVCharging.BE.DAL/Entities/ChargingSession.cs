@@ -27,6 +27,8 @@ public partial class ChargingSession
 
     public decimal? AppliedDiscount { get; set; }
 
+    public decimal? DepositAmount { get; set; }
+
     public decimal? FinalCost { get; set; }
 
     public string? Status { get; set; }

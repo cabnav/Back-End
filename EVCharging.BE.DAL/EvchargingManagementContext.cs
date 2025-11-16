@@ -165,6 +165,10 @@ public partial class EvchargingManagementContext : DbContext
                 .HasDefaultValue(0.0m)
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("cost_before_discount");
+            entity.Property(e => e.DepositAmount)
+                .HasDefaultValue(0.0m)
+                .HasColumnType("decimal(10, 2)")
+                .HasColumnName("deposit_amount");
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
             entity.Property(e => e.DurationMinutes)
                 .HasDefaultValue(0)

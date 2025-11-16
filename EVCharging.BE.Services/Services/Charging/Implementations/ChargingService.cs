@@ -583,7 +583,30 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var costResponse = await _costCalculationService.CalculateCostAsync(costRequest);
                 session.CostBeforeDiscount = costResponse.BaseCost;
                 session.AppliedDiscount = costResponse.TotalDiscount;
-                session.FinalCost = costResponse.FinalCost;
+                
+                // Lấy deposit amount từ reservation (nếu có)
+                decimal depositAmount = 0m;
+                if (session.ReservationId.HasValue)
+                {
+                    var depositPayment = await _db.Payments
+                        .Where(p => p.ReservationId == session.ReservationId.Value
+                            && p.PaymentType == "deposit"
+                            && p.PaymentStatus == "success")
+                        .OrderByDescending(p => p.CreatedAt)
+                        .FirstOrDefaultAsync();
+                    
+                    if (depositPayment != null)
+                    {
+                        depositAmount = depositPayment.Amount;
+                    }
+                }
+                
+                // Trừ deposit amount vào final_cost (final_cost = cost_after_discount - deposit)
+                var finalCostAfterDiscount = costResponse.FinalCost;
+                session.DepositAmount = depositAmount;
+                session.FinalCost = Math.Max(0, finalCostAfterDiscount - depositAmount);
+                
+                Console.WriteLine($"[StopSessionAsync] Session {session.SessionId} - CostAfterDiscount: {finalCostAfterDiscount}, DepositAmount: {depositAmount}, FinalCost: {session.FinalCost}");
 
                 // Update payment amount if there's a pending payment for this session (walk-in cash/card/pos)
                 var pendingPayment = await _db.Payments
