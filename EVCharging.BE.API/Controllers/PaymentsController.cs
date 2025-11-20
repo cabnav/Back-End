@@ -371,13 +371,25 @@ namespace EVCharging.BE.API.Controllers
                 {
                     if (!string.IsNullOrEmpty(result.RedirectUrl))
                     {
+                        // If service returned absolute URL, redirect directly. Otherwise prefix with current host.
+                        if (Uri.IsWellFormedUriString(result.RedirectUrl, UriKind.Absolute))
+                            return Redirect(result.RedirectUrl);
+
                         return Redirect($"{Request.Scheme}://{Request.Host}{result.RedirectUrl}");
                     }
                     return BadRequest(new { message = result.ErrorMessage ?? "Payment processing failed" });
                 }
 
-                // Redirect đến trang thành công hoặc thất bại
-                return Redirect($"{Request.Scheme}://{Request.Host}{result.RedirectUrl}");
+                // Redirect to frontend URL returned by service. Support absolute or relative paths.
+                if (!string.IsNullOrEmpty(result.RedirectUrl))
+                {
+                    if (Uri.IsWellFormedUriString(result.RedirectUrl, UriKind.Absolute))
+                        return Redirect(result.RedirectUrl);
+
+                    return Redirect($"{Request.Scheme}://{Request.Host}{result.RedirectUrl}");
+                }
+
+                return Ok(new { message = "Payment processed" });
             }
             catch (Exception ex)
             {
