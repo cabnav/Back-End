@@ -519,63 +519,19 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     return false;
                 }
 
-                // ✅ Tính SOC hiện tại từ session đã load (không gọi GetCurrentSOCAsync để tránh duplicate query)
-                int currentSOC;
+                // ✅ Tính SOC hiện tại hoàn toàn dựa trên năng lượng đã sạc
+                var currentSOC = CalculateCurrentSOCFromEnergy(session);
+                if (session.CurrentSoc != currentSOC)
+                {
+                    session.CurrentSoc = currentSOC;
+                    await db.SaveChangesAsync();
+                }
 
-                // Nếu có log, lấy từ log mới nhất (chỉ lấy log hợp lệ: LogTime >= StartTime)
+                // Lấy log mới nhất (chỉ để kiểm tra tiến trình, không dùng cho SOC)
                 var latestLog = session.SessionLogs?
-                    .Where(sl => sl.LogTime.HasValue && sl.LogTime.Value >= session.StartTime) // ✅ Chỉ lấy log sau StartTime
+                    .Where(sl => sl.LogTime.HasValue && sl.LogTime.Value >= session.StartTime)
                     .OrderByDescending(sl => sl.LogTime)
                     .FirstOrDefault();
-
-                if (latestLog?.SocPercentage.HasValue == true)
-                {
-                    currentSOC = latestLog.SocPercentage.Value;
-                    // ✅ Validate: SOC không thể < InitialSOC hoặc > 100
-                    if (currentSOC < session.InitialSoc)
-                    {
-                        _logger.LogWarning(
-                            "Session {SessionId} - CurrentSOC từ log ({CurrentSOC}%) < InitialSOC ({InitialSOC}%), không hợp lệ. Sử dụng InitialSOC.",
-                            sessionId, currentSOC, session.InitialSoc);
-                        currentSOC = session.InitialSoc;
-                    }
-                    currentSOC = Math.Min(currentSOC, 100); // Đảm bảo không vượt quá 100%
-                }
-                else if (session.Driver?.BatteryCapacity.HasValue == true &&
-                         session.EnergyUsed.HasValue &&
-                         session.Driver.BatteryCapacity.Value > 0)
-                {
-                    // Tính từ EnergyUsed và BatteryCapacity
-                    var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                    var energyUsed = session.EnergyUsed.Value;
-                    
-                    // ✅ Validate: EnergyUsed không thể âm
-                    if (energyUsed < 0)
-                    {
-                        _logger.LogWarning(
-                            "Session {SessionId} - EnergyUsed ({EnergyUsed}) < 0, không hợp lệ. Sử dụng InitialSOC.",
-                            sessionId, energyUsed);
-                        currentSOC = session.InitialSoc;
-                    }
-                    else
-                    {
-                        var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
-                        currentSOC = session.InitialSoc + socIncrease;
-                        currentSOC = Math.Min(currentSOC, 100); // Đảm bảo không vượt quá 100%
-                        // ✅ Validate: SOC không thể < InitialSOC (sau khi tính)
-                        currentSOC = Math.Max(currentSOC, session.InitialSoc);
-                    }
-                }
-                else
-                {
-                    // Nếu chưa có log và chưa có EnergyUsed, dùng InitialSoc
-                    // Nhưng nếu InitialSOC đã >= target, không nên auto-stop ngay (cần thời gian để verify)
-                    currentSOC = session.InitialSoc;
-                }
-
-                // ✅ QUAN TRỌNG: Đảm bảo currentSOC >= InitialSOC (double-check)
-                // SOC không thể giảm so với InitialSOC
-                currentSOC = Math.Max(currentSOC, session.InitialSoc);
 
                 // ✅ Xác định target SOC từ reservation (lấy mới nhất từ database)
                 // Logic:
@@ -725,7 +681,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Logic: Khi InitialSOC sạc tăng lên = FinalSOC (targetSOC), tự động dừng
                 // ✅ QUAN TRỌNG: Thêm điều kiện currentSOC > InitialSOC để đảm bảo đã có tiến trình sạc
                 if (targetSOC >= session.InitialSoc && 
-                    currentSOC >= targetSOC && // ✅ Đảm bảo SOC đã tăng so với InitialSOC
+                    currentSOC >= targetSOC && 
+                    currentSOC > session.InitialSoc && // ✅ Đảm bảo SOC đã tăng so với InitialSOC
                     hasActualChargingProgress)
                 {
                     _logger.LogInformation(
@@ -745,6 +702,27 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     
                     // Đảm bảo FinalSOC >= InitialSOC (SOC không thể giảm)
                     finalSOCToUse = Math.Max(finalSOCToUse, session.InitialSoc);
+
+                    // Nếu log cuối cùng chưa phản ánh SOC đạt target, thêm log cuối ở mức target/final
+                    if (latestLog?.SocPercentage.GetValueOrDefault() < finalSOCToUse)
+                    {
+                        var finalLog = new EVCharging.BE.DAL.Entities.SessionLog
+                        {
+                            SessionId = sessionId,
+                            SocPercentage = finalSOCToUse,
+                            CurrentPower = 0,
+                            Voltage = latestLog?.Voltage ?? 400,
+                            Temperature = latestLog?.Temperature ?? 25,
+                            LogTime = DateTime.UtcNow
+                        };
+
+                        db.SessionLogs.Add(finalLog);
+                        await db.SaveChangesAsync();
+
+                        _logger.LogInformation(
+                            "Session {SessionId} - Added final SOC log at {FinalSOC}% before auto-stop to reflect completion.",
+                            sessionId, finalSOCToUse);
+                    }
 
                     // Tự động dừng session
                     var stopRequest = new ChargingSessionStopRequest
@@ -872,29 +850,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     targetSOC = MIN_VALID_TARGET_SOC;
                 }
 
-                // Lấy SOC hiện tại
-                int currentSOC;
-                var latestLog = session.SessionLogs?
-                    .OrderByDescending(sl => sl.LogTime)
-                    .FirstOrDefault();
+                var driver = session.Driver;
+                var batteryCapacity = driver?.BatteryCapacity;
+                if (batteryCapacity.HasValue != true ||
+                    batteryCapacity.Value <= 0 ||
+                    !session.EnergyUsed.HasValue)
+                {
+                    return; // Chưa có dữ liệu năng lượng để tính SOC
+                }
 
-                if (latestLog?.SocPercentage.HasValue == true)
+                var currentSOC = CalculateCurrentSOCFromEnergy(session);
+                if (session.CurrentSoc != currentSOC)
                 {
-                    currentSOC = latestLog.SocPercentage.Value;
-                }
-                else if (session.Driver?.BatteryCapacity.HasValue == true &&
-                         session.EnergyUsed.HasValue &&
-                         session.Driver.BatteryCapacity.Value > 0)
-                {
-                    var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                    var energyUsed = session.EnergyUsed.Value;
-                    var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
-                    currentSOC = session.InitialSoc + socIncrease;
-                    currentSOC = Math.Min(currentSOC, 100);
-                }
-                else
-                {
-                    return; // Chưa có dữ liệu SOC
+                    session.CurrentSoc = currentSOC;
+                    await db.SaveChangesAsync();
                 }
 
                 // Kiểm tra xem có gần target chưa (còn 10% so với targetSOC)
@@ -1023,24 +992,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (session == null)
                     return 0;
 
-                // Nếu có log, lấy từ log mới nhất
-                var latestLog = session.SessionLogs?
-                    .OrderByDescending(sl => sl.LogTime)
-                    .FirstOrDefault();
-
-                if (latestLog?.SocPercentage.HasValue == true)
-                    return latestLog.SocPercentage.Value;
-
-                // Nếu chưa có log, tính từ EnergyUsed và BatteryCapacity
                 if (session.Driver?.BatteryCapacity.HasValue == true &&
-                    session.EnergyUsed.HasValue &&
-                    session.Driver.BatteryCapacity.Value > 0)
+                    session.Driver.BatteryCapacity.Value > 0 &&
+                    session.EnergyUsed.HasValue)
                 {
-                    var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                    var energyUsed = session.EnergyUsed.Value;
-                    var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
-                    var currentSOC = session.InitialSoc + socIncrease;
-                    return Math.Min(currentSOC, 100);
+                    return CalculateCurrentSOCFromEnergy(session);
                 }
 
                 return session.InitialSoc;
@@ -1165,13 +1121,15 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         ? (now - lastLog.LogTime.Value).TotalSeconds
                         : 0);
 
-                // Tính toán SOC hiện tại
-                var currentSOC = CalculateCurrentSOCFromLogs(session, lastLog);
+                // Tính toán SOC hiện tại dựa trên năng lượng đã sạc
+                var currentSOC = CalculateCurrentSOCFromEnergy(session);
 
                 // Tính current power (dùng từ log cuối hoặc PowerOutput)
                 var currentPower = lastLog?.CurrentPower ?? (decimal)(session.Point.PowerOutput ?? 50);
 
                 // Tạo log mới
+                session.CurrentSoc = currentSOC;
+
                 var newLog = new EVCharging.BE.DAL.Entities.SessionLog
                 {
                     SessionId = sessionId,
@@ -1182,7 +1140,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     LogTime = now
                 };
 
-                db.SessionLogs.Add(newLog);
+                db.SessionLogs.Add(newLog); 
 
                 // ✅ KHÔNG cập nhật FinalSoc ở đây
                 // FinalSoc đã được set từ reservation.TargetSoc khi start session
@@ -1203,44 +1161,24 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         /// <summary>
-        /// Tính SOC hiện tại dựa trên logs và EnergyUsed
+        /// Tính SOC hiện tại dựa trên năng lượng đã sạc
         /// </summary>
-        private int CalculateCurrentSOCFromLogs(EVCharging.BE.DAL.Entities.ChargingSession session, EVCharging.BE.DAL.Entities.SessionLog? lastLog)
+        private int CalculateCurrentSOCFromEnergy(EVCharging.BE.DAL.Entities.ChargingSession session)
         {
-            // Nếu có log cuối, dùng SOC từ log đó (hoặc tính từ energy đã tăng)
-            if (lastLog?.SocPercentage.HasValue == true)
-            {
-                // Nếu log có SOC, kiểm tra xem có cần cập nhật không dựa trên energy
-                if (session.Driver?.BatteryCapacity.HasValue == true && session.EnergyUsed.HasValue)
-                {
-                    var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                    var energyUsed = session.EnergyUsed.Value;
-
-                    // Tính SOC từ energy
-                    var socFromEnergy = session.InitialSoc + (int)((energyUsed / batteryCapacity) * 100);
-                    var socFromLog = lastLog.SocPercentage.Value;
-
-                    // Dùng giá trị cao hơn (đảm bảo SOC không giảm)
-                    return Math.Min(Math.Max(socFromLog, socFromEnergy), 100);
-                }
-
-                return lastLog.SocPercentage.Value;
-            }
-
-            // Nếu chưa có log, tính từ EnergyUsed và BatteryCapacity
-            if (session.Driver?.BatteryCapacity.HasValue == true && session.EnergyUsed.HasValue)
+            if (session.Driver?.BatteryCapacity.HasValue == true &&
+                session.Driver.BatteryCapacity.Value > 0 &&
+                session.EnergyUsed.HasValue)
             {
                 var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                var energyUsed = session.EnergyUsed.Value;
+                var energyUsed = Math.Max(session.EnergyUsed.Value, 0m);
 
-                // Tính % SOC tăng thêm
                 var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
                 var currentSOC = session.InitialSoc + socIncrease;
+                currentSOC = Math.Min(currentSOC, 100);
 
-                return Math.Min(currentSOC, 100); // Không vượt quá 100%
+                return Math.Max(currentSOC, session.InitialSoc);
             }
 
-            // Fallback: dùng InitialSoc
             return session.InitialSoc;
         }
 
@@ -1273,27 +1211,13 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     session.EnergyUsed = calculatedEnergy;
                     session.DurationMinutes = (int)(DateTime.UtcNow - session.StartTime).TotalMinutes;
 
-                    // ✅ Cập nhật InitialSOC (pin hiện tại) dựa trên EnergyUsed
-                    // InitialSOC = pin hiện tại, cập nhật khi sạc lên 1-2%
                     if (session.Driver?.BatteryCapacity.HasValue == true && session.Driver.BatteryCapacity.Value > 0)
                     {
-                        var batteryCapacity = session.Driver.BatteryCapacity.Value;
-                        var socIncrease = (int)((calculatedEnergy / batteryCapacity) * 100);
-                        var currentSOC = session.InitialSoc + socIncrease;
-                        currentSOC = Math.Min(currentSOC, 100); // Không vượt quá 100%
-
-                        // ✅ Cập nhật InitialSOC khi pin tăng 1-2% so với InitialSOC hiện tại
-                        // InitialSOC luôn phản ánh tình trạng pin hiện tại
-                        const int SOC_UPDATE_THRESHOLD = 2; // Cập nhật khi tăng 2% trở lên
-                        if (currentSOC > session.InitialSoc + SOC_UPDATE_THRESHOLD)
+                        var currentSOC = CalculateCurrentSOCFromEnergy(session);
+                        if (session.CurrentSoc != currentSOC)
                         {
-                            var oldInitialSOC = session.InitialSoc;
-                            session.InitialSoc = currentSOC;
-                            _logger.LogDebug(
-                                "Session {SessionId} - Cập nhật InitialSOC (pin hiện tại) từ {OldInitialSOC}% lên {NewInitialSOC}% (tăng {Increase}%)",
-                                sessionId, oldInitialSOC, session.InitialSoc, currentSOC - oldInitialSOC);
+                            session.CurrentSoc = currentSOC;
                         }
-                        // Nếu không đủ threshold, giữ nguyên InitialSOC (chưa tăng đủ)
                     }
 
                     await db.SaveChangesAsync();

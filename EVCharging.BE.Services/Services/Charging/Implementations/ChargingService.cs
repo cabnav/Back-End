@@ -1237,45 +1237,28 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         }
 
         /// <summary>
-        /// Tính currentSOC từ log mới nhất hoặc ước tính từ thời gian
+        /// Tính currentSOC dựa trên năng lượng đã sạc hoặc giá trị lưu trữ
         /// </summary>
         private int? CalculateCurrentSOC(ChargingSession session)
         {
-            // Nếu có log, lấy từ log mới nhất
-            var latestLog = session.SessionLogs?.OrderByDescending(l => l.LogTime).FirstOrDefault();
-            if (latestLog?.SocPercentage.HasValue == true)
+            if (session.CurrentSoc.HasValue)
             {
-                return latestLog.SocPercentage.Value;
+                return session.CurrentSoc.Value;
             }
 
-            // Nếu chưa có log, ước tính từ thời gian và công suất
-            if (session.Status == "in_progress" && session.Driver?.BatteryCapacity.HasValue == true && session.Point?.PowerOutput.HasValue == true)
+            if (session.Driver?.BatteryCapacity.HasValue == true &&
+                session.Driver.BatteryCapacity.Value > 0 &&
+                session.EnergyUsed.HasValue)
             {
-                var duration = DateTime.UtcNow - session.StartTime;
-                var batteryCapacity = (decimal)session.Driver.BatteryCapacity.Value;
-                var powerOutput = (decimal)session.Point.PowerOutput.Value;
-
-                // Kiểm tra batteryCapacity > 0 để tránh DivideByZeroException
-                if (batteryCapacity <= 0)
-                {
-                    Console.WriteLine($"⚠️ [CalculateCurrentSOC] BatteryCapacity is 0 or negative for session {session.SessionId}. Cannot calculate SOC.");
-                    return null;
-                }
-
-                // Tính năng lượng có thể sạc được (không vượt quá dung lượng còn lại)
-                var maxEnergyAvailable = batteryCapacity * (100 - session.InitialSoc) / 100;
-                var estimatedEnergy = (decimal)duration.TotalHours * powerOutput;
-                var actualEnergy = Math.Min(estimatedEnergy, maxEnergyAvailable);
-
-                // Tính % SOC tăng thêm
-                var socIncrease = (actualEnergy / batteryCapacity) * 100;
-                var estimatedSOC = session.InitialSoc + (int)socIncrease;
-
-                // Không vượt quá 100%
-                return Math.Min(estimatedSOC, 100);
+                var batteryCapacity = session.Driver.BatteryCapacity.Value;
+                var energyUsed = Math.Max(session.EnergyUsed.Value, 0m);
+                var socIncrease = (int)((energyUsed / batteryCapacity) * 100);
+                var currentSOC = session.InitialSoc + socIncrease;
+                currentSOC = Math.Min(currentSOC, 100);
+                return Math.Max(currentSOC, session.InitialSoc);
             }
 
-            return null;
+            return session.InitialSoc;
         }
 
         /// <summary>
