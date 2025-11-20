@@ -255,11 +255,10 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     // Lấy FrontendUrl từ config
                     var frontendUrl = _configuration["AppSettings:FrontendUrl"]
                         ?? _configuration["AppSettings:BaseUrl"]
-                        ?? "http://localhost:5172";
+                        ?? "http://localhost:5173";
 
-                    var redirect = (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
-                        ? $"{frontendUrl}/wallet/topup/success?orderId={result.OrderId}"
-                        : $"{frontendUrl}/payment/success?orderId={result.OrderId}";
+                    // Redirect to frontend home page (root)
+                    var redirect = frontendUrl;
 
                     return new MomoCallbackResultDto
                     {
@@ -350,14 +349,13 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
                     var frontendUrl = _configuration["AppSettings:FrontendUrl"]
                         ?? _configuration["AppSettings:BaseUrl"]
-                        ?? "http://localhost:5172";
+                        ?? "http://localhost:5173";
 
+                    // Redirect user to frontend home page
                     return new MomoCallbackResultDto
                     {
                         Success = true,
-                        RedirectUrl = (!payment.SessionId.HasValue && !payment.ReservationId.HasValue)
-                            ? $"{frontendUrl}/wallet/topup/success?orderId={result.OrderId}"
-                            : $"{frontendUrl}/payment/success?orderId={result.OrderId}",
+                        RedirectUrl = frontendUrl,
                         OrderId = result.OrderId
                     };
                 }
@@ -370,7 +368,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
                     var frontendUrl = _configuration["AppSettings:FrontendUrl"]
                         ?? _configuration["AppSettings:BaseUrl"]
-                        ?? "http://localhost:5172";
+                        ?? "http://localhost:5173";
 
                     return new MomoCallbackResultDto
                     {
@@ -396,6 +394,22 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     OrderId = PaymentExecuteAsync(collection).OrderId
                 };
             }
+        }
+
+        // Ensure frontend url has scheme and no trailing slash
+        private string GetFrontendUrl()
+        {
+            var url = _configuration["AppSettings:FrontendUrl"]
+                      ?? _configuration["AppSettings:BaseUrl"]
+                      ?? "http://localhost:5173";
+
+            url = url.Trim();
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "http://" + url;
+            }
+
+            return url.TrimEnd('/');
         }
 
         public async Task<MomoNotifyResultDto> ProcessNotifyAsync(IQueryCollection collection)

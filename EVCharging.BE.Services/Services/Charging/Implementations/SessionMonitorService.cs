@@ -725,8 +725,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 // Logic: Khi InitialSOC sạc tăng lên = FinalSOC (targetSOC), tự động dừng
                 // ✅ QUAN TRỌNG: Thêm điều kiện currentSOC > InitialSOC để đảm bảo đã có tiến trình sạc
                 if (targetSOC >= session.InitialSoc && 
-                    currentSOC >= targetSOC && 
-                    currentSOC > session.InitialSoc && // ✅ Đảm bảo SOC đã tăng so với InitialSOC
+                    currentSOC >= targetSOC && // ✅ Đảm bảo SOC đã tăng so với InitialSOC
                     hasActualChargingProgress)
                 {
                     _logger.LogInformation(
