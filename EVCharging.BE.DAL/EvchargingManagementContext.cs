@@ -183,6 +183,7 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnType("decimal(10, 2)")
                 .HasColumnName("final_cost");
             entity.Property(e => e.FinalSoc).HasColumnName("final_soc");
+            entity.Property(e => e.CurrentSoc).HasColumnName("current_soc");
             entity.Property(e => e.InitialSoc).HasColumnName("initial_soc");
             entity.Property(e => e.PointId).HasColumnName("point_id");
             entity.Property(e => e.ReservationId).HasColumnName("reservation_id");

@@ -17,6 +17,8 @@ public partial class ChargingSession
 
     public int InitialSoc { get; set; }
 
+    public int? CurrentSoc { get; set; }
+
     public int? FinalSoc { get; set; }
 
     public decimal? EnergyUsed { get; set; }
