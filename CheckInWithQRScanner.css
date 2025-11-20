@@ -1,0 +1,343 @@
+/* Check-in Screen với QR Scanner - Mobile First Design */
+
+.check-in-screen {
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.check-in-header {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.back-button {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #333;
+  cursor: pointer;
+  padding: 8px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.check-in-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  flex: 1;
+  text-align: center;
+}
+
+/* Reservation Code Box */
+.reservation-code-box {
+  background: #e3f2fd;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 16px;
+  text-align: center;
+}
+
+.reservation-code-label {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.reservation-code-input {
+  width: 100%;
+  background: white;
+  border: 2px solid #2196f3;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2196f3;
+  text-align: center;
+  text-transform: uppercase;
+  box-sizing: border-box;
+}
+
+.reservation-code-input:focus {
+  outline: none;
+  border-color: #1976d2;
+}
+
+.reservation-code-input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+/* QR Scan Section */
+.qr-scan-section {
+  background: white;
+  border: 2px dashed #90caf9;
+  border-radius: 12px;
+  padding: 24px 16px;
+  margin: 0 16px 20px;
+  text-align: center;
+}
+
+.qr-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.qr-scan-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.qr-scan-hint {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 20px 0;
+}
+
+.qr-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.qr-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.qr-input-icon {
+  font-size: 20px;
+  margin-right: 8px;
+  opacity: 0.5;
+}
+
+.qr-input-field {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 12px 0;
+  font-size: 16px;
+  color: #333;
+  outline: none;
+}
+
+.qr-input-field::placeholder {
+  color: #999;
+}
+
+.qr-input-field:disabled {
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* ✅ Button icon camera trong input field */
+.scan-qr-icon-btn {
+  background: none;
+  border: none;
+  color: #2196f3;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  transition: all 0.2s;
+}
+
+.scan-qr-icon-btn:hover:not(:disabled) {
+  color: #1976d2;
+  transform: scale(1.1);
+}
+
+.scan-qr-icon-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.scan-qr-icon-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.clear-qr-btn {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clear-qr-btn:hover {
+  color: #666;
+}
+
+.clear-qr-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* ✅ Button quét QR bằng camera */
+.scan-qr-button {
+  width: 100%;
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.scan-qr-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
+
+.scan-qr-button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.scan-qr-button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Error Message */
+.error-message {
+  background: #ffebee;
+  border: 1px solid #ef5350;
+  color: #c62828;
+  padding: 12px 16px;
+  margin: 0 16px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Footer Buttons */
+.check-in-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+}
+
+.back-footer-button {
+  flex: 1;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+}
+
+.back-footer-button:hover:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.back-footer-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.continue-button {
+  flex: 1;
+  background: #e0e0e0;
+  border: none;
+  border-radius: 8px;
+  padding: 14px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #999;
+  cursor: not-allowed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s;
+}
+
+.continue-button.active {
+  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+}
+
+.continue-button.active:hover {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.4);
+}
+
+.continue-button.active:active {
+  transform: translateY(0);
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+  .check-in-title {
+    font-size: 18px;
+  }
+
+  .reservation-code-box {
+    margin: 16px 12px;
+    padding: 16px;
+  }
+
+  .qr-scan-section {
+    margin: 0 12px 16px;
+    padding: 20px 12px;
+  }
+
+  .check-in-footer {
+    padding: 12px;
+  }
+}
+
