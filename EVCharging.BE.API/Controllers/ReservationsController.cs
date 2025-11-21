@@ -83,27 +83,43 @@ namespace EVCharging.BE.API.Controllers
             // 2) Kiểm tra thời gian check-in hợp lệ
             var now = DateTime.UtcNow;
             
-            // 2.1) Không cho check-in quá sớm (tối đa EarlyCheckInMinutes trước StartTime)
-            if (now < reservation.StartTime.AddMinutes(-_opt.EarlyCheckInMinutes))
+            // 2.1) Kiểm tra check-in sớm: Cho phép check-in sớm 15 phút NẾU slot trước đó không có ai đặt
+            const int EARLY_CHECK_IN_MINUTES = 15;
+            var earliestCheckInTime = reservation.StartTime.AddMinutes(-EARLY_CHECK_IN_MINUTES);
+            
+            if (now < earliestCheckInTime)
             {
-                var minutesUntilStart = (int)(reservation.StartTime - now).TotalMinutes;
+                // Quá sớm, không cho check-in
+                var minutesUntilEarliest = (int)(earliestCheckInTime - now).TotalMinutes;
                 return BadRequest(new { 
-                    message = $"Cannot check in too early. You can check in at most {_opt.EarlyCheckInMinutes} minutes before the reservation start time. " +
-                              $"Your reservation starts at {reservation.StartTime:yyyy-MM-dd HH:mm} UTC, which is {minutesUntilStart} minutes from now."
+                    message = $"Cannot check in too early. " +
+                              $"Earliest check-in time: {earliestCheckInTime:yyyy-MM-dd HH:mm} UTC (15 minutes before start), " +
+                              $"Reservation starts at: {reservation.StartTime:yyyy-MM-dd HH:mm} UTC, " +
+                              $"which is {minutesUntilEarliest} minutes from now."
                 });
             }
             
-            // ✅ ĐÃ BỎ: Kiểm tra hết hạn no-show - Vì đã có cọc tiền, cho phép check-in bất cứ lúc nào trong slot
-            // Logic cũ: Nếu quá NoShowGraceMinutes (30 phút) sau StartTime thì không cho check-in và tự động hủy
-            // Lý do bỏ: Đã có cọc tiền, nếu không tới sạc thì mất cọc, không cần chặn check-in
-            // User có thể check-in bất cứ lúc nào trong thời gian slot (từ StartTime đến EndTime)
+            // Kiểm tra xem có reservation nào đặt slot trước đó không (EndTime = StartTime của reservation hiện tại)
+            var previousReservation = await _db.Reservations
+                .Where(r => r.PointId == reservation.PointId
+                    && r.EndTime == reservation.StartTime
+                    && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress"))
+                .FirstOrDefaultAsync();
             
-            // Code cũ đã được comment:
-            // if (now > reservation.StartTime.AddMinutes(_opt.NoShowGraceMinutes))
-            // {
-            //     await _reservationService.CancelReservationByCodeAsync(userId, reservationCode, "no_show");
-            //     return BadRequest(new { message = $"Reservation expired (no-show). Cannot check in after {_opt.NoShowGraceMinutes} minutes." });
-            // }
+            if (previousReservation != null)
+            {
+                // Có người đặt slot trước đó → Không cho check-in sớm, chỉ cho từ StartTime
+                if (now < reservation.StartTime)
+                {
+                    var minutesUntilStart = (int)(reservation.StartTime - now).TotalMinutes;
+                    return BadRequest(new { 
+                        message = $"Cannot check in early. There is a previous reservation ending at {reservation.StartTime:yyyy-MM-dd HH:mm} UTC. " +
+                                  $"You can only check in from {reservation.StartTime:yyyy-MM-dd HH:mm} UTC onwards, " +
+                                  $"which is {minutesUntilStart} minutes from now."
+                    });
+                }
+            }
+            // Nếu không có reservation trước đó → Cho phép check-in sớm 15 phút (đã check ở trên)
 
             // 2.2) Không cho check-in sau khi đã hết thời gian slot (EndTime)
             if (now > reservation.EndTime)
@@ -115,6 +131,10 @@ namespace EVCharging.BE.API.Controllers
                               $"The reservation will be automatically cancelled. Your deposit will not be refunded."
                 });
             }
+            
+            // ✅ Cho phép check-in:
+            // - Sớm 15 phút NẾU slot trước đó không có ai đặt (earliestCheckInTime <= now < StartTime)
+            // - Đúng giờ hoặc muộn trong slot (StartTime <= now <= EndTime)
 
             // 3) ✅ Tìm charging point từ pointQrCode và validate khớp với reservation
             var chargingPoint = await _db.ChargingPoints
