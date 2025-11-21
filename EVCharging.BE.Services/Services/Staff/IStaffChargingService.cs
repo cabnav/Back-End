@@ -36,6 +36,13 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <returns>Thông tin trạm</returns>
         Task<StationInfo?> GetMyStationInfoAsync(int staffId);
 
+        /// <summary>
+        /// Lấy danh sách tất cả điểm sạc tại trạm được assigned với đầy đủ thông tin real-time
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <returns>Danh sách điểm sạc với thông tin chi tiết và real-time</returns>
+        Task<List<StaffChargingPointDTO>> GetMyStationChargingPointsAsync(int staffId);
+
         // ========== WALK-IN CUSTOMER SESSION MANAGEMENT ==========
 
         /// <summary>

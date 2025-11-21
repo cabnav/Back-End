@@ -157,6 +157,106 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        /// <summary>
+        /// Lấy danh sách tất cả điểm sạc tại trạm được assigned với đầy đủ thông tin real-time
+        /// </summary>
+        public async Task<List<StaffChargingPointDTO>> GetMyStationChargingPointsAsync(int staffId)
+        {
+            try
+            {
+                // 1. Get assigned stations
+                var stationIds = await GetAssignedStationsAsync(staffId);
+                if (!stationIds.Any())
+                {
+                    return new List<StaffChargingPointDTO>();
+                }
+
+                // 2. Get all charging points from assigned stations
+                var chargingPoints = await _db.ChargingPoints
+                    .Include(cp => cp.Station)
+                    .Where(cp => stationIds.Contains(cp.StationId))
+                    .OrderBy(cp => cp.StationId)
+                    .ThenBy(cp => cp.PointId)
+                    .ToListAsync();
+
+                // 3. Get active sessions for these points with latest session logs
+                var pointIds = chargingPoints.Select(cp => cp.PointId).ToList();
+                var activeSessions = await _db.ChargingSessions
+                    .Include(s => s.Driver)
+                    .ThenInclude(d => d.User)
+                    .Include(s => s.SessionLogs.OrderByDescending(sl => sl.LogTime).Take(1))
+                    .Where(s => pointIds.Contains(s.PointId) && 
+                               (s.Status == "in_progress" || s.Status == "paused"))
+                    .ToListAsync();
+
+                // 4. Map to DTOs
+                var result = chargingPoints.Select(cp =>
+                {
+                    var status = cp.Status?.ToLower() ?? "unknown";
+                    var isOnline = status != "offline";
+                    var isAvailable = status == "available";
+
+                    // Find active session for this point
+                    var activeSession = activeSessions.FirstOrDefault(s => s.PointId == cp.PointId);
+                    ActiveSessionInfo? sessionInfo = null;
+
+                    if (activeSession != null)
+                    {
+                        var duration = DateTime.UtcNow - activeSession.StartTime;
+                        
+                        // Get latest session log for real-time data
+                        var latestLog = activeSession.SessionLogs.OrderByDescending(sl => sl.LogTime).FirstOrDefault();
+                        var currentPower = latestLog?.CurrentPower.HasValue == true 
+                            ? (double)latestLog.CurrentPower.Value 
+                            : (cp.CurrentPower ?? 0);
+                        var currentSOC = latestLog?.SocPercentage ?? activeSession.InitialSoc;
+                        
+                        sessionInfo = new ActiveSessionInfo
+                        {
+                            SessionId = activeSession.SessionId,
+                            DriverId = activeSession.DriverId,
+                            DriverName = activeSession.Driver?.User?.Name,
+                            VehiclePlate = activeSession.Driver?.VehiclePlate,
+                            StartTime = activeSession.StartTime,
+                            DurationMinutes = (int)duration.TotalMinutes,
+                            EnergyUsed = (double)(activeSession.EnergyUsed ?? 0),
+                            CurrentPower = currentPower, // Real-time từ session log hoặc charging point
+                            InitialSOC = activeSession.InitialSoc,
+                            CurrentSOC = currentSOC, // Real-time từ session log
+                            TargetSOC = activeSession.FinalSoc,
+                            CurrentCost = activeSession.CostBeforeDiscount ?? 0,
+                            Status = activeSession.Status ?? "unknown"
+                        };
+                    }
+
+                    return new StaffChargingPointDTO
+                    {
+                        PointId = cp.PointId,
+                        StationId = cp.StationId,
+                        StationName = cp.Station?.Name ?? "",
+                        StationAddress = cp.Station?.Address ?? "",
+                        ConnectorType = cp.ConnectorType,
+                        PowerOutput = cp.PowerOutput,
+                        CurrentPower = cp.CurrentPower,
+                        PricePerKwh = cp.PricePerKwh,
+                        QrCode = cp.QrCode,
+                        Status = cp.Status,
+                        IsOnline = isOnline,
+                        IsAvailable = isAvailable,
+                        LastMaintenance = cp.LastMaintenance,
+                        ActiveSession = sessionInfo
+                    };
+                }).ToList();
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting charging points: {ex.Message}");
+                return new List<StaffChargingPointDTO>();
+            }
+        }
+
         // ========== WALK-IN CUSTOMER SESSION MANAGEMENT ==========
 
         public async Task<WalkInSessionResponse?> StartWalkInSessionAsync(int staffId, WalkInSessionRequest request)
