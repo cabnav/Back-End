@@ -55,6 +55,37 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách tất cả điểm sạc tại trạm được assigned với đầy đủ thông tin real-time
+        /// GET /api/staff/charging/points
+        /// </summary>
+        [HttpGet("points")]
+        public async Task<IActionResult> GetMyStationChargingPoints()
+        {
+            try
+            {
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                var chargingPoints = await _staffChargingService.GetMyStationChargingPointsAsync(staffId);
+                
+                return Ok(new { 
+                    message = "Charging points retrieved successfully", 
+                    data = chargingPoints,
+                    count = chargingPoints.Count,
+                    note = "Includes real-time status, power output, and active session information"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while retrieving charging points", 
+                    error = ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
         /// Khởi động phiên sạc cho khách walk-in (không có app)
         /// POST /api/staff/charging/walk-in/start
         /// </summary>
