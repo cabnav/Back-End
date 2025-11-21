@@ -93,12 +93,27 @@ namespace EVCharging.BE.API.Controllers
                 });
             }
             
-            // 2.2) Kiểm tra hết hạn no-show (30 phút sau StartTime)
-            if (now > reservation.StartTime.AddMinutes(_opt.NoShowGraceMinutes))
+            // ✅ ĐÃ BỎ: Kiểm tra hết hạn no-show - Vì đã có cọc tiền, cho phép check-in bất cứ lúc nào trong slot
+            // Logic cũ: Nếu quá NoShowGraceMinutes (30 phút) sau StartTime thì không cho check-in và tự động hủy
+            // Lý do bỏ: Đã có cọc tiền, nếu không tới sạc thì mất cọc, không cần chặn check-in
+            // User có thể check-in bất cứ lúc nào trong thời gian slot (từ StartTime đến EndTime)
+            
+            // Code cũ đã được comment:
+            // if (now > reservation.StartTime.AddMinutes(_opt.NoShowGraceMinutes))
+            // {
+            //     await _reservationService.CancelReservationByCodeAsync(userId, reservationCode, "no_show");
+            //     return BadRequest(new { message = $"Reservation expired (no-show). Cannot check in after {_opt.NoShowGraceMinutes} minutes." });
+            // }
+
+            // 2.2) Không cho check-in sau khi đã hết thời gian slot (EndTime)
+            if (now > reservation.EndTime)
             {
-                // auto-cancel và chặn check-in
-                await _reservationService.CancelReservationByCodeAsync(userId, reservationCode, "no_show");
-                return BadRequest(new { message = $"Reservation expired (no-show). Cannot check in after {_opt.NoShowGraceMinutes} minutes." });
+                return BadRequest(new { 
+                    message = $"Cannot check in. This reservation has expired. " +
+                              $"Reservation end time: {reservation.EndTime:yyyy-MM-dd HH:mm} UTC, " +
+                              $"Current time: {now:yyyy-MM-dd HH:mm} UTC. " +
+                              $"The reservation will be automatically cancelled. Your deposit will not be refunded."
+                });
             }
 
             // 3) ✅ Tìm charging point từ pointQrCode và validate khớp với reservation
