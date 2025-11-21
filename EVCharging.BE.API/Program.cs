@@ -53,7 +53,7 @@ builder.Services.AddDbContextFactory<EvchargingManagementContext>(options =>
         sql =>
         {
             sql.EnableRetryOnFailure(3);
-            sql.CommandTimeout(30);
+            sql.CommandTimeout(60); // Tăng timeout lên 60 giây để tránh timeout khi query notification
         });
 });
 builder.Services.AddScoped<EvchargingManagementContext>(provider =>

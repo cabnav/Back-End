@@ -83,43 +83,18 @@ namespace EVCharging.BE.API.Controllers
             // 2) Kiểm tra thời gian check-in hợp lệ
             var now = DateTime.UtcNow;
             
-            // 2.1) Kiểm tra check-in sớm: Cho phép check-in sớm 15 phút NẾU slot trước đó không có ai đặt
-            const int EARLY_CHECK_IN_MINUTES = 15;
-            var earliestCheckInTime = reservation.StartTime.AddMinutes(-EARLY_CHECK_IN_MINUTES);
-            
-            if (now < earliestCheckInTime)
+            // 2.1) Không cho check-in sớm - chỉ cho phép check-in từ StartTime trở đi
+            if (now < reservation.StartTime)
             {
-                // Quá sớm, không cho check-in
-                var minutesUntilEarliest = (int)(earliestCheckInTime - now).TotalMinutes;
+                var minutesUntilStart = (int)(reservation.StartTime - now).TotalMinutes;
                 return BadRequest(new { 
-                    message = $"Cannot check in too early. " +
-                              $"Earliest check-in time: {earliestCheckInTime:yyyy-MM-dd HH:mm} UTC (15 minutes before start), " +
+                    message = $"Cannot check in early. " +
                               $"Reservation starts at: {reservation.StartTime:yyyy-MM-dd HH:mm} UTC, " +
-                              $"which is {minutesUntilEarliest} minutes from now."
+                              $"Current time: {now:yyyy-MM-dd HH:mm} UTC. " +
+                              $"You can only check in from {reservation.StartTime:yyyy-MM-dd HH:mm} UTC onwards, " +
+                              $"which is {minutesUntilStart} minutes from now."
                 });
             }
-            
-            // Kiểm tra xem có reservation nào đặt slot trước đó không (EndTime = StartTime của reservation hiện tại)
-            var previousReservation = await _db.Reservations
-                .Where(r => r.PointId == reservation.PointId
-                    && r.EndTime == reservation.StartTime
-                    && (r.Status == "booked" || r.Status == "checked_in" || r.Status == "in_progress"))
-                .FirstOrDefaultAsync();
-            
-            if (previousReservation != null)
-            {
-                // Có người đặt slot trước đó → Không cho check-in sớm, chỉ cho từ StartTime
-                if (now < reservation.StartTime)
-                {
-                    var minutesUntilStart = (int)(reservation.StartTime - now).TotalMinutes;
-                    return BadRequest(new { 
-                        message = $"Cannot check in early. There is a previous reservation ending at {reservation.StartTime:yyyy-MM-dd HH:mm} UTC. " +
-                                  $"You can only check in from {reservation.StartTime:yyyy-MM-dd HH:mm} UTC onwards, " +
-                                  $"which is {minutesUntilStart} minutes from now."
-                    });
-                }
-            }
-            // Nếu không có reservation trước đó → Cho phép check-in sớm 15 phút (đã check ở trên)
 
             // 2.2) Không cho check-in sau khi đã hết thời gian slot (EndTime)
             if (now > reservation.EndTime)
@@ -132,9 +107,8 @@ namespace EVCharging.BE.API.Controllers
                 });
             }
             
-            // ✅ Cho phép check-in:
-            // - Sớm 15 phút NẾU slot trước đó không có ai đặt (earliestCheckInTime <= now < StartTime)
-            // - Đúng giờ hoặc muộn trong slot (StartTime <= now <= EndTime)
+            // ✅ Cho phép check-in chỉ trong khung thời gian của slot:
+            // - Từ StartTime đến EndTime (StartTime <= now <= EndTime)
 
             // 3) ✅ Tìm charging point từ pointQrCode và validate khớp với reservation
             var chargingPoint = await _db.ChargingPoints
@@ -155,9 +129,7 @@ namespace EVCharging.BE.API.Controllers
             }
 
             // 4) Tính StartAtUtc cho session:
-            // - Nếu check-in sớm (now < StartTime) VÀ slot trước đó trống: bắt đầu ngay (startAtUtc = now)
-            // - Nếu check-in đúng giờ/muộn (now >= StartTime): bắt đầu ngay (startAtUtc = now)
-            // Lưu ý: Nếu check-in sớm nhưng có reservation trước đó, đã bị reject ở bước 2.1
+            // - Check-in trong khung thời gian slot (StartTime <= now <= EndTime): bắt đầu ngay (startAtUtc = now)
             var startAtUtc = now;
 
             // 5) Bắt đầu phiên sạc với StartAtUtc = StartTime của reservation
