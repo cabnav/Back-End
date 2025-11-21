@@ -46,25 +46,37 @@ namespace EVCharging.BE.Services.Services.Background
 
                     var now = DateTime.UtcNow;
 
-                    // 1) Auto-cancel NO-SHOW: quá StartTime + 15 phút mà chưa check-in (theo yêu cầu)
-                    const int NO_SHOW_GRACE_MINUTES = 15; // 15 phút theo yêu cầu
-                    var noShowBorder = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
-                    var toCancel = await db.Reservations
+                    // ✅ ĐÃ BỎ: Auto-cancel NO-SHOW - Vì đã có cọc tiền, nếu không tới sạc thì mất cọc, không cần tự động hủy
+                    // Logic cũ: Tự động hủy reservation nếu quá StartTime + 15 phút mà chưa check-in
+                    // Lý do bỏ: Đã có cọc tiền, nếu không tới sạc thì mất cọc, không cần tự động hủy reservation
+                    // Reservation sẽ giữ nguyên status "booked" cho đến khi:
+                    // - User tự hủy
+                    // - User check-in (chuyển sang "checked_in")
+                    // - Hết thời gian slot (có thể tự động chuyển sang "completed" hoặc "no_show" nếu cần)
+                    
+                    // Code cũ đã được comment:
+                    // const int NO_SHOW_GRACE_MINUTES = 15;
+                    // var noShowBorder = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
+                    // var toCancel = await db.Reservations...
+                    // ... (đã bỏ logic tự động hủy)
+
+                    // 1) Auto-cancel reservation đã hết thời gian slot mà chưa check-in
+                    // Nếu reservation có status = "booked" (chưa check-in) và EndTime <= now → chuyển thành "cancelled"
+                    var expiredReservations = await db.Reservations
                         .Include(r => r.Driver)
                             .ThenInclude(d => d.User)
                         .Include(r => r.Point)
                             .ThenInclude(p => p.Station)
-                        .Where(r => r.Status == "booked" && r.StartTime < noShowBorder)
+                        .Where(r => r.Status == "booked" && r.EndTime <= now)
                         .ToListAsync(stoppingToken);
 
-                    if (toCancel.Count > 0)
+                    if (expiredReservations.Count > 0)
                     {
                         using var scope = _serviceProvider.CreateScope();
                         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-                        foreach (var r in toCancel)
+                        foreach (var r in expiredReservations)
                         {
-                            // Tùy rule của bạn: "cancelled" hoặc "no_show"
                             r.Status = "cancelled";
                             r.UpdatedAt = now;
 
@@ -73,11 +85,11 @@ namespace EVCharging.BE.Services.Services.Background
                             {
                                 var userId = r.Driver.User.UserId;
                                 var stationName = r.Point?.Station?.Name ?? "trạm sạc";
-                                var startTime = r.StartTime;
+                                var endTime = r.EndTime;
 
-                                var title = "Đặt chỗ đã bị hủy tự động";
-                                var message = $"Đặt chỗ của bạn tại {stationName} đã bị hủy tự động do không check-in sau 15 phút từ thời gian bắt đầu.\n" +
-                                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                                var title = "Đặt chỗ đã hết hạn";
+                                var message = $"Đặt chỗ của bạn tại {stationName} đã hết hạn do không check-in trong thời gian slot.\n" +
+                                             $"Thời gian kết thúc: {endTime:HH:mm} ngày {endTime:dd/MM/yyyy}\n" +
                                              $"Mã đặt chỗ: {r.ReservationCode}\n" +
                                              $"Lưu ý: Cọc đã đặt sẽ không được hoàn lại.";
 
@@ -87,18 +99,18 @@ namespace EVCharging.BE.Services.Services.Background
                                         userId,
                                         title,
                                         message,
-                                        "reservation_auto_cancelled",
+                                        "reservation_expired",
                                         r.ReservationId);
                                 }
                                 catch (Exception notifEx)
                                 {
-                                    _logger.LogError(notifEx, "Error sending notification for auto-cancelled reservation {ReservationId}", r.ReservationId);
+                                    _logger.LogError(notifEx, "Error sending notification for expired reservation {ReservationId}", r.ReservationId);
                                 }
                             }
                         }
 
                         await db.SaveChangesAsync(stoppingToken);
-                        _logger.LogInformation("Auto-cancelled {Count} expired reservations (no check-in after 15 minutes).", toCancel.Count);
+                        _logger.LogInformation("Auto-cancelled {Count} expired reservations (no check-in before end time).", expiredReservations.Count);
                     }
 
                     // 2) Auto-cancel reservation chưa thanh toán cọc sau 5 phút
