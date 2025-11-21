@@ -2,6 +2,7 @@
 using EVCharging.BE.Common.DTOs.Staff;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -12,10 +13,12 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
     public class AdminService : IAdminService
     {
         private readonly EvchargingManagementContext _db;
+        private readonly INotificationService _notificationService;
 
-        public AdminService(EvchargingManagementContext db)
+        public AdminService(EvchargingManagementContext db, INotificationService notificationService)
         {
             _db = db;
+            _notificationService = notificationService;
         }
 
         // ✅ 1. System Stats tổng quan
@@ -349,17 +352,20 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     return null;
                 }
 
-                // 3. Update status
+                // 3. Save old status before updating
+                var oldStatus = incident.Status;
+
+                // 4. Update status
                 var newStatus = request.Status.ToLower();
                 incident.Status = newStatus;
 
-                // 3.5. Update admin notes if provided
+                // 5. Update admin notes if provided
                 if (!string.IsNullOrWhiteSpace(request.Notes))
                 {
                     incident.AdminNotes = request.Notes;
                 }
 
-                // 4. Handle status transitions
+                // 6. Handle status transitions
                 if (newStatus == "resolved")
                 {
                     // Mark as resolved - set who and when
@@ -379,13 +385,69 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     // This preserves the resolution history even if reopened
                 }
 
-                // 5. Save changes
+                // 7. Save changes
                 await _db.SaveChangesAsync();
 
-                // 6. Reload to get updated ResolvedByNavigation
+                // 8. Notify reporter (staff/driver) about the update
+                try
+                {
+                    var statusChanged = oldStatus != newStatus;
+                    
+                    string notificationTitle;
+                    string notificationMessage;
+                    
+                    if (newStatus == "resolved")
+                    {
+                        notificationTitle = $"Báo cáo sự cố đã được giải quyết - #{reportId}";
+                        notificationMessage = $"Báo cáo sự cố của bạn \"{incident.Title}\" đã được admin giải quyết.";
+                        if (!string.IsNullOrWhiteSpace(request.Notes))
+                        {
+                            notificationMessage += $" Phản hồi: {request.Notes}";
+                        }
+                    }
+                    else if (newStatus == "in_progress")
+                    {
+                        notificationTitle = $"Báo cáo sự cố đang được xử lý - #{reportId}";
+                        notificationMessage = $"Báo cáo sự cố của bạn \"{incident.Title}\" đang được admin xử lý.";
+                        if (!string.IsNullOrWhiteSpace(request.Notes))
+                        {
+                            notificationMessage += $" Ghi chú: {request.Notes}";
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(request.Notes))
+                    {
+                        // Nếu có notes nhưng không phải resolved/in_progress
+                        notificationTitle = $"Cập nhật báo cáo sự cố - #{reportId}";
+                        notificationMessage = $"Admin đã cập nhật báo cáo sự cố \"{incident.Title}\" của bạn. Phản hồi: {request.Notes}";
+                    }
+                    else
+                    {
+                        // Chỉ update status, không có notes
+                        notificationTitle = $"Cập nhật trạng thái báo cáo sự cố - #{reportId}";
+                        notificationMessage = $"Trạng thái báo cáo sự cố \"{incident.Title}\" của bạn đã được cập nhật thành: {newStatus}.";
+                    }
+                    
+                    Console.WriteLine($"[ADMIN UPDATE] Notifying reporter {incident.ReporterId} about incident report {reportId} update");
+                    await _notificationService.SendNotificationAsync(
+                        userId: incident.ReporterId,
+                        title: notificationTitle,
+                        message: notificationMessage,
+                        type: "incident_update",
+                        relatedId: reportId
+                    );
+                    Console.WriteLine($"[ADMIN UPDATE] Notification sent successfully to reporter {incident.ReporterId}");
+                }
+                catch (Exception notifEx)
+                {
+                    // Log lỗi nhưng không fail toàn bộ request
+                    Console.WriteLine($"[ADMIN UPDATE ERROR] Failed to send notification to reporter: {notifEx.Message}");
+                    Console.WriteLine($"[ADMIN UPDATE ERROR] StackTrace: {notifEx.StackTrace}");
+                }
+
+                // 7. Reload to get updated ResolvedByNavigation
                 await _db.Entry(incident).Reference(ir => ir.ResolvedByNavigation).LoadAsync();
 
-                // 7. Return updated report
+                // 8. Return updated report
                 return new IncidentReportResponse
                 {
                     ReportId = incident.ReportId,
