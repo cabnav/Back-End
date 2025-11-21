@@ -539,8 +539,8 @@ namespace EVCharging.BE.API.Controllers
                     PaymentMethod = "momo",
                     PaymentType = "deposit",
                     PaymentStatus = "pending",
-                    PaymentType = "deposit", // ⭐ Quan trọng: Phân biệt loại payment
-                    InvoiceNumber = tempInvoiceNumber, // Tạm thời, sẽ update sau
+                    PaymentType = "deposit",
+                    InvoiceNumber = tempInvoiceNumber,
                     CreatedAt = DateTime.UtcNow
                 };
 
