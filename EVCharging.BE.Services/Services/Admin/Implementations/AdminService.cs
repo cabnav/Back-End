@@ -70,8 +70,10 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
             var endDate = to ?? DateTime.Now;
 
             var dailyRevenue = await _db.Payments
-                .Where(p => p.CreatedAt >= startDate && p.CreatedAt <= endDate)
-                .GroupBy(p => p.CreatedAt.Value.Date)
+                .Where(p => p.CreatedAt.HasValue 
+                    && p.CreatedAt.Value >= startDate 
+                    && p.CreatedAt.Value <= endDate)
+                .GroupBy(p => p.CreatedAt!.Value.Date)
                 .Select(g => new
                 {
                     Date = g.Key,
@@ -143,16 +145,30 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
         // ✅ 6. Tổng doanh thu theo trạm & phương thức thanh toán
         public async Task<object> GetRevenueByStationAndMethodAsync()
         {
-            var data = await _db.Payments
-                .Where(p => p.PaymentStatus == "success") // chỉ tính thanh toán thành công
+            // Lấy tất cả trạm
+            var allStations = await _db.ChargingStations
+                .Select(s => new
+                {
+                    s.StationId,
+                    s.Name
+                })
+                .ToListAsync();
+
+            // Lấy doanh thu từ payments thành công
+            var revenueData = await _db.Payments
+                .Where(p => p.PaymentStatus == "success" // chỉ tính thanh toán thành công
+                    && p.SessionId.HasValue // đảm bảo có Session
+                    && p.Session != null
+                    && p.Session.Point != null
+                    && p.Session.Point.Station != null) // đảm bảo có Station
                 .Include(p => p.Session)
                     .ThenInclude(s => s.Point)
                     .ThenInclude(pt => pt.Station)
                 .GroupBy(p => new
                 {
-                    p.Session.Point.Station.StationId,
+                    StationId = p.Session!.Point!.Station!.StationId,
                     StationName = p.Session.Point.Station.Name,
-                    p.PaymentMethod
+                    PaymentMethod = p.PaymentMethod ?? "Unknown"
                 })
                 .Select(g => new
                 {
@@ -161,19 +177,59 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                     g.Key.PaymentMethod,
                     TotalAmount = Math.Round(g.Sum(x => x.Amount), 2)
                 })
-                .OrderBy(x => x.StationId)
                 .ToListAsync();
 
-            var totalRevenue = data.Sum(x => x.TotalAmount);
-            var walletTotal = data
-        .Where(x => x.PaymentMethod.ToLower() == "wallet")
-        .Sum(x => x.TotalAmount);
-
+            // Kết hợp: hiển thị tất cả trạm, kể cả trạm chưa có payment
+            var breakdownList = new List<(int StationId, string StationName, string PaymentMethod, double TotalAmount)>();
             
+            foreach (var station in allStations)
+            {
+                var stationPayments = revenueData
+                    .Where(r => r.StationId == station.StationId)
+                    .ToList();
+
+                // Nếu trạm chưa có payment nào, thêm 1 record với TotalAmount = 0
+                if (!stationPayments.Any())
+                {
+                    breakdownList.Add((station.StationId, station.Name, "N/A", 0.0));
+                }
+                else
+                {
+                    // Thêm tất cả payment methods của trạm
+                    foreach (var payment in stationPayments)
+                    {
+                        breakdownList.Add((
+                            station.StationId, 
+                            station.Name, 
+                            payment.PaymentMethod ?? "Unknown", 
+                            (double)payment.TotalAmount
+                        ));
+                    }
+                }
+            }
+
+            // Sắp xếp breakdown
+            var breakdown = breakdownList
+                .OrderBy(x => x.StationId)
+                .ThenBy(x => x.PaymentMethod)
+                .Select(x => new
+                {
+                    StationId = x.StationId,
+                    StationName = x.StationName,
+                    PaymentMethod = x.PaymentMethod,
+                    TotalAmount = x.TotalAmount
+                })
+                .ToList();
+
+            var totalRevenue = breakdown.Sum(x => x.TotalAmount);
+            var walletTotal = breakdown
+                .Where(x => x.PaymentMethod != null && x.PaymentMethod.ToLower() == "wallet")
+                .Sum(x => x.TotalAmount);
+
             return new
             {
                 TotalRevenue = totalRevenue,
-                Breakdown = data
+                Breakdown = breakdown
             };
         }
 
