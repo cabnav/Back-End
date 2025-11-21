@@ -113,11 +113,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 Latitude = s.Latitude ?? 0,
                 Longitude = s.Longitude ?? 0,
                 Operator = s.Operator,
-                Status = s.Status ?? "Unknown",
+                Status = s.Status ?? "unknown",
                 TotalPoints = s.ChargingPoints.Count,
-                AvailablePoints = s.ChargingPoints.Count(p => p.Status == "Available"),
-                BusyPoints = s.ChargingPoints.Count(p => p.Status == "Busy" || p.Status == "in_use"),
-                MaintenancePoints = s.ChargingPoints.Count(p => p.Status == "Maintenance"),
+                AvailablePoints = s.ChargingPoints.Count(p => p.Status == "available"),
+                BusyPoints = s.ChargingPoints.Count(p => p.Status == "busy" || p.Status == "in_use"),
+                MaintenancePoints = s.ChargingPoints.Count(p => p.Status == "maintenance"),
                 GoogleMapsUrl = $"https://www.google.com/maps?q={s.Latitude},{s.Longitude}",
                 ChargingPoints = s.ChargingPoints.Select(cp => new ChargingPointMapDTO
                 {
@@ -125,9 +125,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     ConnectorType = ConnectorType.AC,
                     PowerOutput = cp.PowerOutput ?? 0,
                     PricePerKwh = cp.PricePerKwh,
-                    Status = cp.Status ?? "Unknown",
+                    Status = cp.Status ?? "unknown",
                     CurrentPower = cp.CurrentPower ?? 0,
-                    IsAvailable = cp.Status == "Available",
+                    IsAvailable = cp.Status == "available",
                     LastMaintenance = cp.LastMaintenance?.ToDateTime(TimeOnly.MinValue)
                 }).ToList()
             });
@@ -178,9 +178,9 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 .ToListAsync();
 
             var total = points.Count;
-            var available = points.Count(p => p.Status != null && p.Status.Equals("Available", StringComparison.OrdinalIgnoreCase));
-            var busy = points.Count(p => p.Status != null && (p.Status.Equals("Busy", StringComparison.OrdinalIgnoreCase) || p.Status.Equals("in_use", StringComparison.OrdinalIgnoreCase)));
-            var maintenance = points.Count(p => p.Status != null && p.Status.Equals("Maintenance", StringComparison.OrdinalIgnoreCase));
+            var available = points.Count(p => p.Status != null && p.Status.Equals("available", StringComparison.OrdinalIgnoreCase));
+            var busy = points.Count(p => p.Status != null && (p.Status.Equals("busy", StringComparison.OrdinalIgnoreCase) || p.Status.Equals("in_use", StringComparison.OrdinalIgnoreCase)));
+            var maintenance = points.Count(p => p.Status != null && p.Status.Equals("maintenance", StringComparison.OrdinalIgnoreCase));
 
             return new
             {

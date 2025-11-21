@@ -1,7 +1,9 @@
 ﻿using EVCharging.BE.Common.DTOs.Corporates;
+using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Notification;
+using EVCharging.BE.Services.Services.Payment;
 using Microsoft.EntityFrameworkCore;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
@@ -11,11 +13,16 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
     {
         private readonly EvchargingManagementContext _db;
         private readonly INotificationService _notificationService;
+        private readonly IMomoService _momoService;
 
-        public CorporateAccountService(EvchargingManagementContext db, INotificationService notificationService)
+        public CorporateAccountService(
+            EvchargingManagementContext db, 
+            INotificationService notificationService,
+            IMomoService momoService)
         {
             _db = db;
             _notificationService = notificationService;
+            _momoService = momoService;
         }
 
         public async Task<CorporateAccountDTO> CreateAsync(CorporateAccountCreateRequest req)
@@ -122,6 +129,29 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                 AdminUserId = corporate.AdminUserId,
                 CreatedAt = corporate.CreatedAt,
                 DriverCount = await _db.DriverProfiles.CountAsync(p => p.CorporateId == corporateId && p.Status == "active")
+            };
+        }
+
+        public async Task<CorporateAccountDTO?> GetByAdminUserIdAsync(int adminUserId)
+        {
+            var corporate = await _db.CorporateAccounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.AdminUserId == adminUserId);
+
+            if (corporate == null) return null;
+
+            return new CorporateAccountDTO
+            {
+                CorporateId = corporate.CorporateId,
+                CompanyName = corporate.CompanyName!,
+                ContactPerson = corporate.ContactPerson,
+                ContactEmail = corporate.ContactEmail,
+                BillingType = corporate.BillingType ?? "",
+                CreditLimit = corporate.CreditLimit ?? 0m,
+                Status = corporate.Status ?? "",
+                AdminUserId = corporate.AdminUserId,
+                CreatedAt = corporate.CreatedAt,
+                DriverCount = await _db.DriverProfiles.CountAsync(p => p.CorporateId == corporate.CorporateId && p.Status == "active")
             };
         }
 
@@ -547,6 +577,134 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             await _db.SaveChangesAsync();
 
             return true;
+        }
+
+        public async Task<CorporateInvoiceMomoPaymentResponseDto> PayCorporateInvoiceWithMomoAsync(
+            int corporateId, int invoiceId, int adminUserId)
+        {
+            // ✅ Kiểm tra quyền
+            var corporate = await _db.CorporateAccounts
+                .FirstOrDefaultAsync(c => c.CorporateId == corporateId);
+            
+            if (corporate == null)
+                throw new KeyNotFoundException("Corporate không tồn tại");
+            
+            if (corporate.AdminUserId != adminUserId)
+                throw new UnauthorizedAccessException("Bạn không có quyền thanh toán invoice này");
+
+            // ✅ Lấy invoice
+            var invoice = await _db.Invoices
+                .Include(i => i.Corporate)
+                .Include(i => i.InvoiceItems)
+                .FirstOrDefaultAsync(i => i.InvoiceId == invoiceId && i.CorporateId == corporateId);
+
+            if (invoice == null)
+                throw new KeyNotFoundException("Invoice không tồn tại");
+
+            if (invoice.Status == "paid")
+                throw new InvalidOperationException("Invoice đã được thanh toán rồi");
+
+            // ✅ Validate amount
+            if (invoice.TotalAmount <= 0)
+                throw new ArgumentException($"Số tiền hóa đơn không hợp lệ (phải lớn hơn 0). InvoiceId: {invoiceId}, TotalAmount: {invoice.TotalAmount}");
+
+            // Momo yêu cầu amount >= 1000 VND
+            if (invoice.TotalAmount < 1000)
+                throw new ArgumentException($"Số tiền thanh toán tối thiểu là 1,000 VND. Số tiền hiện tại: {invoice.TotalAmount:N0} VND");
+
+            // Lấy thông tin user
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.UserId == adminUserId);
+            var fullName = user?.Name ?? "Khách hàng";
+
+            // Làm tròn amount về số nguyên (VND không có decimal)
+            var amount = Math.Round(invoice.TotalAmount, 0, MidpointRounding.AwayFromZero);
+
+            // Tạo Payment record với status "pending"
+            var orderId = $"CORP-INV-{invoiceId}_{DateTime.UtcNow:yyyyMMddHHmmss}_{adminUserId}";
+            if (orderId.Length > 50)
+            {
+                orderId = orderId.Substring(0, 50);
+            }
+
+            // Kiểm tra InvoiceNumber không trùng
+            var originalOrderId = orderId;
+            int suffix = 0;
+            while (await _db.Payments.AnyAsync(p => p.InvoiceNumber == orderId))
+            {
+                suffix++;
+                var suffixStr = suffix.ToString();
+                orderId = originalOrderId.Length + suffixStr.Length <= 50
+                    ? originalOrderId + suffixStr
+                    : originalOrderId.Substring(0, 50 - suffixStr.Length) + suffixStr;
+            }
+
+            var payment = new PaymentEntity
+            {
+                UserId = adminUserId,
+                SessionId = null, // Corporate invoice không có SessionId cụ thể
+                Amount = amount,
+                PaymentMethod = "momo",
+                PaymentStatus = "pending",
+                PaymentType = "corporate_invoice",
+                InvoiceNumber = orderId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _db.Payments.Add(payment);
+            await _db.SaveChangesAsync();
+
+            // Tạo MoMo payment request
+            var momoRequest = new MomoCreatePaymentRequestDto
+            {
+                SessionId = 0, // Không có session, dùng InvoiceId
+                UserId = adminUserId,
+                Amount = amount,
+                FullName = fullName,
+                OrderInfo = $"Thanh toán hóa đơn #{invoice.InvoiceNumber} - {corporate.CompanyName}",
+                InvoiceId = invoiceId // Cho Corporate Invoice
+            };
+
+            var momoResponse = await _momoService.CreatePaymentAsync(momoRequest);
+
+            // Cập nhật Payment với orderId từ MoMo
+            var finalInvoiceNumber = momoResponse.OrderId ?? payment.InvoiceNumber;
+            if (finalInvoiceNumber != null && finalInvoiceNumber.Length > 50)
+            {
+                finalInvoiceNumber = finalInvoiceNumber.Substring(0, 50);
+            }
+
+            // Kiểm tra unique constraint
+            if (finalInvoiceNumber != null && await _db.Payments.AnyAsync(p => p.InvoiceNumber == finalInvoiceNumber && p.PaymentId != payment.PaymentId))
+            {
+                finalInvoiceNumber = payment.InvoiceNumber;
+            }
+
+            if (finalInvoiceNumber != null)
+            {
+                payment.InvoiceNumber = finalInvoiceNumber;
+                await _db.SaveChangesAsync();
+            }
+
+            if (momoResponse.ErrorCode != 0)
+            {
+                // Nếu có lỗi, xóa payment record và throw exception
+                _db.Payments.Remove(payment);
+                await _db.SaveChangesAsync();
+
+                throw new InvalidOperationException($"Lỗi khi tạo payment: {momoResponse.Message} (ErrorCode: {momoResponse.ErrorCode})");
+            }
+
+            return new CorporateInvoiceMomoPaymentResponseDto
+            {
+                Message = "Tạo payment URL thành công",
+                PayUrl = momoResponse.PayUrl ?? string.Empty,
+                OrderId = momoResponse.OrderId ?? orderId,
+                QrCodeUrl = momoResponse.QrCodeUrl,
+                Deeplink = momoResponse.Deeplink,
+                PaymentId = payment.PaymentId,
+                InvoiceId = invoice.InvoiceId,
+                InvoiceNumber = invoice.InvoiceNumber ?? string.Empty
+            };
         }
 
         /// <summary>
