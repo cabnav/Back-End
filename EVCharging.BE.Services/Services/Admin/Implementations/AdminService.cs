@@ -141,7 +141,7 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
         public async Task<object> GetRevenueByStationAndMethodAsync()
         {
             var data = await _db.Payments
-                .Where(p => p.PaymentStatus == "completed") // chỉ tính thanh toán thành công
+                .Where(p => p.PaymentStatus == "success") // chỉ tính thanh toán thành công
                 .Include(p => p.Session)
                     .ThenInclude(s => s.Point)
                     .ThenInclude(pt => pt.Station)
