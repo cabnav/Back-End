@@ -61,7 +61,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     // Re-validate trong transaction context (có thể khác với validation ở controller)
 
-                    // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
+                    // Truyền request.StartAtUtc để validate point availability tại thời điểm session bắt đầu
                     if (!await ValidateChargingPointAsync(chargingPointId, request.StartAtUtc))
                     {
                         Console.WriteLine($"⚠️ [StartSessionAsync] Charging point validation failed for PointId={chargingPointId}, StartAtUtc={request.StartAtUtc}");
@@ -76,7 +76,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         return null;
                     }
 
-                    // Truyền request.StartAtUtc để cho phép check-in sớm nếu session đang active sẽ kết thúc trước start time
+                    // Truyền request.StartAtUtc để validate có thể bắt đầu session tại thời điểm đó
                     if (!await CanStartSessionAsync(chargingPointId, request.DriverId, request.StartAtUtc))
                     {
                         Console.WriteLine($"⚠️ [StartSessionAsync] Cannot start session - PointId={chargingPointId}, DriverId={request.DriverId}, StartAtUtc={request.StartAtUtc}");
@@ -166,26 +166,23 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         // Walk-in session: Đơn giản hóa logic - CHỈ block nếu thực sự cần thiết
                         // Note: CanStartSessionAsync đã kiểm tra point availability (có session đang chạy không)
                         var now = DateTime.UtcNow;
-                        const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
-                        var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
                         
-                        // ✅ CHỈ block walk-in nếu có reservation status="booked" (chưa check-in) đang trong grace period
+                        // ✅ CHỈ block walk-in nếu có reservation status="booked" (chưa check-in) đang trong khung thời gian slot
                         // Logic: Nếu reservation đã check-in (status="checked_in" hoặc "in_progress"), point đã được sử dụng
                         // và CanStartSessionAsync đã kiểm tra point availability rồi, không cần block ở đây nữa
                         var activeReservation = await _db.Reservations
                             .Where(r => r.PointId == chargingPointId 
                                 && r.Status == "booked" // CHỈ check reservation chưa check-in
                                 && r.StartTime <= now // Đã quá start_time
-                                && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
-                                && r.EndTime > now) // Reservation chưa kết thúc
+                                && r.EndTime > now) // Reservation chưa kết thúc (vẫn trong khung thời gian slot)
                             .OrderBy(r => r.StartTime)
                             .FirstOrDefaultAsync();
                         
-                        // ✅ BLOCK walk-in nếu có reservation đang trong grace period (chưa check-in)
+                        // ✅ BLOCK walk-in nếu có reservation đang trong khung thời gian slot (chưa check-in)
                         if (activeReservation != null)
                         {
                             var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
-                            Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period. Rolling back transaction.");
+                            Console.WriteLine($"⚠️ [StartSessionAsync] BLOCKING: Reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within reservation slot. Rolling back transaction.");
                             try
                             {
                                 await transaction.RollbackAsync();
@@ -196,7 +193,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                             {
                                 Console.WriteLine($"⚠️ [StartSessionAsync] Error rolling back transaction: {rollbackEx.Message}");
                             }
-                            throw new InvalidOperationException($"Cannot start walk-in session. There is a reservation (started at {activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) that is still within the grace period. The reservation holder may check in at any time.");
+                            throw new InvalidOperationException($"Cannot start walk-in session. There is a reservation (slot: {activeReservation.StartTime:HH:mm} - {activeReservation.EndTime:HH:mm}) that is still active. The reservation holder may check in during the reservation slot.");
                         }
                         
                         // ✅ Check reservation sắp đến - CHỈ block nếu reservation sắp đến trong 15 phút tới
@@ -284,7 +281,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         DriverId = request.DriverId,
                         PointId = chargingPointId, // ✅ Đã validate không null ở đầu method
                         ReservationId = reservationId,
-                        StartTime = sessionStartTime, // ✅ Đảm bảo StartTime = reservation.StartTime khi check-in sớm
+                        StartTime = sessionStartTime, // ✅ Đảm bảo StartTime = reservation.StartTime (hoặc thời gian hiện tại nếu check-in muộn)
                         InitialSoc = request.InitialSOC, // Pin hiện tại khi bắt đầu sạc (sẽ cập nhật theo pin thực tế khi sạc lên 1-2%)
                         FinalSoc = finalSOC, // Pin cuối cùng: targetSOC từ reservation hoặc 100% mặc định
                         Status = "in_progress",
@@ -336,7 +333,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                                 Console.WriteLine($"[StartSessionAsync] Updated reservation status from 'checked_in' to 'in_progress' - ReservationId={reservationId}, StartTime={sessionStartTime}, Now={now}");
                             }
                         }
-                        // Nếu session StartTime trong tương lai (check-in sớm), giữ status = "checked_in"
+                        // Nếu session StartTime trong tương lai (không xảy ra với logic mới, nhưng giữ để an toàn), giữ status = "checked_in"
                         else
                         {
                             Console.WriteLine($"[StartSessionAsync] Reservation status kept as 'checked_in' (session starts in future) - ReservationId={reservationId}, StartTime={sessionStartTime}, Now={now}");
@@ -526,7 +523,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 if (!endTimeToUse.HasValue)
                 {
                     // Đảm bảo EndTime >= StartTime
-                    // Nếu StartTime trong tương lai (check-in sớm cho reservation), dùng StartTime làm EndTime
+                    // Nếu StartTime trong tương lai (không xảy ra với logic mới, nhưng giữ để an toàn), dùng StartTime làm EndTime
                     // Nếu StartTime đã qua, dùng thời gian hiện tại
                     endTimeToUse = now < session.StartTime ? session.StartTime : now;
                 }
@@ -687,7 +684,7 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     if (!session.EndTime.HasValue)
                     {
                         var now = DateTime.UtcNow;
-                        // Nếu StartTime trong tương lai (check-in sớm cho reservation), đợi đến StartTime mới cho phép set EndTime
+                        // Nếu StartTime trong tương lai (không xảy ra với logic mới, nhưng giữ để an toàn), đợi đến StartTime mới cho phép set EndTime
                         // Nếu StartTime đã qua, dùng thời gian hiện tại
                         session.EndTime = now < session.StartTime ? session.StartTime : now;
                     }

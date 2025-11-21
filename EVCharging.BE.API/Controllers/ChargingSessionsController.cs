@@ -137,9 +137,7 @@ namespace EVCharging.BE.API.Controllers
 
                 // ✅ Check reservation để giới hạn thời gian walk-in session
                 // 1) Check reservation sắp đến (trong tương lai)
-                // 2) ✅ QUAN TRỌNG: Check reservation đã QUÁ start_time nhưng vẫn trong grace period (chưa check-in)
-                const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
-                var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
+                // 2) ✅ QUAN TRỌNG: Check reservation đã QUÁ start_time nhưng vẫn trong khung thời gian slot (chưa check-in)
                 
                 // Check reservation sắp đến (trong tương lai)
                 var upcomingReservation = await _db.Reservations
@@ -150,20 +148,19 @@ namespace EVCharging.BE.API.Controllers
                     .OrderBy(r => r.StartTime)
                     .FirstOrDefaultAsync();
                 
-                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong khung thời gian slot (status="booked" chưa check-in)
                 var activeReservation = await _db.Reservations
                     .Where(r => r.PointId == chargingPointId 
                         && r.Status == "booked" // Chỉ check reservation chưa check-in
                         && r.StartTime <= now // Đã quá start_time
-                        && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
-                        && r.EndTime > now) // Reservation chưa kết thúc
+                        && r.EndTime > now) // Reservation chưa kết thúc (vẫn trong khung thời gian slot)
                     .OrderBy(r => r.StartTime)
                     .FirstOrDefaultAsync();
 
                 DateTime? maxEndTime = null;
                 string? warningMessage = null;
                 
-                // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                // ✅ BLOCK walk-in nếu có reservation đang active (vẫn trong khung thời gian slot)
                 if (activeReservation != null)
                 {
                     var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
