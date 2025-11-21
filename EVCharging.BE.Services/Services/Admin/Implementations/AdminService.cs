@@ -157,13 +157,13 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
             // Lấy doanh thu từ payments thành công
             var revenueData = await _db.Payments
                 .Where(p => p.PaymentStatus == "success" // chỉ tính thanh toán thành công
-                    && p.SessionId.HasValue // đảm bảo có Session
-                    && p.Session != null
-                    && p.Session.Point != null
-                    && p.Session.Point.Station != null) // đảm bảo có Station
-                .Include(p => p.Session)
+                    && p.SessionId.HasValue) // đảm bảo có Session
+                .Include(p => p.Session!)
                     .ThenInclude(s => s.Point)
                     .ThenInclude(pt => pt.Station)
+                .Where(p => p.Session != null
+                    && p.Session.Point != null
+                    && p.Session.Point.Station != null) // đảm bảo có Station
                 .GroupBy(p => new
                 {
                     StationId = p.Session!.Point!.Station!.StationId,
