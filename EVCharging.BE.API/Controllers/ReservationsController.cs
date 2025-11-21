@@ -154,9 +154,11 @@ namespace EVCharging.BE.API.Controllers
                 });
             }
 
-            // 4) Nếu check-in sớm: StartAtUtc = StartTime của reservation
-            // Nếu check-in muộn (nhưng trong 30 phút): StartAtUtc = thời điểm check-in hiện tại
-            var startAtUtc = now < reservation.StartTime ? reservation.StartTime : now;
+            // 4) Tính StartAtUtc cho session:
+            // - Nếu check-in sớm (now < StartTime) VÀ slot trước đó trống: bắt đầu ngay (startAtUtc = now)
+            // - Nếu check-in đúng giờ/muộn (now >= StartTime): bắt đầu ngay (startAtUtc = now)
+            // Lưu ý: Nếu check-in sớm nhưng có reservation trước đó, đã bị reject ở bước 2.1
+            var startAtUtc = now;
 
             // 5) Bắt đầu phiên sạc với StartAtUtc = StartTime của reservation
             var startReq = new EVCharging.BE.Common.DTOs.Charging.ChargingSessionStartRequest
