@@ -299,6 +299,7 @@ namespace EVCharging.BE.API.Controllers
                     SessionId = request.SessionId,
                     Amount = session.FinalCost.Value,
                     PaymentMethod = "momo",
+                    PaymentType = "session_payment",
                     PaymentStatus = "pending",
                     InvoiceNumber = orderId, // Tạm thời dùng orderId làm InvoiceNumber, sẽ cập nhật sau
                     CreatedAt = DateTime.UtcNow
@@ -536,6 +537,7 @@ namespace EVCharging.BE.API.Controllers
                     ReservationId = reservation.ReservationId,
                     Amount = depositAmount,
                     PaymentMethod = "momo",
+                    PaymentType = "deposit",
                     PaymentStatus = "pending",
                     PaymentType = "deposit", // ⭐ Quan trọng: Phân biệt loại payment
                     InvoiceNumber = tempInvoiceNumber, // Tạm thời, sẽ update sau
