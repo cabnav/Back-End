@@ -5,6 +5,7 @@ using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Charging;
 using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 
 namespace EVCharging.BE.Services.Services.Staff.Implementations
@@ -20,6 +21,7 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
         private readonly ICostCalculationService _costCalculationService;
         private readonly IPaymentService _paymentService;
         private readonly IInvoiceService _invoiceService;
+        private readonly INotificationService _notificationService;
 
         public StaffChargingService(
             EvchargingManagementContext db,
@@ -27,7 +29,8 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             ISessionMonitorService sessionMonitorService,
             ICostCalculationService costCalculationService,
             IPaymentService paymentService,
-            IInvoiceService invoiceService)
+            IInvoiceService invoiceService,
+            INotificationService notificationService)
         {
             _db = db;
             _chargingService = chargingService;
@@ -35,6 +38,7 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             _costCalculationService = costCalculationService;
             _paymentService = paymentService;
             _invoiceService = invoiceService;
+            _notificationService = notificationService;
         }
 
         // ========== STATION ASSIGNMENT & VERIFICATION ==========
@@ -419,6 +423,15 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
 
                 _db.IncidentReports.Add(incident);
                 await _db.SaveChangesAsync();
+
+                // 5.5. Notify admin about emergency stop incident
+                var staffUser = await _db.Users.FindAsync(staffId);
+                await _notificationService.NotifyAdminIncidentAsync(
+                    incident.ReportId,
+                    incident.Title,
+                    staffUser?.Name ?? "Unknown",
+                    staffUser?.Role ?? "Staff"
+                );
 
                 // 6. Log emergency event
                 await LogStaffActionAsync(staffId, "emergency_stop", sessionId,
@@ -920,11 +933,24 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 await LogStaffActionAsync(staffId, "create_incident_report", request.PointId,
                     $"Title: {request.Title}, Priority: {request.Priority}");
 
-                // 7. TODO: Notify admin if required (implement with SignalR or notification service)
-                if (request.NotifyAdmin)
+                // 7. Notify admin - luôn gửi notification cho admin khi có incident report mới
+                // (không phụ thuộc vào NotifyAdmin flag để đảm bảo admin luôn biết)
+                try
                 {
-                    // await _notificationService.NotifyAdminIncidentAsync(incident.ReportId, request.Title);
-                    Console.WriteLine($"[ADMIN ALERT] New incident report created: {incident.ReportId} - {request.Title}");
+                    Console.WriteLine($"[STAFF INCIDENT] Notifying admins about incident report {incident.ReportId}");
+                    await _notificationService.NotifyAdminIncidentAsync(
+                        incident.ReportId, 
+                        request.Title, 
+                        staffUser.Name ?? "Unknown", 
+                        staffUser.Role ?? "Staff"
+                    );
+                    Console.WriteLine($"[STAFF INCIDENT] Notification sent successfully for report {incident.ReportId}");
+                }
+                catch (Exception notifEx)
+                {
+                    // Log lỗi nhưng không fail toàn bộ request
+                    Console.WriteLine($"[STAFF INCIDENT ERROR] Failed to send notification: {notifEx.Message}");
+                    Console.WriteLine($"[STAFF INCIDENT ERROR] StackTrace: {notifEx.StackTrace}");
                 }
 
                 // 8. Return response

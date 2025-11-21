@@ -3,6 +3,7 @@ using EVCharging.BE.Common.DTOs.Stations;
 using EVCharging.BE.Common.DTOs.Users;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using IncidentReport = EVCharging.BE.DAL.Entities.IncidentReport;
 
@@ -16,15 +17,18 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         private readonly EvchargingManagementContext _db;
         private readonly ICostCalculationService _costCalculationService;
         private readonly ISessionMonitorService _sessionMonitorService;
+        private readonly INotificationService _notificationService;
 
         public ChargingService(
             EvchargingManagementContext db, 
             ICostCalculationService costCalculationService,
-            ISessionMonitorService sessionMonitorService)
+            ISessionMonitorService sessionMonitorService,
+            INotificationService notificationService)
         {
             _db = db;
             _costCalculationService = costCalculationService;
             _sessionMonitorService = sessionMonitorService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -1338,11 +1342,24 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     Console.WriteLine($"[DRIVER REPORT] Maintenance suggested for Point {request.PointId} by Driver {userId}");
                 }
 
-                // 6. TODO: Notify admin/staff if required (implement with SignalR or notification service)
-                if (request.NotifyAdmin)
+                // 6. Notify admin - luôn gửi notification cho admin khi có incident report mới
+                // (không phụ thuộc vào NotifyAdmin flag để đảm bảo admin luôn biết)
+                try
                 {
-                    // await _notificationService.NotifyAdminIncidentAsync(incident.ReportId, request.Title);
-                    Console.WriteLine($"[ADMIN ALERT] New incident report from driver: {incident.ReportId} - {request.Title} by User {userId}");
+                    Console.WriteLine($"[DRIVER INCIDENT] Notifying admins about incident report {incident.ReportId}");
+                    await _notificationService.NotifyAdminIncidentAsync(
+                        incident.ReportId, 
+                        request.Title, 
+                        driverUser.Name ?? "Unknown", 
+                        driverUser.Role ?? "Driver"
+                    );
+                    Console.WriteLine($"[DRIVER INCIDENT] Notification sent successfully for report {incident.ReportId}");
+                }
+                catch (Exception notifEx)
+                {
+                    // Log lỗi nhưng không fail toàn bộ request
+                    Console.WriteLine($"[DRIVER INCIDENT ERROR] Failed to send notification: {notifEx.Message}");
+                    Console.WriteLine($"[DRIVER INCIDENT ERROR] StackTrace: {notifEx.StackTrace}");
                 }
 
                 // 7. Return response
