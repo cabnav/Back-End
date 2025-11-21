@@ -308,6 +308,7 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
         /// <summary>
         /// Get upcoming reservations for a user (các đặt chỗ sắp tới của người dùng)
+        /// Bao gồm cả reservation đã quá StartTime nhưng chưa đến EndTime và chưa check-in
         /// </summary>
         public async Task<IEnumerable<ReservationDTO>> GetUpcomingReservationsAsync(int userId, TimeSpan horizon)
         {
@@ -328,8 +329,14 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 .Include(r => r.Driver).ThenInclude(d => d.User)
                 .Where(r => r.DriverId == driverId
                          && r.Status == "booked"
-                         && r.StartTime >= now
-                         && r.StartTime <= to)
+                         && (
+                             // Trường hợp 1: Reservation trong tương lai (StartTime >= now và StartTime <= to)
+                             (r.StartTime >= now && r.StartTime <= to)
+                             ||
+                             // Trường hợp 2: Reservation đã quá StartTime nhưng chưa đến EndTime và chưa check-in
+                             // Ví dụ: Đặt 6:00-7:00, bây giờ 6:59 → vẫn hiển thị vì EndTime (7:00) > now
+                             (r.StartTime < now && r.EndTime > now)
+                         ))
                 .OrderBy(r => r.StartTime)
                 .ToListAsync();
 
