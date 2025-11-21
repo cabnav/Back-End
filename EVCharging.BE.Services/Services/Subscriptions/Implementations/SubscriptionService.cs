@@ -91,6 +91,18 @@ namespace EVCharging.BE.Services.Services.Subscriptions.Implementations
                     ? startDate.AddMonths(1)
                     : startDate.AddYears(1);
 
+                // Tạo Subscription record (lưu vào bảng Subscription)
+                var subscriptionEntity = new Subscription
+                {
+                    UserId = userId,
+                    PlanId = plan.PlanId,
+                    StartDate = startDate,
+                    EndDate = endDate,
+                    Status = "active",
+                    AutoRenew = false
+                };
+                _db.Subscriptions.Add(subscriptionEntity);
+
                 // Lưu thay đổi MembershipTier
                 await _db.SaveChangesAsync();
 
@@ -175,23 +187,69 @@ namespace EVCharging.BE.Services.Services.Subscriptions.Implementations
 
         public async Task<SubscriptionResponse?> GetActiveSubscriptionAsync(int userId)
         {
+            // Prefer explicit Subscription record (has start/end) if exists
+            var activeSub = await _db.Subscriptions
+                .Include(s => s.Plan)
+                .Where(s => s.UserId == userId && (s.Status == "active" || s.Status == null))
+                .OrderByDescending(s => s.StartDate)
+                .FirstOrDefaultAsync();
+
+            if (activeSub != null)
+            {
+                // activeSub.Plan is an EF entity (PricingPlan), while the pricing service returns PricingPlanDTO
+                // Build a DTO from the entity when available, otherwise fetch DTO from service
+                EVCharging.BE.Common.DTOs.Subscriptions.PricingPlanDTO? planDto = null;
+                if (activeSub.Plan != null)
+                {
+                    planDto = new EVCharging.BE.Common.DTOs.Subscriptions.PricingPlanDTO
+                    {
+                        PlanId = activeSub.Plan.PlanId,
+                        Name = activeSub.Plan.Name,
+                        PlanType = activeSub.Plan.PlanType,
+                        Description = activeSub.Plan.Description,
+                        Price = activeSub.Plan.Price,
+                        BillingCycle = activeSub.Plan.BillingCycle,
+                        DiscountRate = activeSub.Plan.DiscountRate,
+                        TargetAudience = activeSub.Plan.TargetAudience,
+                        Benefits = activeSub.Plan.Benefits,
+                        IsActive = activeSub.Plan.IsActive
+                    };
+                }
+                else
+                {
+                    planDto = await _pricingPlanService.GetPlanByIdAsync(activeSub.PlanId);
+                }
+
+                return new SubscriptionResponse
+                {
+                    Tier = planDto?.Name?.ToLower(),
+                    DiscountRate = planDto?.DiscountRate ?? 0m,
+                    StartDate = activeSub.StartDate,
+                    EndDate = activeSub.EndDate,
+                    IsActive = (activeSub.Status ?? "active").ToLower() == "active",
+                    BillingCycle = planDto?.BillingCycle,
+                    Price = planDto?.Price
+                };
+            }
+
+            // Fallback: use MembershipTier on User (legacy)
             var user = await _db.Users.FindAsync(userId);
             if (user == null || string.IsNullOrEmpty(user.MembershipTier))
                 return null;
 
-            // Lấy plan từ database
-            var plan = await _pricingPlanService.GetPlanByNameAsync(user.MembershipTier);
-            if (plan == null || plan.IsActive != true)
+            var fallbackPlan = await _pricingPlanService.GetPlanByNameAsync(user.MembershipTier);
+            if (fallbackPlan == null || fallbackPlan.IsActive != true)
                 return null;
 
             return new SubscriptionResponse
             {
-                Tier = plan.Name.ToLower(),
-                DiscountRate = plan.DiscountRate ?? 0m,
-                StartDate = null, // Không có record
-                EndDate = null,   // Không có record
+                Tier = fallbackPlan.Name.ToLower(),
+                DiscountRate = fallbackPlan.DiscountRate ?? 0m,
+                StartDate = null,
+                EndDate = null,
                 IsActive = true,
-                BillingCycle = plan.BillingCycle
+                BillingCycle = fallbackPlan.BillingCycle,
+                Price = fallbackPlan.Price
             };
         }
 
@@ -200,6 +258,22 @@ namespace EVCharging.BE.Services.Services.Subscriptions.Implementations
             var user = await _db.Users.FindAsync(userId);
             if (user == null)
                 return false;
+
+            // Find active subscription records and mark inactive
+            var activeSubs = await _db.Subscriptions
+                .Where(s => s.UserId == userId && (s.Status == "active" || s.Status == null))
+                .ToListAsync();
+
+            if (activeSubs.Any())
+            {
+                foreach (var s in activeSubs)
+                {
+                    s.Status = "inactive"; // or "cancelled"
+                    // set EndDate to now if not set or in future
+                    if (s.EndDate == default || s.EndDate > DateTime.UtcNow)
+                        s.EndDate = DateTime.UtcNow;
+                }
+            }
 
             // Reset MembershipTier
             user.MembershipTier = null;

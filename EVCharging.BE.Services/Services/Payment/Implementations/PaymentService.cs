@@ -56,41 +56,45 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
             if (!session.FinalCost.HasValue)
                 throw new InvalidOperationException("Phiên sạc chưa có chi phí cuối cùng.");
 
-            // Kiểm tra đã thanh toán chưa
+            // Kiểm tra đã thanh toán chưa (bao gồm success và pending)
             var existingPayment = await _db.Payments
-                .Where(p => p.SessionId == sessionId 
-                    && p.PaymentStatus == "success" 
+                .Where(p => p.SessionId == sessionId
+                    && p.PaymentStatus == "success"
                     && p.PaymentType == "session_payment")
                 .OrderByDescending(p => p.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (existingPayment != null)
             {
-                var existingTransaction = await _db.WalletTransactions
-                    .Where(wt => wt.UserId == userId &&
-                               wt.ReferenceId == sessionId &&
-                               wt.TransactionType == "debit")
-                    .OrderByDescending(wt => wt.CreatedAt)
-                    .FirstOrDefaultAsync();
-
-                return new PaymentResultDto
+                // Nếu đã success -> trả về already paid
+                if (existingPayment.PaymentStatus == "success")
                 {
-                    Success = false,
-                    AlreadyPaid = true,
-                    Message = "Phiên sạc đã được thanh toán rồi",
-                    ExistingPaymentInfo = new PaymentInfoDto
+                    var existingTransaction = await _db.WalletTransactions
+                        .Where(wt => wt.UserId == userId &&
+                                   wt.ReferenceId == sessionId &&
+                                   wt.TransactionType == "debit")
+                        .OrderByDescending(wt => wt.CreatedAt)
+                        .FirstOrDefaultAsync();
+
+                    return new PaymentResultDto
                     {
-                        PaymentId = existingPayment.PaymentId,
-                        PaymentMethod = existingPayment.PaymentMethod ?? "",
-                        Amount = existingPayment.Amount,
-                        InvoiceNumber = existingPayment.InvoiceNumber,
-                        PaidAt = existingPayment.CreatedAt,
-                        SessionId = existingPayment.SessionId,
-                        ReservationId = existingPayment.ReservationId,
-                        UserId = userId,
-                        TransactionId = existingTransaction?.TransactionId
-                    }
-                };
+                        Success = false,
+                        AlreadyPaid = true,
+                        Message = "Phiên sạc đã được thanh toán rồi",
+                        ExistingPaymentInfo = new PaymentInfoDto
+                        {
+                            PaymentId = existingPayment.PaymentId,
+                            PaymentMethod = existingPayment.PaymentMethod ?? "",
+                            Amount = existingPayment.Amount,
+                            InvoiceNumber = existingPayment.InvoiceNumber,
+                            PaidAt = existingPayment.CreatedAt,
+                            SessionId = existingPayment.SessionId,
+                            ReservationId = existingPayment.ReservationId,
+                            UserId = userId,
+                            TransactionId = existingTransaction?.TransactionId
+                        }
+                    };
+                }
             }
 
             // Tìm reservation thông qua payment deposit (cùng pointId và driverId)
@@ -409,7 +413,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .ToListAsync();
 
             var unpaidSessions = await _db.ChargingSessions
-                .Include(s => s.Driver)
+                // .Include(s => s.Driver)
                 .Include(s => s.Point)
                     .ThenInclude(p => p.Station)
                 .Where(s => s.Driver.UserId == userId
