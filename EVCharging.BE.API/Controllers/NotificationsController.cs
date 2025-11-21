@@ -19,26 +19,52 @@ namespace EVCharging.BE.API.Controllers
         }
 
         [HttpGet("my")]
-        public async Task<IActionResult> GetMyNotifications([FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        public async Task<IActionResult> GetMyNotifications([FromQuery] int page = 1, [FromQuery] int pageSize = 20)
         {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-            var query = _db.Notifications
-                .Where(n => n.UserId == userId)
-                .OrderByDescending(n => n.CreatedAt);
-
-            var total = await query.CountAsync();
-            var data = await query.Skip((page - 1) * pageSize).Take(pageSize).Select(n => new
+            try
             {
-                n.NotificationId,
-                n.Title,
-                n.Message,
-                n.Type,
-                n.IsRead,
-                n.CreatedAt
-            }).ToListAsync();
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-            return Ok(new { total, data });
+                // Validate pagination
+                if (page < 1) page = 1;
+                if (pageSize < 1 || pageSize > 100) pageSize = 20;
+
+                // Tối ưu: Query data trước, count sau để tránh timeout
+                var data = await _db.Notifications
+                    .Where(n => n.UserId == userId)
+                    .OrderByDescending(n => n.CreatedAt)
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(n => new
+                    {
+                        n.NotificationId,
+                        n.Title,
+                        n.Message,
+                        n.Type,
+                        n.IsRead,
+                        n.CreatedAt
+                    })
+                    .ToListAsync();
+
+                // Chỉ count nếu cần (estimate nếu page đầu và ít data)
+                int total;
+                if (page == 1 && data.Count < pageSize)
+                {
+                    total = data.Count;
+                }
+                else
+                {
+                    total = await _db.Notifications
+                        .Where(n => n.UserId == userId)
+                        .CountAsync();
+                }
+
+                return Ok(new { total, data });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving notifications", error = ex.Message });
+            }
         }
 
         [HttpGet("unread-count")]

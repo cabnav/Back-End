@@ -38,17 +38,23 @@ public class ReservationReminderWorker : BackgroundService
                 await using var db = await _dbFactory.CreateDbContextAsync(stoppingToken);
 
                 var now = DateTime.UtcNow;
+                // Tìm các reservation có start time trong vòng ReminderMinutes phút tới
+                // Ví dụ: nếu ReminderMinutes = 30, thì tìm reservation có start time từ now đến (now + 30 phút)
                 var reminderTime = now.AddMinutes(_opt.ReminderMinutes);
 
                 var upcomingReservations = await db.Reservations
                     .Include(r => r.Point)
                         .ThenInclude(p => p.Station)
-                    .Where(r => r.Status == "booked" && r.StartTime <= reminderTime && r.StartTime > now)
+                    .Where(r => r.Status == "booked" 
+                        && r.StartTime <= reminderTime 
+                        && r.StartTime > now)
                     .OrderBy(r => r.StartTime)
                     .ToListAsync(stoppingToken);
 
                 if (upcomingReservations.Count > 0)
                 {
+                    var sentCount = 0;
+                    
                     foreach (var reservation in upcomingReservations)
                     {
                         var userId = await db.DriverProfiles
@@ -58,6 +64,19 @@ public class ReservationReminderWorker : BackgroundService
 
                         if (userId > 0)
                         {
+                            // Kiểm tra xem đã gửi notification cho reservation này chưa
+                            // Chỉ gửi một lần duy nhất cho mỗi reservation (không giới hạn thời gian)
+                            var alreadyNotified = await db.Notifications
+                                .AnyAsync(n => n.UserId == userId 
+                                    && n.Type == "reservation_reminder" 
+                                    && n.RelatedId == reservation.ReservationId, stoppingToken);
+
+                            if (alreadyNotified)
+                            {
+                                // Đã gửi notification rồi, bỏ qua
+                                continue;
+                            }
+
                             var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
                             var stationAddress = reservation.Point?.Station?.Address ?? "";
                             var pointId = reservation.PointId;
@@ -87,14 +106,26 @@ public class ReservationReminderWorker : BackgroundService
                                 Title = "Nhắc nhở đặt chỗ sắp tới",
                                 Message = message,
                                 Type = "reservation_reminder",
+                                RelatedId = reservation.ReservationId, // Lưu reservationId để track
                                 IsRead = false,
                                 CreatedAt = now
                             });
+                            
+                            sentCount++;
                         }
                     }
 
-                    await db.SaveChangesAsync(stoppingToken);
-                    _logger.LogInformation("ReservationReminderWorker: sent {Count} reminders.", upcomingReservations.Count);
+                    if (sentCount > 0)
+                    {
+                        await db.SaveChangesAsync(stoppingToken);
+                        _logger.LogInformation("ReservationReminderWorker: sent {Count} new reminders (skipped {Skipped} duplicates).", 
+                            sentCount, upcomingReservations.Count - sentCount);
+                    }
+                    else
+                    {
+                        _logger.LogInformation("ReservationReminderWorker: found {Count} upcoming reservations but all already notified.", 
+                            upcomingReservations.Count);
+                    }
                 }
             }
             catch (Exception ex)
