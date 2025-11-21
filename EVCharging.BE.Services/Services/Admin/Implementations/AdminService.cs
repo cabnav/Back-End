@@ -162,7 +162,11 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
                 .ToListAsync();
 
             var totalRevenue = data.Sum(x => x.TotalAmount);
+            var walletTotal = data
+        .Where(x => x.PaymentMethod.ToLower() == "wallet")
+        .Sum(x => x.TotalAmount);
 
+            
             return new
             {
                 TotalRevenue = totalRevenue,
