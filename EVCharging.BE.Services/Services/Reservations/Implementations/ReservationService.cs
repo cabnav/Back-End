@@ -238,9 +238,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 if (userIdForNotification.HasValue)
                 {
                     var startIso = entity.StartTime.ToString("o");
+                    var endIso = entity.EndTime.ToString("o");
                     var stationName = entity.Point?.Station?.Name ?? "trạm sạc";
                     var title = "Đặt chỗ đã được xác nhận";
-                    var message = $"Đặt chỗ sạc của bạn đã được xác nhận tại {stationName}. Vui lòng đến đúng giờ. Thời gian check-in muộn nhất được phép là trong vòng 30 phút kể từ thời gian bắt đầu ({startIso} UTC).";
+                    var message = $"Đặt chỗ sạc của bạn đã được xác nhận tại {stationName}. " +
+                                  $"Thời gian slot: {startIso} - {endIso} UTC. " +
+                                  $"Vui lòng check-in trong khung thời gian này.";
 
                     _db.Notifications.Add(new EVCharging.BE.DAL.Entities.Notification
                     {

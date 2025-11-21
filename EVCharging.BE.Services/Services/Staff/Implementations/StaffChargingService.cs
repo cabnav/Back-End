@@ -182,24 +182,21 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
 
                 // 3.1. ✅ Check reservation để block walk-in nếu có reservation active hoặc sắp đến
                 var now = DateTime.UtcNow;
-                const int NO_SHOW_GRACE_MINUTES = 30; // Grace period 30 phút sau start_time
-                var gracePeriodStart = now.AddMinutes(-NO_SHOW_GRACE_MINUTES);
                 
-                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong grace period (status="booked" chưa check-in)
+                // ✅ Check reservation đã QUÁ start_time nhưng vẫn trong khung thời gian slot (status="booked" chưa check-in)
                 var activeReservation = await _db.Reservations
                     .Where(r => r.PointId == request.ChargingPointId 
                         && r.Status == "booked" // Chỉ check reservation chưa check-in
                         && r.StartTime <= now // Đã quá start_time
-                        && r.StartTime >= gracePeriodStart // Vẫn trong grace period (30 phút)
-                        && r.EndTime > now) // Reservation chưa kết thúc
+                        && r.EndTime > now) // Reservation chưa kết thúc (vẫn trong khung thời gian slot)
                     .OrderBy(r => r.StartTime)
                     .FirstOrDefaultAsync();
                 
-                // ✅ BLOCK walk-in nếu có reservation đang active (đã quá start_time nhưng vẫn trong grace period)
+                // ✅ BLOCK walk-in nếu có reservation đang active (vẫn trong khung thời gian slot)
                 if (activeReservation != null)
                 {
                     var minutesSinceStart = (now - activeReservation.StartTime).TotalMinutes;
-                    Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Active reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within grace period");
+                    Console.WriteLine($"[StartWalkInSessionAsync] BLOCKED: Active reservation (ReservationId={activeReservation.ReservationId}, StartTime={activeReservation.StartTime:HH:mm}, {minutesSinceStart:F0} minutes ago) is still within reservation slot");
                     return null; // Staff API sẽ return null và controller sẽ trả về BadRequest
                 }
                 
