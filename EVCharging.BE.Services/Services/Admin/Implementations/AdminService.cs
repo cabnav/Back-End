@@ -1,4 +1,5 @@
-﻿using EVCharging.BE.Common.DTOs.Shared;
+﻿using EVCharging.BE.Common.DTOs.Analytics;
+using EVCharging.BE.Common.DTOs.Shared;
 using EVCharging.BE.Common.DTOs.Staff;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
@@ -230,6 +231,272 @@ namespace EVCharging.BE.Services.Services.Admin.Implementations
             {
                 TotalRevenue = totalRevenue,
                 Breakdown = breakdown
+            };
+        }
+
+        // ========== STATION ANALYTICS ==========
+
+        /// <summary>
+        /// Lấy tần suất sử dụng theo từng trạm
+        /// </summary>
+        public async Task<object> GetStationUsageFrequencyAsync(int stationId, DateTime? from = null, DateTime? to = null)
+        {
+            var startDate = from ?? DateTime.Now.AddDays(-30);
+            var endDate = to ?? DateTime.Now;
+
+            // 1. Kiểm tra trạm có tồn tại không
+            var station = await _db.ChargingStations
+                .FirstOrDefaultAsync(s => s.StationId == stationId);
+
+            if (station == null)
+            {
+                throw new KeyNotFoundException($"Station with ID {stationId} not found");
+            }
+
+            // 2. Lấy tất cả sessions của trạm trong khoảng thời gian
+            var sessions = await _db.ChargingSessions
+                .Where(s => s.Point != null && 
+                           s.Point.StationId == stationId &&
+                           s.StartTime >= startDate && 
+                           s.StartTime <= endDate &&
+                           s.Status.ToLower() == "completed")
+                .Include(s => s.Point)
+                .ToListAsync();
+
+            var totalSessions = sessions.Count;
+            var daysInPeriod = (endDate - startDate).TotalDays;
+            var averageSessionsPerDay = daysInPeriod > 0 ? totalSessions / daysInPeriod : 0;
+
+            // 3. Tính utilization rate
+            var totalPoints = await _db.ChargingPoints
+                .CountAsync(p => p.StationId == stationId);
+            
+            var utilizationRate = 0.0;
+            if (totalPoints > 0 && daysInPeriod > 0)
+            {
+                var totalPossibleSessions = totalPoints * daysInPeriod * 24; // Giả sử mỗi giờ có thể có 1 session
+                utilizationRate = totalPossibleSessions > 0 
+                    ? (totalSessions / totalPossibleSessions) * 100 
+                    : 0;
+            }
+
+            // 4. Thống kê theo giờ
+            var usageByHour = sessions
+                .GroupBy(s => s.StartTime.Hour)
+                .Select(g => new
+                {
+                    Hour = g.Key,
+                    SessionCount = g.Count(),
+                    AverageEnergyUsed = g.Where(s => s.EnergyUsed.HasValue).Any() 
+                        ? (decimal?)g.Where(s => s.EnergyUsed.HasValue).Average(s => s.EnergyUsed!.Value) 
+                        : null,
+                    AverageRevenue = g.Where(s => s.FinalCost.HasValue).Any()
+                        ? (decimal?)g.Where(s => s.FinalCost.HasValue).Average(s => s.FinalCost!.Value)
+                        : null
+                })
+                .OrderBy(x => x.Hour)
+                .ToList();
+
+            // Tính phần trăm cho mỗi giờ
+            var usageByHourWithPercentage = usageByHour.Select(x => new
+            {
+                x.Hour,
+                x.SessionCount,
+                Percentage = totalSessions > 0 ? Math.Round((x.SessionCount / (double)totalSessions) * 100, 2) : 0,
+                x.AverageEnergyUsed,
+                x.AverageRevenue
+            }).ToList();
+
+            // 5. Thống kê theo ngày
+            var usageByDay = sessions
+                .GroupBy(s => s.StartTime.Date)
+                .Select(g => new
+                {
+                    Date = g.Key,
+                    SessionCount = g.Count(),
+                    TotalRevenue = g.Where(s => s.FinalCost.HasValue).Sum(s => s.FinalCost!.Value),
+                    TotalEnergyUsed = g.Where(s => s.EnergyUsed.HasValue).Sum(s => s.EnergyUsed!.Value)
+                })
+                .OrderBy(x => x.Date)
+                .ToList();
+
+            // 6. Xác định giờ cao điểm (top 3 giờ có nhiều session nhất)
+            var peakHours = usageByHour
+                .OrderByDescending(x => x.SessionCount)
+                .Take(3)
+                .Select(x => x.Hour)
+                .ToList();
+
+            return new StationUsageFrequencyDto
+            {
+                StationId = stationId,
+                StationName = station.Name,
+                Period = $"{startDate:dd/MM/yyyy} - {endDate:dd/MM/yyyy}",
+                TotalSessions = totalSessions,
+                AverageSessionsPerDay = Math.Round(averageSessionsPerDay, 2),
+                UtilizationRate = Math.Round(utilizationRate, 2),
+                UsageByHour = usageByHourWithPercentage.Select(x => new UsageByHourDto
+                {
+                    Hour = x.Hour,
+                    SessionCount = x.SessionCount,
+                    Percentage = x.Percentage,
+                    AverageEnergyUsed = x.AverageEnergyUsed,
+                    AverageRevenue = x.AverageRevenue
+                }).ToList(),
+                UsageByDay = usageByDay.Select(x => new UsageByDayDto
+                {
+                    Date = x.Date,
+                    SessionCount = x.SessionCount,
+                    TotalRevenue = x.TotalRevenue > 0 ? x.TotalRevenue : null,
+                    TotalEnergyUsed = x.TotalEnergyUsed > 0 ? x.TotalEnergyUsed : null
+                }).ToList(),
+                PeakHours = peakHours
+            };
+        }
+
+        /// <summary>
+        /// Lấy giờ cao điểm theo từng trạm
+        /// </summary>
+        public async Task<object> GetStationPeakHoursAsync(int stationId, DateTime? from = null, DateTime? to = null)
+        {
+            var startDate = from ?? DateTime.Now.AddDays(-30);
+            var endDate = to ?? DateTime.Now;
+
+            // 1. Kiểm tra trạm có tồn tại không
+            var station = await _db.ChargingStations
+                .FirstOrDefaultAsync(s => s.StationId == stationId);
+
+            if (station == null)
+            {
+                throw new KeyNotFoundException($"Station with ID {stationId} not found");
+            }
+
+            // 2. Lấy tất cả sessions của trạm trong khoảng thời gian
+            var sessions = await _db.ChargingSessions
+                .Where(s => s.Point != null && 
+                           s.Point.StationId == stationId &&
+                           s.StartTime >= startDate && 
+                           s.StartTime <= endDate &&
+                           s.Status.ToLower() == "completed")
+                .Include(s => s.Point)
+                .ToListAsync();
+
+            if (!sessions.Any())
+            {
+                return new StationPeakHoursDto
+                {
+                    StationId = stationId,
+                    StationName = station.Name,
+                    Period = $"{startDate:dd/MM/yyyy} - {endDate:dd/MM/yyyy}",
+                    PeakHours = new List<PeakHourDetailDto>(),
+                    PeakHourRange = "N/A",
+                    Recommendations = new List<string> { "Chưa có dữ liệu sử dụng trong khoảng thời gian này" }
+                };
+            }
+
+            // 3. Tính toán thống kê theo giờ
+            var hourlyStats = sessions
+                .GroupBy(s => s.StartTime.Hour)
+                .Select(g => new
+                {
+                    Hour = g.Key,
+                    SessionCount = g.Count(),
+                    AverageDurationMinutes = g.Where(s => s.DurationMinutes.HasValue).Any()
+                        ? g.Where(s => s.DurationMinutes.HasValue).Average(s => s.DurationMinutes!.Value)
+                        : 0,
+                    Revenue = g.Where(s => s.FinalCost.HasValue).Sum(s => s.FinalCost!.Value),
+                    AverageEnergyUsed = g.Where(s => s.EnergyUsed.HasValue).Any()
+                        ? (decimal?)g.Where(s => s.EnergyUsed.HasValue).Average(s => s.EnergyUsed!.Value)
+                        : null
+                })
+                .OrderByDescending(x => x.SessionCount)
+                .ToList();
+
+            // 4. Tính utilization rate cho mỗi giờ
+            var totalPoints = await _db.ChargingPoints
+                .CountAsync(p => p.StationId == stationId);
+
+            var peakHourDetails = hourlyStats.Select(stat =>
+            {
+                // Tính utilization rate: số session / (số điểm sạc * số ngày trong period)
+                var daysInPeriod = (endDate - startDate).TotalDays;
+                var utilizationRate = 0.0;
+                if (totalPoints > 0 && daysInPeriod > 0)
+                {
+                    // Giả sử mỗi giờ có thể có tối đa số điểm sạc session
+                    var maxPossibleSessions = totalPoints * daysInPeriod;
+                    utilizationRate = maxPossibleSessions > 0
+                        ? (stat.SessionCount / maxPossibleSessions) * 100
+                        : 0;
+                }
+
+                // Tính concurrent sessions (ước tính dựa trên duration)
+                var concurrentSessions = (int?)Math.Ceiling(stat.AverageDurationMinutes / 60.0 * stat.SessionCount);
+
+                return new PeakHourDetailDto
+                {
+                    Hour = stat.Hour,
+                    SessionCount = stat.SessionCount,
+                    AverageDurationMinutes = Math.Round(stat.AverageDurationMinutes, 2),
+                    UtilizationRate = Math.Round(utilizationRate, 2),
+                    Revenue = stat.Revenue,
+                    AverageEnergyUsed = stat.AverageEnergyUsed,
+                    ConcurrentSessions = concurrentSessions
+                };
+            }).ToList();
+
+            // 5. Lấy top 3 giờ cao điểm
+            var topPeakHours = peakHourDetails
+                .OrderByDescending(x => x.SessionCount)
+                .Take(3)
+                .ToList();
+
+            // 6. Tạo peak hour range string
+            var peakHourRange = topPeakHours.Any()
+                ? string.Join(", ", topPeakHours.Select(h => $"{h.Hour}:00 - {h.Hour + 1}:00"))
+                : "N/A";
+
+            // 7. Tạo recommendations
+            var recommendations = new List<string>();
+            
+            if (topPeakHours.Any())
+            {
+                var maxPeakHour = topPeakHours.First();
+                if (maxPeakHour.UtilizationRate > 80)
+                {
+                    recommendations.Add($"Giờ cao điểm {maxPeakHour.Hour}:00 có tỷ lệ sử dụng {maxPeakHour.UtilizationRate:F1}%. Nên xem xét tăng số điểm sạc vào giờ này.");
+                }
+                
+                if (maxPeakHour.ConcurrentSessions.HasValue && maxPeakHour.ConcurrentSessions > totalPoints)
+                {
+                    recommendations.Add($"Giờ {maxPeakHour.Hour}:00 có nhiều session đồng thời ({maxPeakHour.ConcurrentSessions}) hơn số điểm sạc ({totalPoints}). Cần mở rộng hạ tầng.");
+                }
+
+                var lowUtilizationHours = peakHourDetails
+                    .Where(h => h.UtilizationRate < 30 && h.SessionCount > 0)
+                    .OrderBy(h => h.UtilizationRate)
+                    .Take(3)
+                    .ToList();
+
+                if (lowUtilizationHours.Any())
+                {
+                    recommendations.Add($"Các giờ có tỷ lệ sử dụng thấp: {string.Join(", ", lowUtilizationHours.Select(h => $"{h.Hour}:00 ({h.UtilizationRate:F1}%)"))}. Có thể giảm giá vào các giờ này để tăng nhu cầu.");
+                }
+            }
+
+            if (!recommendations.Any())
+            {
+                recommendations.Add("Tỷ lệ sử dụng trạm đang ở mức ổn định.");
+            }
+
+            return new StationPeakHoursDto
+            {
+                StationId = stationId,
+                StationName = station.Name,
+                Period = $"{startDate:dd/MM/yyyy} - {endDate:dd/MM/yyyy}",
+                PeakHours = topPeakHours,
+                PeakHourRange = peakHourRange,
+                Recommendations = recommendations
             };
         }
 
