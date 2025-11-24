@@ -5,6 +5,7 @@ using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -24,17 +25,20 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         private readonly ITimeValidationService _timeValidator;
         private readonly IWalletService _walletService;
         private readonly IDepositService _depositService;
+        private readonly INotificationService _notificationService;
 
         public ReservationService(
             EvchargingManagementContext db,
             ITimeValidationService timeValidator,
             IWalletService walletService,
-            IDepositService depositService)
+            IDepositService depositService,
+            INotificationService notificationService)
         {
             _db = db;
             _timeValidator = timeValidator;
             _walletService = walletService;
             _depositService = depositService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -724,7 +728,12 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 var maxEndTime = reservationStartTime.AddMinutes(-bufferMinutes);
 
                 // Tìm tất cả walk-in sessions đang active trên point này (không có ReservationId)
+                // Include Driver và User để lấy thông tin gửi notification
                 var walkInSessions = await _db.ChargingSessions
+                    .Include(s => s.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
                     .Where(s => 
                         s.PointId == pointId 
                         && s.Status == "in_progress"
@@ -767,7 +776,10 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                         }
 
                         // Chỉ update nếu maxEndTime mới sớm hơn maxEndTime cũ (hoặc chưa có maxEndTime)
-                        if (!currentMaxEndTime.HasValue || maxEndTime < currentMaxEndTime.Value)
+                        var shouldUpdate = !currentMaxEndTime.HasValue || maxEndTime < currentMaxEndTime.Value;
+                        var shouldNotify = shouldUpdate; // Chỉ gửi notification khi có thay đổi
+
+                        if (shouldUpdate)
                         {
                             // Update hoặc tạo mới Notes với maxEndTime mới
                             // ✅ Serialize với ISO 8601 format để đảm bảo parse được
@@ -784,6 +796,39 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                             };
                             session.Notes = System.Text.Json.JsonSerializer.Serialize(maxEndTimeInfo, options);
                             Console.WriteLine($"[UpdateWalkInSessionsForNewReservation] Updated walk-in session SessionId={session.SessionId} with maxEndTime={maxEndTime} (reservation starts at {reservationStartTime})");
+                        }
+
+                        // Gửi notification cho người đang sạc về việc phiên sạc sẽ dừng sớm
+                        if (shouldNotify && session.Driver?.User != null)
+                        {
+                            try
+                            {
+                                var userId = session.Driver.User.UserId;
+                                var stationName = session.Point?.Station?.Name ?? "trạm sạc";
+                                
+                                // Format thời gian theo múi giờ Việt Nam (UTC+7)
+                                var maxEndTimeLocal = maxEndTime.AddHours(7);
+                                var reservationStartTimeLocal = reservationStartTime.AddHours(7);
+                                
+                                var title = "Thông báo: Phiên sạc sẽ dừng sớm";
+                                var message = $"Phiên sạc walk-in của bạn tại {stationName} sẽ tự động dừng lúc {maxEndTimeLocal:HH:mm} ngày {maxEndTimeLocal:dd/MM/yyyy} " +
+                                            $"(5 phút trước khi có đặt chỗ lúc {reservationStartTimeLocal:HH:mm}). " +
+                                            $"Vui lòng chuẩn bị kết thúc phiên sạc trước thời điểm này.";
+
+                                await _notificationService.SendNotificationAsync(
+                                    userId,
+                                    title,
+                                    message,
+                                    "walk_in_session_ending_soon",
+                                    session.SessionId);
+
+                                Console.WriteLine($"[UpdateWalkInSessionsForNewReservation] Sent notification to user {userId} for session {session.SessionId} about early stop at {maxEndTimeLocal:HH:mm}");
+                            }
+                            catch (Exception notifyEx)
+                            {
+                                // Log lỗi nhưng không throw để không ảnh hưởng đến flow chính
+                                Console.WriteLine($"⚠️ [UpdateWalkInSessionsForNewReservation] Error sending notification for session {session.SessionId}: {notifyEx.Message}");
+                            }
                         }
                     }
                     catch (Exception ex)
