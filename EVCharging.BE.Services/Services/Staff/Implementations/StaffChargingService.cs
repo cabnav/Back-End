@@ -263,13 +263,16 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
         {
             try
             {
-                // 1. Verify charging point
+                // 1. Verify charging point - Reload để đảm bảo có thông số mới nhất
                 var chargingPoint = await _db.ChargingPoints
                     .Include(cp => cp.Station)
                     .FirstOrDefaultAsync(cp => cp.PointId == request.ChargingPointId);
 
                 if (chargingPoint == null)
                     return null;
+                
+                // ✅ Reload charging point để đảm bảo có thông số mới nhất từ DB
+                await _db.Entry(chargingPoint).ReloadAsync();
 
                 // 2. Verify staff assignment to this station
                 var hasAccess = await VerifyStaffAssignmentAsync(staffId, chargingPoint.StationId);
@@ -334,6 +337,35 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 if (guestDriver == null)
                     return null;
 
+                // 4.5. ✅ Cập nhật driver profile với thông tin từ request (batteryCapacity, vehiclePlate, vehicleModel)
+                // Điều này đảm bảo driver profile có thông tin mới nhất của walk-in customer
+                var hasUpdates = false;
+                
+                if (request.BatteryCapacity.HasValue && request.BatteryCapacity.Value > 0)
+                {
+                    guestDriver.BatteryCapacity = (int)request.BatteryCapacity.Value;
+                    hasUpdates = true;
+                }
+                
+                if (!string.IsNullOrWhiteSpace(request.VehiclePlate))
+                {
+                    guestDriver.VehiclePlate = request.VehiclePlate;
+                    hasUpdates = true;
+                }
+                
+                if (!string.IsNullOrWhiteSpace(request.VehicleModel))
+                {
+                    guestDriver.VehicleModel = request.VehicleModel;
+                    hasUpdates = true;
+                }
+                
+                if (hasUpdates)
+                {
+                    guestDriver.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+                    Console.WriteLine($"[StartWalkInSessionAsync] Updated guest driver profile - BatteryCapacity: {guestDriver.BatteryCapacity}, VehiclePlate: {guestDriver.VehiclePlate}, VehicleModel: {guestDriver.VehicleModel}");
+                }
+
                 // 5. Prepare customer info JSON
                 var customerInfo = new
                 {
@@ -350,12 +382,20 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 };
 
                 // 6. Create charging session
+                // ✅ Set FinalSOC = TargetSOC (mặc định 100 nếu không có)
+                var targetSOC = request.TargetSOC > 0 ? request.TargetSOC : 100;
+                if (targetSOC < request.InitialSOC)
+                {
+                    targetSOC = 100; // Nếu target < initial, set = 100
+                }
+                
                 var session = new ChargingSession
                 {
                     DriverId = guestDriver.DriverId,
                     PointId = request.ChargingPointId,
                     StartTime = DateTime.UtcNow,
                     InitialSoc = request.InitialSOC,
+                    FinalSoc = targetSOC, // ✅ Set FinalSOC = TargetSOC
                     Status = "in_progress",
                     EnergyUsed = 0,
                     DurationMinutes = 0,
@@ -385,7 +425,33 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 chargingPoint.CurrentPower = chargingPoint.PowerOutput ?? 0; // ✅ Set current_power = power_output khi bắt đầu session
                 await _db.SaveChangesAsync();
 
-                // 8. Start monitoring
+                // 7.5. ✅ Tạo initial log khi session bắt đầu (giống như StartSessionAsync)
+                // ✅ Dùng logic đơn giản giống StartSessionAsync: chargingPoint.PowerOutput ?? 0
+                // Reload charging point để đảm bảo có giá trị mới nhất
+                await _db.Entry(chargingPoint).ReloadAsync();
+                
+                // Lấy PowerOutput từ charging point (giống StartSessionAsync)
+                var initialCurrentPower = chargingPoint.PowerOutput ?? 0;
+                
+                Console.WriteLine($"[StartWalkInSessionAsync] Creating initial log - PointId={request.ChargingPointId}");
+                Console.WriteLine($"[StartWalkInSessionAsync]   - chargingPoint.PowerOutput: {chargingPoint.PowerOutput?.ToString() ?? "null"}");
+                Console.WriteLine($"[StartWalkInSessionAsync]   - chargingPoint.CurrentPower: {chargingPoint.CurrentPower?.ToString() ?? "null"}");
+                Console.WriteLine($"[StartWalkInSessionAsync]   - Using initialCurrentPower: {initialCurrentPower}kW");
+                
+                var initialLog = new EVCharging.BE.DAL.Entities.SessionLog
+                {
+                    SessionId = session.SessionId,
+                    SocPercentage = request.InitialSOC,
+                    CurrentPower = initialCurrentPower,
+                    Voltage = 400, // Mặc định 400V (charging point không có field này)
+                    Temperature = 25, // Mặc định 25°C (charging point không có field này)
+                    LogTime = session.StartTime
+                };
+                _db.SessionLogs.Add(initialLog);
+                await _db.SaveChangesAsync();
+                Console.WriteLine($"[StartWalkInSessionAsync] Initial log created for SessionId={session.SessionId}: SOC={request.InitialSOC}%, Power={initialCurrentPower}kW, Voltage=400V, Temp=25°C");
+
+                 // 8. Start monitoring
                 await _sessionMonitorService.StartMonitoringAsync(session.SessionId);
 
                 // 9. Log staff action
@@ -395,13 +461,18 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 // 10. Calculate estimated cost and time
                 var pricePerKwh = await _costCalculationService.GetCurrentPricePerKwhAsync(request.ChargingPointId);
                 var batteryCapacity = request.BatteryCapacity ?? 50; // Default 50 kWh
-                var energyNeeded = batteryCapacity * (request.TargetSOC - request.InitialSOC) / 100;
+                
+                // ✅ Đảm bảo targetSOC >= initialSOC để tránh giá trị âm
+                var targetSOCForCalc = request.TargetSOC > request.InitialSOC ? request.TargetSOC : 100;
+                var energyNeeded = batteryCapacity * (targetSOCForCalc - request.InitialSOC) / 100;
                 var estimatedCost = energyNeeded * pricePerKwh;
                 
-                // Estimate time based on charging power (assume average 50kW)
+                // Estimate time based on charging power
                 var chargingPower = chargingPoint.PowerOutput ?? 50;
-                var estimatedHours = energyNeeded / chargingPower;
-                var estimatedCompletionTime = DateTime.UtcNow.AddHours((double)estimatedHours);
+                var estimatedHours = energyNeeded > 0 ? energyNeeded / chargingPower : 0;
+                var estimatedCompletionTime = estimatedHours > 0 
+                    ? DateTime.UtcNow.AddHours((double)estimatedHours)
+                    : DateTime.UtcNow;
 
                 // 11. Create payment immediately if payment method is cash/card/pos (pending status)
                 // Payment will be updated with actual cost when session completes
@@ -816,6 +887,137 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
+        /// <summary>
+        /// Lấy danh sách phiên sạc đang hoạt động tại trạm của staff với thông tin real-time
+        /// </summary>
+        public async Task<List<ActiveSessionProgressResponse>> GetActiveSessionsProgressAsync(int staffId)
+        {
+            try
+            {
+                // 1. Get assigned stations
+                var stationIds = await GetAssignedStationsAsync(staffId);
+                if (!stationIds.Any())
+                {
+                    return new List<ActiveSessionProgressResponse>();
+                }
+
+                // 2. Get active sessions (in_progress hoặc paused) với đầy đủ thông tin
+                var activeSessions = await _db.ChargingSessions
+                    .Include(s => s.Driver)
+                        .ThenInclude(d => d.User)
+                    .Include(s => s.Point)
+                        .ThenInclude(p => p.Station)
+                    .Include(s => s.SessionLogs.OrderByDescending(sl => sl.LogTime).Take(1)) // Chỉ lấy log mới nhất
+                    .Where(s => stationIds.Contains(s.Point.StationId) && 
+                               (s.Status == "in_progress" || s.Status == "paused"))
+                    .OrderByDescending(s => s.StartTime)
+                    .ToListAsync();
+
+                // 3. Map to DTOs với thông tin real-time
+                var result = activeSessions.Select(session =>
+                {
+                    var now = DateTime.UtcNow;
+                    var duration = now - session.StartTime;
+                    
+                    // Lấy log mới nhất để có thông số real-time
+                    var latestLog = session.SessionLogs.OrderByDescending(sl => sl.LogTime).FirstOrDefault();
+                    
+                    // Tính current SOC từ log hoặc từ session
+                    var currentSOC = latestLog?.SocPercentage ?? session.CurrentSoc ?? session.InitialSoc;
+                    
+                    // Tính progress percentage
+                    var targetSOC = session.FinalSoc ?? 100;
+                    var socRange = targetSOC - session.InitialSoc;
+                    var progressPercentage = socRange > 0 
+                        ? ((double)(currentSOC - session.InitialSoc) / socRange) * 100 
+                        : 0;
+                    progressPercentage = Math.Max(0, Math.Min(100, progressPercentage)); // Clamp 0-100
+                    
+                    // Ước tính thời gian còn lại (nếu có current power)
+                    int? estimatedRemainingMinutes = null;
+                    if (latestLog?.CurrentPower.HasValue == true && latestLog.CurrentPower.Value > 0 && session.Driver?.BatteryCapacity.HasValue == true)
+                    {
+                        var remainingSOC = targetSOC - currentSOC;
+                        var remainingEnergy = (session.Driver.BatteryCapacity.Value * remainingSOC) / 100; // kWh
+                        var currentPowerKw = (double)latestLog.CurrentPower.Value;
+                        var remainingHours = remainingEnergy / currentPowerKw;
+                        estimatedRemainingMinutes = (int)Math.Ceiling(remainingHours * 60);
+                    }
+                    
+                    // Ước tính chi phí còn lại
+                    decimal? estimatedRemainingCost = null;
+                    if (session.Point?.PricePerKwh > 0 && latestLog?.CurrentPower.HasValue == true && latestLog.CurrentPower.Value > 0 && session.Driver?.BatteryCapacity.HasValue == true)
+                    {
+                        var remainingSOC = targetSOC - currentSOC;
+                        var remainingEnergy = (session.Driver.BatteryCapacity.Value * remainingSOC) / 100; // kWh
+                        estimatedRemainingCost = remainingEnergy * session.Point.PricePerKwh;
+                    }
+                    
+                    // Kiểm tra xem có phải walk-in không (dựa vào driver email hoặc Notes)
+                    var isWalkIn = session.Driver?.User?.Email == "guest@evcharging.system" ||
+                                  (!string.IsNullOrEmpty(session.Notes) && session.Notes.Contains("isWalkIn"));
+                    
+                    // Parse walk-in customer info từ Notes nếu có
+                    string? customerPhone = null;
+                    if (isWalkIn && !string.IsNullOrEmpty(session.Notes))
+                    {
+                        try
+                        {
+                            var notesJson = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(session.Notes);
+                            if (notesJson.TryGetProperty("walkInCustomer", out var walkInCustomerElement))
+                            {
+                                if (walkInCustomerElement.TryGetProperty("customerPhone", out var phoneElement))
+                                {
+                                    customerPhone = phoneElement.GetString();
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Ignore parse errors
+                        }
+                    }
+                    
+                    return new ActiveSessionProgressResponse
+                    {
+                        SessionId = session.SessionId,
+                        PointId = session.PointId,
+                        PointName = $"Point {session.PointId}", // Có thể cải thiện nếu có tên điểm sạc
+                        StationId = session.Point?.StationId ?? 0,
+                        StationName = session.Point?.Station?.Name ?? "",
+                        DriverId = session.DriverId,
+                        DriverName = session.Driver?.User?.Name,
+                        CustomerPhone = customerPhone,
+                        VehiclePlate = session.Driver?.VehiclePlate,
+                        VehicleModel = session.Driver?.VehicleModel,
+                        IsWalkIn = isWalkIn,
+                        StartTime = session.StartTime,
+                        DurationMinutes = (int)duration.TotalMinutes,
+                        InitialSOC = session.InitialSoc,
+                        CurrentSOC = currentSOC,
+                        TargetSOC = targetSOC,
+                        EnergyUsed = (double)(session.EnergyUsed ?? 0),
+                        CurrentCost = session.CostBeforeDiscount ?? 0,
+                        Status = session.Status ?? "unknown",
+                        CurrentPower = latestLog?.CurrentPower,
+                        Voltage = latestLog?.Voltage,
+                        Temperature = latestLog?.Temperature,
+                        LastLogTime = latestLog?.LogTime,
+                        EstimatedRemainingMinutes = estimatedRemainingMinutes,
+                        EstimatedRemainingCost = estimatedRemainingCost,
+                        ProgressPercentage = progressPercentage
+                    };
+                }).ToList();
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error getting active sessions progress: {ex.Message}");
+                return new List<ActiveSessionProgressResponse>();
+            }
+        }
+
         // ========== PAYMENT OPERATIONS ==========
 
         /// <summary>
@@ -1176,30 +1378,19 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
             }
         }
 
-        public async Task LogStaffActionAsync(int staffId, string action, int sessionId, string? details = null)
+        public Task LogStaffActionAsync(int staffId, string action, int sessionId, string? details = null)
         {
             try
             {
-                // Create audit log entry
-                var logEntry = new SessionLog
-                {
-                    SessionId = sessionId,
-                    SocPercentage = 0,
-                    CurrentPower = 0,
-                    Voltage = 0,
-                    Temperature = 0,
-                    LogTime = DateTime.UtcNow
-                };
-
-                _db.SessionLogs.Add(logEntry);
-                await _db.SaveChangesAsync();
-
+                // ✅ Chỉ log console, không tạo SessionLog (SessionLog chỉ dùng cho dữ liệu sạc thực tế)
+                // Nếu cần audit log, nên tạo bảng AuditLog riêng
                 Console.WriteLine($"[AUDIT] Staff {staffId} - {action} - Session {sessionId}: {details ?? ""}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error logging staff action: {ex.Message}");
             }
+            return Task.CompletedTask;
         }
 
         // ========== HELPER METHODS ==========

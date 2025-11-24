@@ -102,6 +102,13 @@ namespace EVCharging.BE.Services.Services.Staff
         /// <returns>Thông tin phiên sạc</returns>
         Task<ChargingSessionResponse?> GetSessionDetailAsync(int staffId, int sessionId);
 
+        /// <summary>
+        /// Lấy danh sách phiên sạc đang hoạt động tại trạm của staff với thông tin real-time
+        /// </summary>
+        /// <param name="staffId">ID của staff</param>
+        /// <returns>Danh sách active sessions với real-time progress</returns>
+        Task<List<ActiveSessionProgressResponse>> GetActiveSessionsProgressAsync(int staffId);
+
         // ========== PAYMENT OPERATIONS ==========
 
         /// <summary>

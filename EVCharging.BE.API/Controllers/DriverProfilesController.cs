@@ -52,7 +52,7 @@ namespace EVCharging.BE.API.Controllers
                 return Unauthorized(new { message = "Không thể xác định người dùng. Vui lòng đăng nhập lại." });
             }
 
-            var dto = await _svc.GetByUserIdAsync(userId);
+            var dto = await _svc.GetByUserIdAsync(userId);  
             if (dto == null)
             {
                 return NotFound(new { message = "Driver profile not found" });

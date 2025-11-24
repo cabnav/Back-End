@@ -293,6 +293,37 @@ namespace EVCharging.BE.API.Controllers
         }
 
         /// <summary>
+        /// Lấy danh sách phiên sạc đang hoạt động với tiến trình real-time
+        /// GET /api/staff/charging/active-sessions
+        /// </summary>
+        [HttpGet("active-sessions")]
+        public async Task<IActionResult> GetActiveSessionsProgress()
+        {
+            try
+            {
+                var staffId = GetStaffIdFromToken();
+                if (staffId == 0)
+                    return Unauthorized(new { message = "Invalid staff token" });
+
+                var activeSessions = await _staffChargingService.GetActiveSessionsProgressAsync(staffId);
+                
+                return Ok(new { 
+                    message = "Active sessions retrieved successfully", 
+                    data = activeSessions,
+                    count = activeSessions.Count,
+                    note = "Only shows sessions with status 'in_progress' or 'paused' at assigned stations"
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { 
+                    message = "An error occurred while retrieving active sessions", 
+                    error = ex.Message 
+                });
+            }
+        }
+
+        /// <summary>
         /// Lấy danh sách payments pending tại trạm của staff (để xác nhận thanh toán)
         /// GET /api/staff/charging/payments/pending
         /// </summary>
