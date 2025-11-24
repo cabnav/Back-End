@@ -204,6 +204,10 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     };
 
                     _db.Payments.Add(depositPayment);
+                    
+                    // ✅ Cập nhật DepositPaymentStatus của reservation
+                    entity.DepositPaymentStatus = "success";
+                    
                     await _db.SaveChangesAsync();
                 }
                 else
@@ -784,7 +788,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 },
                 // Thông tin trạm sạc (để dễ truy cập)
                 StationName = r.Point?.Station?.Name,
-                StationAddress = r.Point?.Station?.Address
+                StationAddress = r.Point?.Station?.Address,
+                // ✅ Trạng thái thanh toán tiền cọc
+                DepositPaymentStatus = r.DepositPaymentStatus
             };
         }
 
