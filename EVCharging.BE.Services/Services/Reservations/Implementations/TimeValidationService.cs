@@ -72,37 +72,40 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 throw new KeyNotFoundException("Charging point not found (không tìm thấy điểm sạc).");
 
             // Kiểm tra status của charging point
-            // Option 2: Cho phép đặt reservation cho slot tương lai dù point đang "in_use" (do walk-in session)
+            // ✅ Cho phép đặt reservation cho slot tương lai dù point đang "in_use" (do walk-in hoặc reservation session)
             // Walk-in session sẽ tự động dừng trước reservation start time
+            // Reservation session hiện tại sẽ kết thúc trước reservation mới bắt đầu
             if (chargingPoint.Status != "available")
             {
+                Console.WriteLine($"[ValidateTimeSlotAsync] Point {pointId} status: {chargingPoint.Status}, startUtc: {startUtc:yyyy-MM-dd HH:mm}, now: {now:yyyy-MM-dd HH:mm}, startUtc > now: {startUtc > now}");
+                
                 // Nếu reservation bắt đầu trong tương lai, cho phép đặt dù point đang "in_use"
-                // Vì walk-in session sẽ tự động dừng trước reservation start time
+                // Vì session hiện tại (walk-in hoặc reservation) sẽ kết thúc trước reservation start time
                 if (startUtc > now && chargingPoint.Status == "in_use")
                 {
-                    // Kiểm tra xem có walk-in session đang active trên point này không
-                    var hasWalkInSession = await _db.ChargingSessions
+                    // Kiểm tra xem có session đang active trên point này không
+                    var hasActiveSession = await _db.ChargingSessions
                         .AnyAsync(s => 
                             s.PointId == pointId 
-                            && s.Status == "in_progress"
-                            && !s.ReservationId.HasValue);
+                            && s.Status == "in_progress");
                     
-                    if (hasWalkInSession)
-                    {
-                        // Có walk-in session đang active, cho phép đặt reservation cho slot tương lai
-                        // UpdateWalkInSessionsForNewReservationAsync sẽ tự động set maxEndTime cho walk-in session
-                        // Không throw error, tiếp tục validate
-                    }
-                    else
-                    {
-                        // Point đang "in_use" nhưng không phải do walk-in session → Block
-                        throw new InvalidOperationException($"Charging point is not available (điểm sạc không khả dụng). Current status: {chargingPoint.Status ?? "null"}");
-                    }
+                    Console.WriteLine($"[ValidateTimeSlotAsync] Point {pointId} has active session: {hasActiveSession}");
+                    
+                    // ✅ Cho phép đặt reservation cho slot tương lai dù có session đang active hay không
+                    // Vì session hiện tại sẽ kết thúc trước reservation start time
+                    Console.WriteLine($"[ValidateTimeSlotAsync] Point {pointId} is in_use but reservation starts in future ({startUtc:HH:mm}), allowing booking");
+                    // Không throw error, tiếp tục validate
+                }
+                else if (chargingPoint.Status == "maintenance" || chargingPoint.Status == "offline")
+                {
+                    // Point đang maintenance hoặc offline → Block tất cả reservation
+                    throw new InvalidOperationException($"Charging point is not available (điểm sạc không khả dụng). Current status: {chargingPoint.Status ?? "null"}");
                 }
                 else
                 {
-                    // Reservation bắt đầu ngay bây giờ hoặc trong quá khứ, hoặc point status không phải "in_use"
+                    // Reservation bắt đầu ngay bây giờ hoặc trong quá khứ, và point status không phải "in_use" hoặc "maintenance"/"offline"
                     // Block reservation
+                    Console.WriteLine($"[ValidateTimeSlotAsync] Blocking reservation: startUtc={startUtc:yyyy-MM-dd HH:mm}, now={now:yyyy-MM-dd HH:mm}, status={chargingPoint.Status}");
                     throw new InvalidOperationException($"Charging point is not available (điểm sạc không khả dụng). Current status: {chargingPoint.Status ?? "null"}");
                 }
             }
