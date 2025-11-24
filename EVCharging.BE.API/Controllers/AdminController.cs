@@ -66,6 +66,66 @@ namespace EVCharging.BE.API.Controllers
             return Ok(result);
         }
 
+        // ========== STATION ANALYTICS ==========
+
+        /// <summary>
+        /// Lấy tần suất sử dụng theo từng trạm
+        /// GET /api/admin/stations/{stationId}/usage-frequency?from={date}&to={date}
+        /// </summary>
+        [HttpGet("stations/{stationId}/usage-frequency")]
+        public async Task<IActionResult> GetStationUsageFrequency(
+            int stationId,
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
+        {
+            try
+            {
+                var result = await _service.GetStationUsageFrequencyAsync(stationId, from, to);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Có lỗi xảy ra khi lấy thống kê tần suất sử dụng",
+                    error = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Lấy giờ cao điểm theo từng trạm
+        /// GET /api/admin/stations/{stationId}/peak-hours?from={date}&to={date}
+        /// </summary>
+        [HttpGet("stations/{stationId}/peak-hours")]
+        public async Task<IActionResult> GetStationPeakHours(
+            int stationId,
+            [FromQuery] DateTime? from,
+            [FromQuery] DateTime? to)
+        {
+            try
+            {
+                var result = await _service.GetStationPeakHoursAsync(stationId, from, to);
+                return Ok(result);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    message = "Có lỗi xảy ra khi lấy thống kê giờ cao điểm",
+                    error = ex.Message
+                });
+            }
+        }
+
         // ========== DEPOSIT MANAGEMENT (Quản lý giá tiền cọc) ==========
 
         /// <summary>

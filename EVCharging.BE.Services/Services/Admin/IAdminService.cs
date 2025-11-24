@@ -13,6 +13,18 @@ namespace EVCharging.BE.Services.Services.Admin
         Task<object> GetStaffPerformanceAsync();
         Task<object> GetRevenueByStationAndMethodAsync();
 
+        // ========== STATION ANALYTICS ==========
+
+        /// <summary>
+        /// Lấy tần suất sử dụng theo từng trạm
+        /// </summary>
+        Task<object> GetStationUsageFrequencyAsync(int stationId, DateTime? from = null, DateTime? to = null);
+
+        /// <summary>
+        /// Lấy giờ cao điểm theo từng trạm
+        /// </summary>
+        Task<object> GetStationPeakHoursAsync(int stationId, DateTime? from = null, DateTime? to = null);
+
         // ========== INCIDENT REPORT MANAGEMENT ==========
 
         /// <summary>
