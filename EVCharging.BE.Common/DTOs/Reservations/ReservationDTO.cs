@@ -25,7 +25,10 @@ namespace EVCharging.BE.Common.DTOs.Reservations
         public UserDTO Driver { get; set; }
         public string? ReservationCode { get; set; }
         
-       
+        /// <summary>
+        /// Trạng thái thanh toán tiền cọc: "success", "pending", "failed", hoặc null (chưa thanh toán)
+        /// </summary>
+        public string? DepositPaymentStatus { get; set; }
 
     }
 }

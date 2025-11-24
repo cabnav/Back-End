@@ -545,6 +545,10 @@ namespace EVCharging.BE.API.Controllers
                 };
 
                 _db.Payments.Add(payment);
+                
+                // ✅ Cập nhật DepositPaymentStatus của reservation
+                reservation.DepositPaymentStatus = "pending";
+                
                 await _db.SaveChangesAsync();
 
                 // Tạo MoMo payment request

@@ -696,6 +696,9 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("updated_at");
             entity.Property(e => e.TargetSoc)
                 .HasColumnName("target_soc");
+            entity.Property(e => e.DepositPaymentStatus)
+                .HasMaxLength(20)
+                .HasColumnName("deposit_payment_status");
 
             entity.HasOne(d => d.Driver).WithMany(p => p.Reservations)
                 .HasForeignKey(d => d.DriverId)

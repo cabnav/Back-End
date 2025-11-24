@@ -29,6 +29,11 @@ public partial class Reservation
     /// </summary>
     public int? TargetSoc { get; set; }
 
+    /// <summary>
+    /// Trạng thái thanh toán tiền cọc: "success", "pending", "failed", hoặc null (chưa thanh toán)
+    /// </summary>
+    public string? DepositPaymentStatus { get; set; }
+
     public virtual ICollection<ChargingSession> ChargingSessions { get; set; } = new List<ChargingSession>();
 
     public virtual DriverProfile Driver { get; set; } = null!;
