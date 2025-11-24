@@ -9,6 +9,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public string InvoiceNumber { get; set; } = string.Empty;
         public int? UserId { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal? DepositAmount { get; set; } // Tiền cọc đã trả (nếu có)
         public string? Status { get; set; }
         public string? PaymentMethod { get; set; } // wallet hoặc cash
         public DateTime? CreatedAt { get; set; }
@@ -46,6 +47,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public int? DurationMinutes { get; set; }
         public decimal? CostBeforeDiscount { get; set; }
         public decimal? AppliedDiscount { get; set; }
+        public decimal? DepositAmount { get; set; } // Tiền cọc đã trả (nếu có)
         public decimal? FinalCost { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime? EndTime { get; set; }

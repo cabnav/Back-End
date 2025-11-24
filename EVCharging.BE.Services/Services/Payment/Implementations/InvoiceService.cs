@@ -189,6 +189,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 InvoiceNumber = invoice.InvoiceNumber,
                 UserId = invoice.UserId,
                 TotalAmount = invoice.TotalAmount,
+                DepositAmount = session?.DepositAmount, // Thêm tiền cọc vào invoice
                 Status = invoice.Status,
                 PaymentMethod = payment?.PaymentMethod,
                 CreatedAt = invoice.CreatedAt,
@@ -205,15 +206,27 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 SessionInfo = session != null ? new SessionInfoDto
                 {
                     SessionId = session.SessionId,
+                    DriverId = session.DriverId,
+                    PointId = session.PointId,
+                    ReservationId = session.ReservationId,
+                    Status = session.Status,
+                    StationId = session.Point?.Station?.StationId,
                     StationName = session.Point?.Station?.Name,
                     StationAddress = session.Point?.Station?.Address,
+                    ConnectorType = session.Point?.ConnectorType,
+                    PowerOutput = session.Point?.PowerOutput,
+                    PricePerKwh = session.Point?.PricePerKwh,
+                    InitialSoc = session.InitialSoc,
+                    FinalSoc = session.FinalSoc,
                     EnergyUsed = session.EnergyUsed,
                     DurationMinutes = session.DurationMinutes,
                     CostBeforeDiscount = session.CostBeforeDiscount,
                     AppliedDiscount = session.AppliedDiscount,
+                    DepositAmount = session.DepositAmount, // Thêm tiền cọc vào session info
                     FinalCost = session.FinalCost,
                     StartTime = session.StartTime,
-                    EndTime = session.EndTime
+                    EndTime = session.EndTime,
+                    Notes = session.Notes
                 } : null
             };
         }
