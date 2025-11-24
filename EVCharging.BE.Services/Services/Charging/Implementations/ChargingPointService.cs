@@ -110,7 +110,16 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
      var entity = await _db.ChargingPoints.FirstOrDefaultAsync(p => p.PointId == id);
      if (entity == null) return null;
 
+     var oldStatus = entity.Status;
      entity.Status = newStatus;
+
+     // ✅ Tự động cập nhật last_maintenance khi chuyển từ maintenance về available
+     if (oldStatus?.ToLower() == "maintenance" && newStatus.ToLower() == "available")
+     {
+         entity.LastMaintenance = DateOnly.FromDateTime(DateTime.UtcNow);
+         Console.WriteLine($"[UpdateStatusAsync] Auto-updated last_maintenance to {entity.LastMaintenance} for point {id} (maintenance -> available)");
+     }
+
      await _db.SaveChangesAsync();
 
      return await GetByIdAsync(id);
@@ -148,13 +157,30 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
             var entity = await _db.ChargingPoints.FirstOrDefaultAsync(p => p.PointId == id);
             if (entity == null) return false;
 
+            var oldStatus = entity.Status;
+
             if (req.ConnectorType != null) entity.ConnectorType = req.ConnectorType;
             if (req.Status != null) entity.Status = req.Status;
             if (req.PowerOutput.HasValue) entity.PowerOutput = req.PowerOutput;
             if (req.PricePerKwh.HasValue) entity.PricePerKwh = req.PricePerKwh.Value;
             if (req.CurrentPower.HasValue) entity.CurrentPower = req.CurrentPower;
-            if (req.LastMaintenance.HasValue) entity.LastMaintenance = req.LastMaintenance.Value;
             if (req.QrCode != null) entity.QrCode = req.QrCode;
+
+            // ✅ Tự động cập nhật last_maintenance khi chuyển từ maintenance về available
+            // Chỉ auto-update nếu không có LastMaintenance được truyền vào request
+            if (req.Status != null && oldStatus?.ToLower() == "maintenance" && req.Status.ToLower() == "available")
+            {
+                if (!req.LastMaintenance.HasValue) // Chỉ auto-update nếu không có giá trị từ request
+                {
+                    entity.LastMaintenance = DateOnly.FromDateTime(DateTime.UtcNow);
+                    Console.WriteLine($"[UpdateAsync] Auto-updated last_maintenance to {entity.LastMaintenance} for point {id} (maintenance -> available)");
+                }
+            }
+            else if (req.LastMaintenance.HasValue)
+            {
+                // Nếu có LastMaintenance trong request, dùng giá trị đó
+                entity.LastMaintenance = req.LastMaintenance.Value;
+            }
 
             await _db.SaveChangesAsync();
             return true;
