@@ -81,7 +81,7 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                 var corporate = await _db.CorporateAccounts
                     .FirstOrDefaultAsync(c => c.CorporateId == req.CorporateId.Value);
                 if (corporate == null)
-                    throw new KeyNotFoundException("Corporate không tồn tại");
+                    throw new KeyNotFoundException("Doanh nghiệp không tồn tại");
             }
             else
             {
@@ -150,17 +150,37 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
 
             if (req.CorporateId.HasValue)
             {
-                // Nếu thay đổi CorporateId, reset status về pending nếu có CorporateId mới
-                if (d.CorporateId != req.CorporateId.Value && req.CorporateId.Value > 0)
+                var newCorporateId = req.CorporateId.Value;
+                
+                // ✅ Nếu CorporateId = 0 hoặc null → Xóa CorporateId (set về null)
+                if (newCorporateId <= 0)
                 {
-                    d.CorporateId = req.CorporateId.Value;
-                    d.Status = "pending"; // Reset về pending khi đổi corporate
+                    d.CorporateId = null;
+                    d.Status = "active"; // Khi không có corporate thì tự động active
                     d.ApprovedByUserId = null;
                     d.ApprovedAt = null;
                 }
                 else
                 {
-                    d.CorporateId = req.CorporateId.Value;
+                    // ✅ Kiểm tra CorporateId có tồn tại không
+                    var corporate = await _db.CorporateAccounts
+                        .FirstOrDefaultAsync(c => c.CorporateId == newCorporateId);
+                    if (corporate == null)
+                        throw new KeyNotFoundException("Corporate không tồn tại");
+
+                    // Nếu thay đổi CorporateId, reset status về pending
+                    if (d.CorporateId != newCorporateId)
+                    {
+                        d.CorporateId = newCorporateId;
+                        d.Status = "pending"; // Reset về pending khi đổi corporate
+                        d.ApprovedByUserId = null;
+                        d.ApprovedAt = null;
+                    }
+                    else
+                    {
+                        // Giữ nguyên CorporateId hiện tại (không thay đổi)
+                        // Không cần update gì cả
+                    }
                 }
             }
 

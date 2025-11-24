@@ -80,9 +80,24 @@ namespace EVCharging.BE.API.Controllers
         [HttpPut("{id:int}/update")]
         public async Task<IActionResult> UpdateDriverProfile(int id, [FromBody] DriverProfileUpdateRequest req)
         {
-            var ok = await _svc.UpdateAsync(id, req);
-            return ok ? Ok(new { message = "Updated successfully" })
-                      : NotFound(new { message = "Driver profile not found" });
+            try
+            {
+                var ok = await _svc.UpdateAsync(id, req);
+                return ok ? Ok(new { message = "Updated successfully" })
+                          : NotFound(new { message = "Driver profile not found" });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
         }
 
         // DELETE: api/DriverProfiles/{id}

@@ -27,4 +27,3 @@ namespace EVCharging.BE.Services.Services.Notification
         Task NotifyAdminIncidentAsync(int reportId, string title, string reporterName, string reporterRole);
     }
 }
-
