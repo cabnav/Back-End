@@ -518,7 +518,13 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
                 if (depositPayment == null)
                 {
-                    // Không có deposit payment → không cần hoàn cọc
+                    // Không có deposit payment → không cần hoàn cọc, nhưng vẫn gửi notification hủy thành công
+                    var reservationForNotification = await _db.Reservations
+                        .Include(r => r.Point)
+                            .ThenInclude(p => p.Station)
+                        .FirstOrDefaultAsync(r => r.ReservationId == reservation.ReservationId);
+                    
+                    await SendCancellationSuccessNotificationAsync(userId, reservationForNotification ?? reservation);
                     return;
                 }
 
@@ -546,6 +552,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     );
 
                     Console.WriteLine($"✅ Đã hoàn cọc {depositAmount:F0} VNĐ cho reservation {reservation.ReservationId} (hủy trước {cancelBeforeStart.TotalMinutes:F0} phút)");
+                    
+                    // ✅ Gửi thông báo khi được hoàn cọc
+                    await SendRefundNotificationAsync(userId, reservationWithDetails ?? reservation, cancelBeforeStart.TotalMinutes, depositAmount);
                 }
                 else
                 {
@@ -561,6 +570,69 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 // Log lỗi nhưng không throw để reservation vẫn được hủy
                 Console.WriteLine($"❌ Lỗi khi xử lý hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
                 Console.WriteLine($"   StackTrace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hủy reservation và được hoàn cọc
+        /// </summary>
+        private async Task SendRefundNotificationAsync(int userId, DAL.Entities.Reservation reservation, double minutesBeforeStart, decimal depositAmount)
+        {
+            try
+            {
+                var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                var startTime = reservation.StartTime;
+
+                var title = "Hủy đặt chỗ thành công - Đã hoàn cọc";
+                var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
+                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                             $"Mã đặt chỗ: {reservation.ReservationCode}\n" +
+                             $"Thời gian hủy: Còn {minutesBeforeStart:F0} phút trước giờ đặt chỗ\n" +
+                             $"✅ Cọc {depositAmount:N0} VND đã được hoàn lại vào ví của bạn.";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "reservation_cancelled_with_refund",
+                    reservation.ReservationId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hoàn cọc cho user {userId}, reservation {reservation.ReservationId}");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow chính
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hủy reservation thành công (không có deposit)
+        /// </summary>
+        private async Task SendCancellationSuccessNotificationAsync(int userId, DAL.Entities.Reservation reservation)
+        {
+            try
+            {
+                var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                var startTime = reservation.StartTime;
+
+                var title = "Hủy đặt chỗ thành công";
+                var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
+                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                             $"Mã đặt chỗ: {reservation.ReservationCode}";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "reservation_cancelled",
+                    reservation.ReservationId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hủy đặt chỗ thành công cho user {userId}, reservation {reservation.ReservationId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hủy đặt chỗ cho reservation {reservation.ReservationId}: {ex.Message}");
             }
         }
 

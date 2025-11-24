@@ -2,6 +2,7 @@ using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
@@ -16,15 +17,18 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
         private readonly EvchargingManagementContext _db;
         private readonly IWalletService _walletService;
         private readonly IInvoiceService _invoiceService;
+        private readonly INotificationService _notificationService;
 
         public PaymentService(
             EvchargingManagementContext db,
             IWalletService walletService,
-            IInvoiceService invoiceService)
+            IInvoiceService invoiceService,
+            INotificationService notificationService)
         {
             _db = db;
             _walletService = walletService;
             _invoiceService = invoiceService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -149,6 +153,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     sessionId
                 );
                 Console.WriteLine($"[PaymentService] Hoàn tiền cọc dư: Deposit={depositAmount}, CostAfterDiscount={costAfterDiscount}, Refund={refundAmount}");
+                
+                // ✅ Gửi notification về hoàn cọc dư
+                await SendDepositRefundNotificationAsync(userId, sessionId, refundAmount, session.Point?.Station?.Name ?? "trạm sạc");
             }
 
             // Kiểm tra số dư ví (chỉ nếu cần thanh toán thêm)
@@ -585,6 +592,33 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 Take = take,
                 Items = paidInvoicesList
             };
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hoàn tiền cọc dư sau khi sạc xong
+        /// </summary>
+        private async Task SendDepositRefundNotificationAsync(int userId, int sessionId, decimal refundAmount, string stationName)
+        {
+            try
+            {
+                var title = "Hoàn tiền cọc dư";
+                var message = $"Phiên sạc #{sessionId} tại {stationName} đã hoàn thành.\n" +
+                             $"✅ Đã hoàn lại tiền cọc dư: {refundAmount:N0} VND vào ví của bạn.";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "deposit_refund",
+                    sessionId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hoàn cọc dư {refundAmount:N0} VND cho user {userId}, session {sessionId}");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow thanh toán
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hoàn cọc dư cho session {sessionId}: {ex.Message}");
+            }
         }
     }
 }
