@@ -136,10 +136,14 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
             // ✅ FinalCost đã được trừ deposit trong ChargingService, nên sử dụng trực tiếp
             // Tuy nhiên, nếu deposit > cost_after_discount, cần hoàn tiền dư
-            var amountToPay = session.FinalCost ?? 0m;
+            var amountToPay = session.FinalCost.Value; // Đã check HasValue ở trên
             
             // Tính cost sau discount (không có deposit)
             var costAfterDiscount = (session.CostBeforeDiscount ?? 0m) - (session.AppliedDiscount ?? 0m);
+            
+            Console.WriteLine($"[PayByWalletAsync] Session {sessionId}: FinalCost={amountToPay}, CostAfterDiscount={costAfterDiscount}, DepositAmount={depositAmount}, AmountToPay={amountToPay}");
+            
+            // ✅ amountToPay có thể là 0 (khi deposit đã cover hết), đó là hợp lệ và vẫn cần thanh toán để tạo invoice
             
             // Nếu deposit > cost_after_discount, hoàn tiền dư vào ví
             decimal refundAmount = 0m;
@@ -419,6 +423,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Distinct()
                 .ToListAsync();
 
+            // ✅ Bao gồm cả sessions có finalCost = 0 (vì vẫn cần thanh toán để tạo invoice và hoàn cọc dư)
             var unpaidSessions = await _db.ChargingSessions
                 // .Include(s => s.Driver)
                 .Include(s => s.Point)
@@ -426,7 +431,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Where(s => s.Driver.UserId == userId
                     && s.Status == "completed"
                     && s.FinalCost.HasValue
-                    && s.FinalCost.Value > 0
                     && !paidSessionIds.Contains(s.SessionId))
                 .OrderByDescending(s => s.EndTime ?? s.StartTime)
                 .Skip(skip)
@@ -437,7 +441,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Where(s => s.Driver.UserId == userId
                     && s.Status == "completed"
                     && s.FinalCost.HasValue
-                    && s.FinalCost.Value > 0
                     && !paidSessionIds.Contains(s.SessionId))
                 .CountAsync();
 
