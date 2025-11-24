@@ -166,6 +166,10 @@ builder.Services.AddScoped<IInteractiveMapService, InteractiveMapService>();
 // Analytics
 builder.Services.AddScoped<EVCharging.BE.Services.AnalyticsService>();
 
+// Chat
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Chat.IChatDataService, EVCharging.BE.Services.Services.Chat.Implementations.JsonChatDataService>();
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Chat.IChatService, EVCharging.BE.Services.Services.Chat.Implementations.ChatService>();
+
 
 
 // ------------------------------
