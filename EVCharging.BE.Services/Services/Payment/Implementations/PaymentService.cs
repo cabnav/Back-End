@@ -479,6 +479,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     DurationMinutes = s.DurationMinutes,
                     CostBeforeDiscount = s.CostBeforeDiscount,
                     AppliedDiscount = s.AppliedDiscount,
+                    DepositAmount = s.DepositAmount,
                     FinalCost = s.FinalCost,
                     StartTime = s.StartTime,
                     EndTime = s.EndTime,
