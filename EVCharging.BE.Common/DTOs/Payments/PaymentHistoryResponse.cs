@@ -42,6 +42,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public int? DurationMinutes { get; set; }
         public decimal? CostBeforeDiscount { get; set; }
         public decimal? AppliedDiscount { get; set; }
+        public decimal? DepositAmount { get; set; }
         public decimal? FinalCost { get; set; }
         public DateTime StartTime { get; set; }
         public DateTime? EndTime { get; set; }
