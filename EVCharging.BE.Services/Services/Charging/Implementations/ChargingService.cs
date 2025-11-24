@@ -316,8 +316,11 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
 
                     _db.ChargingSessions.Add(session);
                     
-                    // Update charging point status
+                    // Update charging point status và current_power
                     chargingPoint.Status = "in_use";
+                    // ✅ Set current_power = power_output khi bắt đầu session (ước tính ban đầu, sẽ được cập nhật từ real-time data)
+                    chargingPoint.CurrentPower = chargingPoint.PowerOutput ?? 0;
+                    Console.WriteLine($"[StartSessionAsync] Set ChargingPoint {chargingPoint.PointId} current_power = {chargingPoint.CurrentPower} kW (from power_output)");
                     
                     // ✅ Update reservation status: "checked_in" → "in_progress" khi session StartTime đến
                     if (reservation != null)
@@ -622,12 +625,13 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     Console.WriteLine($"Updated payment {pendingPayment.PaymentId} amount from {pendingPayment.Amount} to {session.FinalCost.Value}");
                 }
 
-                // ✅ Update charging point status to "available" để slot tiếp theo có thể check-in
+                // ✅ Update charging point status to "available" và reset current_power về 0
                 var chargingPoint = await _db.ChargingPoints.FindAsync(session.PointId);
                 if (chargingPoint != null)
                 {
                     chargingPoint.Status = "available";
-                    Console.WriteLine($"[StopSessionAsync] Updated ChargingPoint {chargingPoint.PointId} status to 'available' after stopping session {session.SessionId}");
+                    chargingPoint.CurrentPower = 0; // ✅ Reset current_power về 0 khi session kết thúc
+                    Console.WriteLine($"[StopSessionAsync] Updated ChargingPoint {chargingPoint.PointId} status to 'available' and reset current_power to 0 after stopping session {session.SessionId}");
                 }
                 else
                 {
@@ -677,6 +681,8 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                     if (chargingPoint != null && chargingPoint.Status == "in_use")
                     {
                         chargingPoint.Status = "available";
+                        chargingPoint.CurrentPower = 0; // ✅ Reset current_power về 0 khi session kết thúc
+                        Console.WriteLine($"[UpdateSessionStatusAsync] Reset ChargingPoint {chargingPoint.PointId} current_power to 0");
                     }
 
                     // Set EndTime nếu chưa có

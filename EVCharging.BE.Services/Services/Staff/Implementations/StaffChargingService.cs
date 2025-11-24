@@ -380,8 +380,9 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 _db.ChargingSessions.Add(session);
                 await _db.SaveChangesAsync();
 
-                // 7. Update charging point status
+                // 7. Update charging point status và current_power
                 chargingPoint.Status = "in_use";
+                chargingPoint.CurrentPower = chargingPoint.PowerOutput ?? 0; // ✅ Set current_power = power_output khi bắt đầu session
                 await _db.SaveChangesAsync();
 
                 // 8. Start monitoring
@@ -592,11 +593,12 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 if (updatedSession == null)
                     return null;
 
-                // 4. Update charging point status to "paused" (reserved for this session)
+                // 4. Update charging point status to "paused" và reset current_power về 0
                 var point = await _db.ChargingPoints.FindAsync(session.PointId);
                 if (point != null)
                 {
                     point.Status = "paused";
+                    point.CurrentPower = 0; // ✅ Reset current_power về 0 khi pause (đang tạm dừng)
                     await _db.SaveChangesAsync();
                 }
 
@@ -655,11 +657,12 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                 if (updatedSession == null)
                     return null;
 
-                // 4. Update charging point status back to in_use
+                // 4. Update charging point status back to in_use và set current_power = power_output
                 var point = await _db.ChargingPoints.FindAsync(session.PointId);
                 if (point != null)
                 {
                     point.Status = "in_use";
+                    point.CurrentPower = point.PowerOutput ?? 0; // ✅ Set current_power = power_output khi resume (ước tính ban đầu)
                     await _db.SaveChangesAsync();
                 }
 
