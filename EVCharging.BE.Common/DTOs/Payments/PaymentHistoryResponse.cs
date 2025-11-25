@@ -73,6 +73,7 @@ namespace EVCharging.BE.Common.DTOs.Payments
         public int InvoiceId { get; set; }
         public string InvoiceNumber { get; set; } = string.Empty;
         public decimal TotalAmount { get; set; }
+        public decimal? DepositAmount { get; set; } // Tiền cọc đã trả (nếu có)
         public string? Status { get; set; }
         public string? PaymentMethod { get; set; }
         public string? PaymentStatus { get; set; }

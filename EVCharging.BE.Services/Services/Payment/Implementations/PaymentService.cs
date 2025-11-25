@@ -553,6 +553,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     InvoiceId = invoice.InvoiceId,
                     InvoiceNumber = invoice.InvoiceNumber,
                     TotalAmount = invoice.TotalAmount,
+                    DepositAmount = session?.DepositAmount, // Thêm tiền cọc vào invoice
                     Status = invoice.Status,
                     PaymentMethod = payment?.PaymentMethod,
                     PaymentStatus = payment?.PaymentStatus,
@@ -578,6 +579,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         DurationMinutes = session.DurationMinutes,
                         CostBeforeDiscount = session.CostBeforeDiscount,
                         AppliedDiscount = session.AppliedDiscount,
+                        DepositAmount = session.DepositAmount, // Thêm tiền cọc vào session info
                         FinalCost = session.FinalCost,
                         StartTime = session.StartTime,
                         EndTime = session.EndTime,
