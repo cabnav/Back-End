@@ -1,0 +1,894 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-11-26T14:56:58.1324663Z",
+  "questions": [
+    {
+      "id": "14211478-0547-4e60-8d95-8da91c49921e",
+      "question": "Làm thế nào để đăng ký tài khoản?",
+      "answer": "Bạn có thể đăng ký tài khoản bằng cách:\n1. Truy cập trang đăng ký\n2. Điền thông tin email và mật khẩu\n3. Xác nhận email qua OTP được gửi đến hộp thư\n4. Hoàn tất đăng ký và đăng nhập",
+      "keywords": [
+        "đăng ký",
+        "tài khoản",
+        "register",
+        "account",
+        "signup"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194788Z",
+      "updatedAt": "2025-11-24T20:02:03.8194788Z",
+      "usageCount": 0
+    },
+    {
+      "id": "5f9b2d00-1c3d-4429-8569-b1bcf972189e",
+      "question": "Làm sao để tìm trạm sạc gần nhất?",
+      "answer": "Để tìm trạm sạc gần nhất:\n1. Sử dụng tính năng tìm kiếm trên bản đồ\n2. Nhập địa chỉ hoặc cho phép truy cập vị trí của bạn\n3. Hệ thống sẽ hiển thị danh sách các trạm sạc gần bạn\n4. Bạn có thể xem thông tin chi tiết và đặt chỗ trước",
+      "keywords": [
+        "tìm",
+        "trạm sạc",
+        "gần nhất",
+        "location",
+        "search",
+        "địa chỉ",
+        "vị trí"
+      ],
+      "category": "station",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194838Z",
+      "updatedAt": "2025-11-26T14:46:55.7127239Z",
+      "usageCount": 0
+    },
+    {
+      "id": "700346a7-3598-4fc9-8239-5ffe63d09583",
+      "question": "Các phương thức thanh toán nào được hỗ trợ?",
+      "answer": "Hệ thống hỗ trợ các phương thức thanh toán sau:\n1. Ví điện tử (Wallet) - nạp tiền và thanh toán trực tiếp\n2. VNPay - thanh toán qua cổng VNPay\n3. MoMo - thanh toán qua ví MoMo\n4. Thanh toán khi sử dụng dịch vụ",
+      "keywords": [
+        "thanh toán",
+        "payment",
+        "phương thức",
+        "ví",
+        "wallet",
+        "vnpay",
+        "momo",
+        "tiền"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194862Z",
+      "updatedAt": "2025-11-26T14:56:58.1324605Z",
+      "usageCount": 0
+    },
+    {
+      "id": "2e1358ba-6e41-473b-9629-8f434fc9664f",
+      "question": "Làm thế nào để đặt chỗ trạm sạc?",
+      "answer": "Để đặt chỗ trạm sạc:\n1. Chọn trạm sạc bạn muốn sử dụng\n2. Chọn thời gian bắt đầu và kết thúc\n3. Xác nhận thông tin đặt chỗ\n4. Thanh toán (nếu cần)\n5. Nhận mã QR để check-in tại trạm",
+      "keywords": [
+        "đặt chỗ",
+        "reservation",
+        "booking",
+        "qr",
+        "qr code",
+        "mã qr",
+        "check-in"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194868Z",
+      "updatedAt": "2025-11-26T14:46:09.3082111Z",
+      "usageCount": 0
+    },
+    {
+      "id": "e8d291dc-cc73-4f9e-b330-9929e0afbbe8",
+      "question": "Giá sạc được tính như thế nào?",
+      "answer": "Giá sạc được tính dựa trên:\n1. Loại gói đăng ký của bạn (nếu có)\n2. Thời gian sạc (theo giờ hoặc phút)\n3. Loại trạm sạc (nhanh/chậm)\n4. Thời điểm sử dụng (giờ cao điểm/giờ thấp điểm)\nBạn có thể xem bảng giá chi tiết trong phần Pricing Plans",
+      "keywords": [
+        "giá",
+        "phí",
+        "chi phí",
+        "price",
+        "cost",
+        "fee",
+        "tính",
+        "bảng giá",
+        "pricing"
+      ],
+      "category": "pricing",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194875Z",
+      "updatedAt": "2025-11-24T20:02:03.8194876Z",
+      "usageCount": 0
+    },
+    {
+      "id": "509cfe2c-4423-414e-9f13-620358a7cdef",
+      "question": "Làm sao để hủy đặt chỗ?",
+      "answer": "Để hủy đặt chỗ:\n1. Vào phần 'Đặt chỗ của tôi'\n2. Chọn đặt chỗ bạn muốn hủy\n3. Nhấn nút 'Hủy đặt chỗ'\n4. Xác nhận hủy\nLưu ý: Hủy trước thời gian đặt chỗ sẽ được hoàn tiền (nếu đã thanh toán)",
+      "keywords": [
+        "hủy",
+        "cancel",
+        "đặt chỗ",
+        "reservation",
+        "hoàn tiền",
+        "refund"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194881Z",
+      "updatedAt": "2025-11-24T20:02:03.8194881Z",
+      "usageCount": 0
+    },
+    {
+      "id": "9dcb9451-351f-4b55-82b4-c24c8addde80",
+      "question": "Tôi quên mật khẩu, làm sao để lấy lại?",
+      "answer": "Để lấy lại mật khẩu:\n1. Vào trang 'Quên mật khẩu'\n2. Nhập email đã đăng ký\n3. Kiểm tra email và nhận link đặt lại mật khẩu\n4. Tạo mật khẩu mới\n5. Đăng nhập lại với mật khẩu mới",
+      "keywords": [
+        "quên mật khẩu",
+        "forgot password",
+        "reset password",
+        "lấy lại",
+        "mật khẩu",
+        "password"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194895Z",
+      "updatedAt": "2025-11-24T20:02:03.8194895Z",
+      "usageCount": 0
+    },
+    {
+      "id": "b1865a22-df3f-4b9f-bbe7-7eb5bbf79c13",
+      "question": "Làm thế nào để nạp tiền vào ví?",
+      "answer": "Để nạp tiền vào ví:\n1. Vào phần 'Ví của tôi'\n2. Chọn 'Nạp tiền'\n3. Nhập số tiền muốn nạp\n4. Chọn phương thức thanh toán (VNPay, MoMo, hoặc MockPay)\n5. Hoàn tất thanh toán\n6. Tiền sẽ được cập nhật vào ví sau khi thanh toán thành công",
+      "keywords": [
+        "nạp tiền",
+        "topup",
+        "deposit",
+        "ví",
+        "wallet",
+        "tiền",
+        "money"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194903Z",
+      "updatedAt": "2025-11-26T14:48:22.8831915Z",
+      "usageCount": 0
+    },
+    {
+      "id": "6790f2e7-db80-4b61-9326-ecb4534e30ed",
+      "question": "Tôi có thể xem lịch sử giao dịch không?",
+      "answer": "Có, bạn có thể xem lịch sử giao dịch:\n1. Vào phần 'Lịch sử thanh toán'\n2. Xem tất cả các giao dịch đã thực hiện\n3. Lọc theo thời gian, loại giao dịch\n4. Tải hóa đơn (invoice) nếu cần",
+      "keywords": [
+        "lịch sử",
+        "history",
+        "giao dịch",
+        "transaction",
+        "thanh toán",
+        "payment",
+        "hóa đơn",
+        "invoice"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194908Z",
+      "updatedAt": "2025-11-24T20:02:03.8194909Z",
+      "usageCount": 0
+    },
+    {
+      "id": "d5d5da36-9be5-44a0-b315-6c7147e11e8e",
+      "question": "Làm sao để liên hệ hỗ trợ?",
+      "answer": "Bạn có thể liên hệ hỗ trợ qua:\n1. Chatbox này - đặt câu hỏi bất kỳ\n2. Email hỗ trợ: support@evcharging.com\n3. Hotline: 1900-xxxx\n4. Tạo báo cáo sự cố trong phần 'Báo cáo sự cố'",
+      "keywords": [
+        "liên hệ",
+        "hỗ trợ",
+        "support",
+        "contact",
+        "help",
+        "báo cáo",
+        "report",
+        "sự cố",
+        "issue"
+      ],
+      "category": "support",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:02:03.8194916Z",
+      "updatedAt": "2025-11-24T20:02:03.8194917Z",
+      "usageCount": 0
+    },
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "question": "Làm thế nào để đăng ký gói subscription?",
+      "answer": "Để đăng ký gói subscription:\n1. Vào phần 'Gói đăng ký' hoặc 'Pricing Plans'\n2. Xem các gói có sẵn (Basic, Premium, Enterprise)\n3. Chọn gói phù hợp với nhu cầu\n4. Chọn chu kỳ thanh toán (tháng/năm)\n5. Thanh toán để kích hoạt gói\n6. Hưởng các ưu đãi và giảm giá của gói",
+      "keywords": [
+        "gói",
+        "subscription",
+        "đăng ký gói",
+        "pricing plan",
+        "plan",
+        "tier",
+        "billing"
+      ],
+      "category": "subscription",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f23456789012",
+      "question": "Lợi ích của gói subscription là gì?",
+      "answer": "Các gói subscription mang lại nhiều lợi ích:\n• Giảm giá sạc (tùy theo gói)\n• Ưu tiên đặt chỗ tại các trạm sạc\n• Hỗ trợ 24/7\n• Báo cáo chi tiết về lịch sử sử dụng\n• Thông báo sớm về các chương trình khuyến mãi\n• Tích lũy điểm thưởng\nBạn có thể xem chi tiết từng gói trong phần Pricing Plans",
+      "keywords": [
+        "lợi ích",
+        "benefits",
+        "ưu đãi",
+        "discount",
+        "giảm giá",
+        "advantages",
+        "gói"
+      ],
+      "category": "subscription",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "c3d4e5f6-a7b8-9012-cdef-345678901234",
+      "question": "Làm sao để bắt đầu phiên sạc?",
+      "answer": "Để bắt đầu phiên sạc:\n1. Đến trạm sạc đã đặt chỗ (hoặc trạm sạc bất kỳ)\n2. Quét mã QR code tại điểm sạc\n3. Hoặc nhập mã QR code từ đặt chỗ của bạn\n4. Xác nhận thông tin và bắt đầu sạc\n5. Hệ thống sẽ tự động theo dõi tiến trình sạc\n6. Bạn có thể xem trạng thái real-time trên ứng dụng",
+      "keywords": [
+        "bắt đầu",
+        "start",
+        "sạc",
+        "charging",
+        "phiên sạc",
+        "session",
+        "qr code",
+        "quét"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "d4e5f6a7-b8c9-0123-def4-456789012345",
+      "question": "Làm sao để dừng phiên sạc?",
+      "answer": "Để dừng phiên sạc:\n1. Vào phần 'Phiên sạc đang hoạt động'\n2. Chọn phiên sạc bạn muốn dừng\n3. Nhấn nút 'Dừng sạc'\n4. Xác nhận dừng\n5. Hệ thống sẽ tính toán chi phí và thanh toán tự động\n6. Nhận hóa đơn và thông báo hoàn tất",
+      "keywords": [
+        "dừng",
+        "stop",
+        "kết thúc",
+        "end",
+        "phiên sạc",
+        "session",
+        "tắt"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "e5f6a7b8-c9d0-1234-ef56-567890123456",
+      "question": "Làm sao để theo dõi tiến trình sạc?",
+      "answer": "Bạn có thể theo dõi tiến trình sạc real-time:\n1. Vào phần 'Phiên sạc đang hoạt động'\n2. Xem thông tin chi tiết: SOC (mức pin), công suất, điện áp, nhiệt độ\n3. Xem thời gian còn lại ước tính\n4. Nhận thông báo khi sạc gần đầy\n5. Xem lịch sử log của phiên sạc\n6. Hệ thống tự động cập nhật mỗi 30 giây",
+      "keywords": [
+        "theo dõi",
+        "monitor",
+        "tiến trình",
+        "progress",
+        "soc",
+        "mức pin",
+        "real-time",
+        "trạng thái"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "f6a7b8c9-d0e1-2345-f678-678901234567",
+      "question": "QR code dùng để làm gì?",
+      "answer": "QR code được sử dụng để:\n1. Check-in tại trạm sạc khi đến giờ đặt chỗ\n2. Bắt đầu phiên sạc tại điểm sạc\n3. Xác thực danh tính và quyền sử dụng\n4. Thanh toán nhanh chóng\n5. Theo dõi lịch sử sử dụng\nBạn sẽ nhận QR code sau khi đặt chỗ thành công hoặc có thể quét QR code tại điểm sạc",
+      "keywords": [
+        "qr",
+        "qr code",
+        "mã qr",
+        "quét",
+        "scan",
+        "check-in"
+      ],
+      "category": "general",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "a7b8c9d0-e1f2-3456-789a-789012345678",
+      "question": "Tôi có thể đặt chỗ trước bao lâu?",
+      "answer": "Bạn có thể đặt chỗ trước:\n• Tối đa 30 ngày trước\n• Tối thiểu 1 giờ trước thời gian muốn sạc\n• Đặt chỗ theo giờ (mỗi slot 1 giờ)\n• Có thể đặt nhiều slot liên tiếp\nLưu ý: Đặt chỗ sớm giúp bạn đảm bảo có chỗ sạc khi cần, đặc biệt vào giờ cao điểm",
+      "keywords": [
+        "đặt chỗ",
+        "reservation",
+        "trước",
+        "bao lâu",
+        "advance",
+        "booking",
+        "slot"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "b8c9d0e1-f2a3-4567-89ab-890123456789",
+      "question": "Làm sao để xem thông báo?",
+      "answer": "Bạn có thể xem thông báo:\n1. Vào phần 'Thông báo' trên ứng dụng\n2. Xem tất cả thông báo: đặt chỗ, sạc, thanh toán, khuyến mãi\n3. Lọc theo loại thông báo\n4. Đánh dấu đã đọc\n5. Nhận thông báo real-time qua email và trong app\n6. Cài đặt loại thông báo muốn nhận",
+      "keywords": [
+        "thông báo",
+        "notification",
+        "alert",
+        "tin nhắn",
+        "message"
+      ],
+      "category": "notification",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "c9d0e1f2-a3b4-5678-9abc-901234567890",
+      "question": "Làm sao để báo cáo sự cố?",
+      "answer": "Để báo cáo sự cố:\n1. Vào phần 'Báo cáo sự cố' hoặc 'Incident Reports'\n2. Chọn loại sự cố: trạm sạc, điểm sạc, thanh toán, khác\n3. Mô tả chi tiết vấn đề\n4. Chọn mức độ ưu tiên (cao/trung bình/thấp)\n5. Đính kèm hình ảnh nếu có\n6. Gửi báo cáo\n7. Theo dõi trạng thái xử lý trong phần 'Báo cáo của tôi'",
+      "keywords": [
+        "báo cáo",
+        "report",
+        "sự cố",
+        "incident",
+        "lỗi",
+        "vấn đề",
+        "problem",
+        "issue"
+      ],
+      "category": "support",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "d0e1f2a3-b4c5-6789-abcd-012345678901",
+      "question": "Tài khoản corporate là gì?",
+      "answer": "Tài khoản Corporate là tài khoản dành cho doanh nghiệp:\n• Quản lý nhiều tài xế trong một công ty\n• Thanh toán tập trung\n• Báo cáo chi tiết về sử dụng của công ty\n• Quản lý ngân sách và hạn mức\n• Hóa đơn theo tháng cho công ty\n• Ưu đãi đặc biệt cho doanh nghiệp\nLiên hệ bộ phận kinh doanh để đăng ký tài khoản Corporate",
+      "keywords": [
+        "corporate",
+        "doanh nghiệp",
+        "công ty",
+        "business",
+        "enterprise",
+        "company"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "e1f2a3b4-c5d6-789a-bcde-123456789012",
+      "question": "Làm sao để cập nhật thông tin hồ sơ tài xế?",
+      "answer": "Để cập nhật thông tin hồ sơ tài xế:\n1. Vào phần 'Hồ sơ' hoặc 'Profile'\n2. Chọn 'Chỉnh sửa hồ sơ'\n3. Cập nhật thông tin: tên, số điện thoại, địa chỉ\n4. Cập nhật thông tin xe: biển số, model, dung lượng pin\n5. Tải lên giấy phép lái xe nếu cần\n6. Lưu thay đổi\nLưu ý: Một số thông tin cần được admin phê duyệt",
+      "keywords": [
+        "hồ sơ",
+        "profile",
+        "tài xế",
+        "driver",
+        "cập nhật",
+        "update",
+        "chỉnh sửa",
+        "edit"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "f2a3b4c5-d6e7-89ab-cdef-234567890123",
+      "question": "Sạc nhanh và sạc chậm khác nhau như thế nào?",
+      "answer": "Sạc nhanh (Fast Charging):\n• Công suất cao (50kW trở lên)\n• Sạc từ 0-80% trong 30-60 phút\n• Phù hợp khi cần sạc nhanh\n• Giá cao hơn\n\nSạc chậm (Slow Charging):\n• Công suất thấp hơn (7-22kW)\n• Sạc đầy trong vài giờ\n• Phù hợp khi có thời gian\n• Giá thấp hơn\n\nBạn có thể chọn loại trạm phù hợp với nhu cầu khi đặt chỗ",
+      "keywords": [
+        "sạc nhanh",
+        "fast charging",
+        "sạc chậm",
+        "slow charging",
+        "công suất",
+        "power",
+        "kw"
+      ],
+      "category": "station",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "a3b4c5d6-e7f8-9abc-def0-345678901234",
+      "question": "Tôi có thể sử dụng nhiều phương thức thanh toán không?",
+      "answer": "Có, bạn có thể:\n• Nạp tiền vào ví và thanh toán từ ví\n• Thanh toán trực tiếp qua VNPay hoặc MoMo\n• Kết hợp: một phần từ ví, phần còn lại qua cổng thanh toán\n• Lưu thông tin thẻ để thanh toán nhanh lần sau\n• Xem lịch sử tất cả các giao dịch trong một nơi",
+      "keywords": [
+        "phương thức",
+        "payment method",
+        "nhiều",
+        "multiple",
+        "kết hợp",
+        "combine"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "b4c5d6e7-f8a9-bcde-f012-456789012345",
+      "question": "Làm sao để xem số dư ví?",
+      "answer": "Để xem số dư ví:\n1. Vào phần 'Ví của tôi' hoặc 'Wallet'\n2. Xem số dư hiện tại\n3. Xem lịch sử nạp tiền và chi tiêu\n4. Xem các giao dịch gần đây\n5. Tải báo cáo chi tiết nếu cần\nBạn cũng có thể nạp thêm tiền hoặc rút tiền từ ví",
+      "keywords": [
+        "số dư",
+        "balance",
+        "ví",
+        "wallet",
+        "tiền",
+        "money"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "c5d6e7f8-a9b0-cdef-0123-567890123456",
+      "question": "Tôi có thể đặt chỗ cho người khác không?",
+      "answer": "Hiện tại hệ thống chỉ cho phép đặt chỗ cho chính tài khoản của bạn. Nếu bạn muốn đặt chỗ cho người khác:\n• Người đó cần có tài khoản riêng\n• Hoặc bạn có thể sử dụng tài khoản Corporate để quản lý nhiều tài xế\n• Liên hệ hỗ trợ nếu cần hỗ trợ đặc biệt",
+      "keywords": [
+        "đặt chỗ",
+        "reservation",
+        "người khác",
+        "another person",
+        "someone else"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "d6e7f8a9-b0c1-def2-3456-678901234567",
+      "question": "Làm sao để hủy gói subscription?",
+      "answer": "Để hủy gói subscription:\n1. Vào phần 'Gói đăng ký' hoặc 'Subscriptions'\n2. Chọn gói đang sử dụng\n3. Nhấn 'Hủy gói'\n4. Xác nhận hủy\nLưu ý:\n• Gói sẽ hết hạn vào cuối chu kỳ thanh toán hiện tại\n• Bạn vẫn có thể sử dụng các ưu đãi đến khi hết hạn\n• Sau khi hết hạn, bạn sẽ chuyển về tài khoản thường\n• Có thể đăng ký lại bất cứ lúc nào",
+      "keywords": [
+        "hủy gói",
+        "cancel subscription",
+        "unsubscribe",
+        "hủy đăng ký"
+      ],
+      "category": "subscription",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "e7f8a9b0-c1d2-ef34-5678-789012345678",
+      "question": "Tôi có thể đổi gói subscription không?",
+      "answer": "Có, bạn có thể nâng cấp hoặc hạ cấp gói:\n1. Vào phần 'Gói đăng ký'\n2. Chọn 'Nâng cấp' hoặc 'Hạ cấp'\n3. Chọn gói mới\n4. Thanh toán chênh lệch (nếu nâng cấp) hoặc nhận hoàn tiền (nếu hạ cấp)\n5. Gói mới sẽ có hiệu lực ngay\nLưu ý: Khi nâng cấp, bạn sẽ được tính lại từ ngày nâng cấp",
+      "keywords": [
+        "đổi gói",
+        "change plan",
+        "nâng cấp",
+        "upgrade",
+        "hạ cấp",
+        "downgrade"
+      ],
+      "category": "subscription",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "f8a9b0c1-d2e3-f456-789a-890123456789",
+      "question": "Làm sao để xem thống kê sử dụng của tôi?",
+      "answer": "Bạn có thể xem thống kê sử dụng:\n1. Vào phần 'Thống kê' hoặc 'Analytics'\n2. Xem tổng số lần sạc, tổng năng lượng đã sạc\n3. Xem chi phí theo tháng/năm\n4. Xem trạm sạc sử dụng nhiều nhất\n5. Xem biểu đồ xu hướng sử dụng\n6. Tải báo cáo chi tiết\nThống kê giúp bạn quản lý chi phí và lập kế hoạch tốt hơn",
+      "keywords": [
+        "thống kê",
+        "statistics",
+        "analytics",
+        "sử dụng",
+        "usage",
+        "báo cáo",
+        "report"
+      ],
+      "category": "analytics",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "a9b0c1d2-e3f4-567a-bcde-901234567890",
+      "question": "Tôi có thể đặt chỗ mà không cần thanh toán trước không?",
+      "answer": "Có, bạn có thể:\n• Đặt chỗ mà không cần thanh toán trước\n• Thanh toán khi đến trạm và bắt đầu sạc\n• Hoặc thanh toán sau khi hoàn tất phiên sạc\nLưu ý:\n• Một số trạm có thể yêu cầu đặt cọc\n• Đặt chỗ có thanh toán trước được ưu tiên hơn\n• Hủy đặt chỗ không thanh toán trước sẽ không mất phí",
+      "keywords": [
+        "đặt chỗ",
+        "reservation",
+        "thanh toán",
+        "payment",
+        "trước",
+        "before",
+        "sau",
+        "after"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "b0c1d2e3-f4a5-678b-cdef-012345678901",
+      "question": "Làm sao để nhận thông báo về khuyến mãi?",
+      "answer": "Để nhận thông báo khuyến mãi:\n1. Vào phần 'Cài đặt' hoặc 'Settings'\n2. Chọn 'Thông báo'\n3. Bật thông báo về khuyến mãi và ưu đãi\n4. Cho phép gửi email marketing\n5. Theo dõi phần 'Thông báo' trong app\n6. Kiểm tra email thường xuyên\nBạn sẽ nhận thông báo về:\n• Chương trình khuyến mãi mới\n• Giảm giá đặc biệt\n• Ưu đãi cho gói subscription\n• Sự kiện và chương trình",
+      "keywords": [
+        "khuyến mãi",
+        "promotion",
+        "ưu đãi",
+        "discount",
+        "thông báo",
+        "notification",
+        "marketing"
+      ],
+      "category": "notification",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "c1d2e3f4-a5b6-789c-def0-123456789012",
+      "question": "Tôi có thể sử dụng ứng dụng mà không cần đăng ký không?",
+      "answer": "Bạn cần đăng ký tài khoản để sử dụng các tính năng:\n• Đặt chỗ trạm sạc\n• Bắt đầu phiên sạc\n• Thanh toán\n• Xem lịch sử\n• Quản lý ví\nTuy nhiên, bạn có thể:\n• Xem danh sách trạm sạc mà không cần đăng nhập\n• Xem thông tin trạm sạc\n• Liên hệ hỗ trợ\nĐăng ký miễn phí và nhanh chóng, chỉ cần email và mật khẩu!",
+      "keywords": [
+        "đăng ký",
+        "register",
+        "tài khoản",
+        "account",
+        "cần",
+        "required",
+        "bắt buộc"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "d2e3f4a5-b6c7-89de-f012-234567890123",
+      "question": "Làm sao để đảm bảo an toàn khi sạc?",
+      "answer": "Để đảm bảo an toàn khi sạc:\n• Chỉ sử dụng trạm sạc được chứng nhận và kiểm định\n• Kiểm tra cáp sạc trước khi sử dụng\n• Không sử dụng thiết bị sạc bị hư hỏng\n• Tuân thủ hướng dẫn của nhà sản xuất xe\n• Không rời khỏi xe khi đang sạc (nếu có thể)\n• Báo cáo ngay nếu phát hiện sự cố\n• Hệ thống tự động giám sát nhiệt độ và điện áp để đảm bảo an toàn",
+      "keywords": [
+        "an toàn",
+        "safety",
+        "bảo đảm",
+        "secure",
+        "kiểm tra",
+        "check"
+      ],
+      "category": "safety",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:15:00Z",
+      "updatedAt": "2025-11-24T20:15:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "walk-in-001",
+      "question": "Tôi có thể sạc mà không cần đặt chỗ trước không?",
+      "answer": "Có, bạn có thể sạc walk-in (không cần đặt chỗ trước):\n1. Đến trạm sạc và quét QR code tại điểm sạc\n2. Hoặc vào phần 'Walk-in' trong ứng dụng\n3. Chọn điểm sạc và quét QR code\n4. Nhập mức pin hiện tại (Initial SOC)\n5. Bắt đầu phiên sạc ngay lập tức\nLưu ý:\n• Walk-in chỉ có thể sử dụng nếu điểm sạc đang available\n• Nếu có đặt chỗ sắp đến (trong 15 phút), walk-in sẽ bị chặn\n• Walk-in có thể bị giới hạn thời gian nếu có reservation sắp đến",
+      "keywords": [
+        "walk-in",
+        "sạc không đặt chỗ",
+        "sạc trực tiếp",
+        "không cần đặt chỗ",
+        "quét qr",
+        "scan qr"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "check-in-001",
+      "question": "Làm sao để check-in vào đặt chỗ?",
+      "answer": "Để check-in vào đặt chỗ:\n1. Đến trạm sạc đúng giờ đã đặt chỗ\n2. Vào phần 'Đặt chỗ của tôi' và chọn đặt chỗ\n3. Quét QR code tại điểm sạc (hoặc nhập mã QR code)\n4. Nhập mức pin hiện tại (Initial SOC)\n5. Xác nhận check-in\n6. Hệ thống sẽ tự động bắt đầu phiên sạc\nLưu ý:\n• Check-in phải trong khung thời gian đặt chỗ\n• Nếu không check-in, đặt chỗ sẽ bị hủy tự động (no-show)\n• Sau khi check-in, bạn có thể xem tiến trình sạc real-time",
+      "keywords": [
+        "check-in",
+        "checkin",
+        "đặt chỗ",
+        "reservation",
+        "quét qr",
+        "scan",
+        "mã qr",
+        "reservation code"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "time-slot-001",
+      "question": "Time slot là gì và làm sao để xem time slot có sẵn?",
+      "answer": "Time slot là các khung giờ có sẵn để đặt chỗ tại một điểm sạc:\n1. Mỗi time slot thường là 1 giờ\n2. Bạn có thể xem time slots có sẵn khi chọn điểm sạc\n3. Time slots hiển thị theo ngày\n4. Màu xanh = có sẵn, màu đỏ = đã được đặt, màu xám = không khả dụng\n5. Bạn có thể đặt nhiều time slots liên tiếp\n6. Time slots được cập nhật real-time khi có người đặt/hủy",
+      "keywords": [
+        "time slot",
+        "khung giờ",
+        "giờ có sẵn",
+        "available time",
+        "slot",
+        "đặt giờ"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "session-logs-001",
+      "question": "Làm sao để xem log và tiến trình sạc real-time?",
+      "answer": "Bạn có thể xem log và tiến trình sạc real-time:\n1. Vào phần 'Phiên sạc đang hoạt động' (Active Sessions)\n2. Xem thông tin chi tiết: SOC, công suất, điện áp, nhiệt độ\n3. Xem session logs - cập nhật mỗi 30 giây\n4. Xem thời gian còn lại ước tính\n5. Xem năng lượng đã sạc (kWh)\n6. Nhận thông báo khi sạc gần đầy (còn 10% so với target SOC)\n7. Xem lịch sử logs sau khi hoàn tất phiên sạc",
+      "keywords": [
+        "log",
+        "tiến trình",
+        "progress",
+        "real-time",
+        "soc",
+        "mức pin",
+        "session log",
+        "monitoring",
+        "kwh"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "connector-001",
+      "question": "Làm sao để tìm trạm sạc phù hợp với loại connector của xe?",
+      "answer": "Để tìm trạm sạc phù hợp:\n1. Xem loại connector của xe bạn trong hồ sơ (Type 1, Type 2, CCS, CHAdeMO)\n2. Khi tìm kiếm trạm, chọn bộ lọc 'Connector Type'\n3. Hệ thống sẽ chỉ hiển thị các trạm có điểm sạc tương thích\n4. Bạn cũng có thể tìm kiếm theo connector type trong phần 'Search Stations'\n5. Xem thông tin chi tiết điểm sạc để xác nhận loại connector\nLưu ý: Mỗi điểm sạc chỉ hỗ trợ một loại connector cụ thể",
+      "keywords": [
+        "connector",
+        "loại connector",
+        "type 1",
+        "type 2",
+        "ccs",
+        "chademo",
+        "tương thích",
+        "compatible"
+      ],
+      "category": "station",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "geocoding-001",
+      "question": "Làm sao để tìm trạm sạc bằng địa chỉ?",
+      "answer": "Bạn có thể tìm trạm sạc bằng địa chỉ:\n1. Sử dụng tính năng Geocoding trong phần tìm kiếm\n2. Nhập địa chỉ (ví dụ: '123 Nguyễn Huệ, Quận 1, TP.HCM')\n3. Chọn bán kính tìm kiếm (km)\n4. Hệ thống sẽ tìm các trạm sạc gần địa chỉ đó\n5. Xem kết quả trên bản đồ và danh sách\n6. Có thể kết hợp với bộ lọc: connector type, công suất, giá cả",
+      "keywords": [
+        "địa chỉ",
+        "address",
+        "geocoding",
+        "tìm theo địa chỉ",
+        "search by address"
+      ],
+      "category": "station",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "invoice-001",
+      "question": "Làm sao để xem và tải hóa đơn?",
+      "answer": "Để xem và tải hóa đơn:\n1. Vào phần 'Hóa đơn' (Invoices) trong Profile\n2. Xem danh sách tất cả hóa đơn\n3. Lọc theo thời gian, trạng thái (paid/unpaid)\n4. Xem chi tiết hóa đơn: thời gian sạc, năng lượng, chi phí, giảm giá\n5. Tải hóa đơn dạng PDF\n6. Xem hóa đơn của từng phiên sạc trong phần 'Lịch sử sạc'\nLưu ý: Hóa đơn được tạo tự động sau mỗi phiên sạc hoàn tất",
+      "keywords": [
+        "hóa đơn",
+        "invoice",
+        "tải",
+        "download",
+        "pdf",
+        "bill"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "incident-001",
+      "question": "Làm sao để báo cáo sự cố khi sạc?",
+      "answer": "Để báo cáo sự cố khi sạc:\n1. Trong phiên sạc đang hoạt động, chọn 'Báo cáo sự cố'\n2. Hoặc vào phần 'Báo cáo sự cố' (Incident Reports)\n3. Chọn loại sự cố: trạm sạc, điểm sạc, thanh toán, khác\n4. Mô tả chi tiết vấn đề\n5. Chọn mức độ ưu tiên (cao/trung bình/thấp)\n6. Đính kèm hình ảnh nếu có\n7. Gửi báo cáo\n8. Theo dõi trạng thái xử lý trong phần 'Báo cáo của tôi'",
+      "keywords": [
+        "báo cáo sự cố",
+        "incident",
+        "report",
+        "lỗi",
+        "vấn đề",
+        "problem",
+        "issue",
+        "sự cố sạc"
+      ],
+      "category": "support",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "target-soc-001",
+      "question": "Target SOC là gì và làm sao để đặt target SOC?",
+      "answer": "Target SOC (State of Charge) là mức pin bạn muốn sạc đến:\n1. Khi đặt chỗ, bạn có thể chọn target SOC (ví dụ: 80%, 90%, 100%)\n2. Hệ thống sẽ tự động dừng sạc khi đạt target SOC\n3. Bạn sẽ nhận thông báo khi sạc gần đạt target (còn 10%)\n4. Target SOC giúp bạn kiểm soát thời gian và chi phí sạc\n5. Bạn có thể thay đổi target SOC trong phiên sạc (nếu cần)\nLưu ý: Sạc đến 100% thường mất nhiều thời gian hơn và có thể tốn kém hơn",
+      "keywords": [
+        "target soc",
+        "mức pin",
+        "soc",
+        "state of charge",
+        "mục tiêu",
+        "target"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "deposit-001",
+      "question": "Đặt cọc (deposit) là gì và có bắt buộc không?",
+      "answer": "Đặt cọc (deposit) là số tiền bạn trả trước khi đặt chỗ:\n1. Một số trạm có thể yêu cầu đặt cọc để đảm bảo bạn sẽ đến\n2. Đặt cọc sẽ được trừ vào tổng chi phí khi thanh toán\n3. Nếu hủy đặt chỗ trước giờ, đặt cọc sẽ được hoàn lại\n4. Nếu không check-in (no-show), đặt cọc có thể bị mất\n5. Bạn có thể xem thông tin đặt cọc trong chi tiết đặt chỗ\nLưu ý: Không phải tất cả đặt chỗ đều yêu cầu đặt cọc",
+      "keywords": [
+        "đặt cọc",
+        "deposit",
+        "cọc",
+        "trả trước",
+        "prepayment"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "wallet-transaction-001",
+      "question": "Làm sao để xem số dư ví và lịch sử giao dịch ví?",
+      "answer": "Để xem số dư ví và lịch sử:\n1. Vào phần 'Ví của tôi' (My Wallet)\n2. Xem số dư hiện tại\n3. Xem lịch sử giao dịch ví:\n   - Nạp tiền (credit)\n   - Chi tiêu (debit) - thanh toán sạc\n   - Hoàn tiền (refund)\n4. Lọc theo thời gian, loại giao dịch\n5. Xem chi tiết từng giao dịch: số tiền, mô tả, số dư sau giao dịch\n6. Tải báo cáo chi tiết nếu cần",
+      "keywords": [
+        "số dư",
+        "balance",
+        "ví",
+        "wallet",
+        "tiền",
+        "money",
+        "lịch sử ví",
+        "wallet transaction",
+        "credit",
+        "debit"
+      ],
+      "category": "payment",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "stop-session-001",
+      "question": "Làm sao để dừng phiên sạc sớm?",
+      "answer": "Để dừng phiên sạc sớm:\n1. Vào phần 'Phiên sạc đang hoạt động'\n2. Chọn phiên sạc bạn muốn dừng\n3. Nhấn nút 'Dừng sạc' (Stop Charging)\n4. Nhập mức pin hiện tại (Final SOC)\n5. Nhập lý do dừng (nếu có)\n6. Xác nhận dừng\n7. Hệ thống sẽ tính toán chi phí dựa trên thời gian và năng lượng đã sạc\n8. Thanh toán và nhận hóa đơn\nLưu ý: Bạn vẫn phải thanh toán cho thời gian và năng lượng đã sử dụng",
+      "keywords": [
+        "dừng",
+        "stop",
+        "kết thúc",
+        "end",
+        "phiên sạc",
+        "session",
+        "tắt",
+        "dừng sớm",
+        "final soc"
+      ],
+      "category": "charging",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "driver-profile-approval-001",
+      "question": "Hồ sơ tài xế cần phê duyệt không và làm sao để xem trạng thái?",
+      "answer": "Hồ sơ tài xế cần được admin phê duyệt trước khi sử dụng:\n1. Sau khi tạo/cập nhật hồ sơ, trạng thái sẽ là 'pending'\n2. Vào phần 'Hồ sơ' > 'Trạng thái hồ sơ' để xem\n3. Trạng thái có thể là: pending, approved, rejected\n4. Nếu bị từ chối, bạn sẽ nhận thông báo lý do\n5. Sau khi được phê duyệt (approved), bạn có thể đặt chỗ và sạc\n6. Bạn có thể cập nhật lại hồ sơ nếu bị từ chối",
+      "keywords": [
+        "phê duyệt",
+        "approval",
+        "trạng thái",
+        "status",
+        "pending",
+        "approved",
+        "rejected",
+        "hồ sơ"
+      ],
+      "category": "account",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "interactive-map-001",
+      "question": "Làm sao để sử dụng bản đồ tương tác để tìm trạm sạc?",
+      "answer": "Bạn có thể sử dụng bản đồ tương tác (Interactive Map):\n1. Vào phần 'Bản đồ' hoặc 'Station Map'\n2. Cho phép truy cập vị trí GPS của bạn\n3. Xem các trạm sạc trên bản đồ\n4. Lọc theo: connector type, công suất, giá cả, khoảng cách\n5. Xem thông tin chi tiết khi click vào trạm\n6. Tìm kiếm trạm gần nhất dựa trên vị trí hiện tại\n7. Xem trạng thái trạm real-time (available, in_use, offline)",
+      "keywords": [
+        "bản đồ",
+        "map",
+        "interactive map",
+        "tương tác",
+        "gps",
+        "vị trí",
+        "location"
+      ],
+      "category": "station",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    },
+    {
+      "id": "reservation-code-001",
+      "question": "Reservation code là gì và dùng để làm gì?",
+      "answer": "Reservation code là mã duy nhất cho mỗi đặt chỗ:\n1. Bạn nhận reservation code sau khi đặt chỗ thành công\n2. Dùng reservation code để check-in tại trạm\n3. Có thể quét QR code (chứa reservation code) hoặc nhập mã thủ công\n4. Reservation code giúp xác thực đặt chỗ của bạn\n5. Bạn có thể xem reservation code trong phần 'Đặt chỗ của tôi'\n6. Mỗi reservation code chỉ dùng được một lần cho một đặt chỗ",
+      "keywords": [
+        "reservation code",
+        "mã đặt chỗ",
+        "code",
+        "mã",
+        "reservation"
+      ],
+      "category": "reservation",
+      "isActive": true,
+      "createdAt": "2025-11-24T20:30:00Z",
+      "updatedAt": "2025-11-24T20:30:00Z",
+      "usageCount": 0
+    }
+  ]
+}
