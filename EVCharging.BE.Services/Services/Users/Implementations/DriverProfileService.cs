@@ -25,6 +25,7 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
             VehicleModel = d.VehicleModel ?? "",
             VehiclePlate = d.VehiclePlate ?? "",
             BatteryCapacity = d.BatteryCapacity,
+            ConnectorType = d.ConnectorType,
             CorporateId = d.CorporateId,
             Status = d.Status ?? "active",
             CreatedAt = d.CreatedAt
@@ -96,6 +97,7 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
                 VehicleModel = req.VehicleModel,
                 VehiclePlate = req.VehiclePlate,
                 BatteryCapacity = req.BatteryCapacity,
+                ConnectorType = string.IsNullOrWhiteSpace(req.ConnectorType) ? null : req.ConnectorType.Trim(),
                 CorporateId = req.CorporateId,
                 Status = status,
                 CreatedAt = DateTime.UtcNow
@@ -147,6 +149,15 @@ namespace EVCharging.BE.Services.Services.Users.Implementations
 
             if (req.BatteryCapacity.HasValue)
                 d.BatteryCapacity = req.BatteryCapacity.Value;
+
+            // ✅ Update ConnectorType (cho phép null để xóa connector type nếu cần)
+            if (req.ConnectorType != null)
+            {
+                // Nếu là empty string, set về null
+                d.ConnectorType = string.IsNullOrWhiteSpace(req.ConnectorType) 
+                    ? null 
+                    : req.ConnectorType.Trim();
+            }
 
             if (req.CorporateId.HasValue)
             {

@@ -13,6 +13,7 @@ namespace EVCharging.BE.Common.DTOs.DriverProfiles
         public string? VehicleModel { get; set; }
         public string? VehiclePlate { get; set; }
         public int? BatteryCapacity { get; set; }
+        public string? ConnectorType { get; set; }
         public int? CorporateId { get; set; }
     }
 
@@ -22,6 +23,7 @@ namespace EVCharging.BE.Common.DTOs.DriverProfiles
         public string? VehicleModel { get; set; }
         public string? VehiclePlate { get; set; }
         public int? BatteryCapacity { get; set; }
+        public string? ConnectorType { get; set; }
         public int? CorporateId { get; set; }
     }
 }

@@ -17,6 +17,8 @@ public partial class DriverProfile
 
     public int? BatteryCapacity { get; set; }
 
+    public string? ConnectorType { get; set; }
+
     public int? CorporateId { get; set; }
 
     public string? Status { get; set; } // "pending", "active", "rejected"

@@ -317,6 +317,9 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
             entity.Property(e => e.BatteryCapacity).HasColumnName("battery_capacity");
+            entity.Property(e => e.ConnectorType)
+                .HasMaxLength(50)
+                .HasColumnName("connector_type");
             entity.Property(e => e.CorporateId).HasColumnName("corporate_id");
             entity.Property(e => e.LicenseNumber)
                 .HasMaxLength(50)

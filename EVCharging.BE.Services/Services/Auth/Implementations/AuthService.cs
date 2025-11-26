@@ -144,7 +144,8 @@ namespace EVCharging.BE.Services.Services.Auth.Implementations
                         LicenseNumber = request.LicenseNumber,
                         VehicleModel = request.VehicleModel,
                         VehiclePlate = request.VehiclePlate,
-                        BatteryCapacity = request.BatteryCapacity
+                        BatteryCapacity = request.BatteryCapacity,
+                        ConnectorType = request.ConnectorType
                     };
 
                     _db.DriverProfiles.Add(driverProfile);

@@ -6,6 +6,7 @@ using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Payment;
 using EVCharging.BE.Services.Services.Notification;
+using EVCharging.BE.Services.Services.Charging;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -26,19 +27,22 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         private readonly IWalletService _walletService;
         private readonly IDepositService _depositService;
         private readonly INotificationService _notificationService;
+        private readonly IConnectorCompatibilityService _compatibilityService;
 
         public ReservationService(
             EvchargingManagementContext db,
             ITimeValidationService timeValidator,
             IWalletService walletService,
             IDepositService depositService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IConnectorCompatibilityService compatibilityService)
         {
             _db = db;
             _timeValidator = timeValidator;
             _walletService = walletService;
             _depositService = depositService;
             _notificationService = notificationService;
+            _compatibilityService = compatibilityService;
         }
 
         /// <summary>
@@ -73,6 +77,39 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
+
+            // ✅ Validate connector compatibility
+            var point = await _db.ChargingPoints
+                .FirstOrDefaultAsync(p => p.PointId == request.PointId);
+            
+            var driver = await _db.DriverProfiles
+                .FirstOrDefaultAsync(d => d.DriverId == driverId);
+            
+            if (point != null && driver != null)
+            {
+                // Check connector type đã được cấu hình
+                if (string.IsNullOrWhiteSpace(driver.ConnectorType))
+                {
+                    throw new InvalidOperationException(
+                        "Bạn chưa cấu hình loại cổng sạc cho xe. Vui lòng cập nhật thông tin xe trước khi đặt chỗ.");
+                }
+
+                if (string.IsNullOrWhiteSpace(point.ConnectorType))
+                {
+                    throw new InvalidOperationException(
+                        "Điểm sạc này chưa có thông tin loại cổng sạc. Vui lòng liên hệ quản trị viên.");
+                }
+
+                if (!_compatibilityService.IsCompatible(driver.ConnectorType, point.ConnectorType))
+                {
+                    var compatibleTypes = _compatibilityService.GetCompatibleConnectorTypes(driver.ConnectorType);
+                    throw new InvalidOperationException(
+                        $"Cổng sạc của xe ({driver.ConnectorType}) không tương thích với điểm sạc đã chọn ({point.ConnectorType}). " +
+                        (compatibleTypes.Any() 
+                            ? $"Vui lòng chọn điểm sạc có cổng: {string.Join(", ", compatibleTypes)}"
+                            : "Vui lòng chọn điểm sạc phù hợp với cổng sạc của xe."));
+                }
+            }
 
             // Sử dụng EF Core execution strategy thay vì TransactionScope
             var strategy = _db.Database.CreateExecutionStrategy();
