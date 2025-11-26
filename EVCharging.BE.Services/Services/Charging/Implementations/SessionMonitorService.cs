@@ -272,12 +272,28 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                 var finalCost = session.FinalCost ?? 0;
                 var durationMinutes = session.DurationMinutes ?? 0;
 
-                var title = "Sạc đầy hoàn tất";
-                var message = $"Phiên sạc của bạn đã hoàn tất tại {stationName}.\n" +
+                // ✅ Kiểm tra xem có hoàn cọc dư không (từ PaymentService)
+                var depositRefund = await db.WalletTransactions
+                    .Where(wt => wt.UserId == userId
+                        && wt.ReferenceId == sessionId
+                        && wt.TransactionType == "topup"
+                        && wt.Description != null
+                        && wt.Description.Contains("Hoàn tiền cọc dư"))
+                    .OrderByDescending(wt => wt.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                var title = "Phiên sạc hoàn thành";
+                var message = $"Phiên sạc của bạn đã hoàn thành tại {stationName}.\n" +
                              $"Pin đã sạc đến {finalSoc}%.\n" +
                              $"Năng lượng đã sạc: {energyUsed:F2} kWh\n" +
                              $"Thời gian sạc: {durationMinutes} phút\n" +
                              $"Chi phí: {finalCost:N0} VND";
+
+                // ✅ Thêm thông tin hoàn cọc dư nếu có
+                if (depositRefund != null && depositRefund.Amount > 0)
+                {
+                    message += $"\n\n✅ Đã hoàn lại tiền cọc dư: {depositRefund.Amount:N0} VND vào ví của bạn.";
+                }
 
                 _logger.LogInformation("Session {SessionId} completed: {Message}", sessionId, message);
 

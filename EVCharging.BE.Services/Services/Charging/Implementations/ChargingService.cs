@@ -18,17 +18,20 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
         private readonly ICostCalculationService _costCalculationService;
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly INotificationService _notificationService;
+        private readonly IConnectorCompatibilityService _compatibilityService;
 
         public ChargingService(
             EvchargingManagementContext db, 
             ICostCalculationService costCalculationService,
             ISessionMonitorService sessionMonitorService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IConnectorCompatibilityService compatibilityService)
         {
             _db = db;
             _costCalculationService = costCalculationService;
             _sessionMonitorService = sessionMonitorService;
             _notificationService = notificationService;
+            _compatibilityService = compatibilityService;
         }
 
         /// <summary>
@@ -100,6 +103,36 @@ namespace EVCharging.BE.Services.Services.Charging.Implementations
                         Console.WriteLine($"⚠️ [StartSessionAsync] Point or Driver not found - PointId={chargingPointId}, DriverId={request.DriverId}");
                         await transaction.RollbackAsync();
                         return null;
+                    }
+
+                    // ✅ Validate connector type đã được cấu hình
+                    if (string.IsNullOrWhiteSpace(driver.ConnectorType))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Driver connector type not configured - DriverId={request.DriverId}");
+                        await transaction.RollbackAsync();
+                        throw new InvalidOperationException(
+                            "Bạn chưa cấu hình loại cổng sạc cho xe. Vui lòng cập nhật thông tin xe trước khi sạc.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(chargingPoint.ConnectorType))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Point connector type missing - PointId={chargingPointId}");
+                        await transaction.RollbackAsync();
+                        throw new InvalidOperationException(
+                            "Điểm sạc này chưa có thông tin loại cổng sạc. Vui lòng liên hệ quản trị viên.");
+                    }
+
+                    // ✅ Validate connector compatibility
+                    if (!_compatibilityService.IsCompatible(driver.ConnectorType, chargingPoint.ConnectorType))
+                    {
+                        Console.WriteLine($"⚠️ [StartSessionAsync] Connector mismatch - Vehicle: {driver.ConnectorType}, Point: {chargingPoint.ConnectorType}");
+                        await transaction.RollbackAsync();
+                        var compatibleTypes = _compatibilityService.GetCompatibleConnectorTypes(driver.ConnectorType);
+                        throw new InvalidOperationException(
+                            $"Cổng sạc của xe ({driver.ConnectorType}) không tương thích với cổng sạc của điểm sạc ({chargingPoint.ConnectorType}). " +
+                            (compatibleTypes.Any() 
+                                ? $"Vui lòng chọn điểm sạc có cổng: {string.Join(", ", compatibleTypes)}"
+                                : "Vui lòng chọn điểm sạc phù hợp với cổng sạc của xe."));
                     }
 
                     Console.WriteLine($"[StartSessionAsync] Creating session - Point status: {chargingPoint.Status}, Station status: {chargingPoint.Station?.Status}");

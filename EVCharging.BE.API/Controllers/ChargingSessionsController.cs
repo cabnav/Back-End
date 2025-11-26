@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using EVCharging.BE.Services.Services.Charging;
 using EVCharging.BE.Services.Services.Notification;
 using EVCharging.BE.DAL;
+using EVCharging.BE.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
@@ -22,17 +23,20 @@ namespace EVCharging.BE.API.Controllers
         private readonly ISessionMonitorService _sessionMonitorService;
         private readonly ISignalRNotificationService _signalRService;
         private readonly EvchargingManagementContext _db;
+        private readonly IConnectorCompatibilityService _compatibilityService;
 
         public ChargingSessionsController(
             IChargingService chargingService,
             ISessionMonitorService sessionMonitorService,
             ISignalRNotificationService signalRService,
-            EvchargingManagementContext db)
+            EvchargingManagementContext db,
+            IConnectorCompatibilityService compatibilityService)
         {
             _chargingService = chargingService;
             _sessionMonitorService = sessionMonitorService;
             _signalRService = signalRService;
             _db = db;
+            _compatibilityService = compatibilityService;
         }
 
         /// <summary>
@@ -68,11 +72,13 @@ namespace EVCharging.BE.API.Controllers
                 var now = DateTime.UtcNow;
 
                 // ✅ Walk-in session: Tìm charging point từ PointQrCode hoặc dùng ChargingPointId
+                ChargingPoint? chargingPoint = null;
                 int chargingPointId;
+                
                 if (!string.IsNullOrEmpty(request.PointQrCode))
                 {
                     // Tìm charging point từ QR code
-                    var chargingPoint = await _db.ChargingPoints
+                    chargingPoint = await _db.ChargingPoints
                         .FirstOrDefaultAsync(p => p.QrCode == request.PointQrCode);
                     
                     if (chargingPoint == null)
@@ -93,12 +99,57 @@ namespace EVCharging.BE.API.Controllers
                 else if (request.ChargingPointId.HasValue)
                 {
                     chargingPointId = request.ChargingPointId.Value;
+                    // Query charging point nếu chưa có
+                    chargingPoint = await _db.ChargingPoints
+                        .FirstOrDefaultAsync(p => p.PointId == chargingPointId);
                 }
                 else
                 {
                     // Nếu không có cả PointQrCode và ChargingPointId
                     return BadRequest(new { 
                         message = "Vui lòng cung cấp PointQrCode hoặc ChargingPointId." 
+                    });
+                }
+
+                // ✅ Validate connector compatibility
+                if (chargingPoint == null)
+                {
+                    return NotFound(new { message = "Không tìm thấy điểm sạc." });
+                }
+
+                // ✅ Validate connector type đã được cấu hình
+                if (string.IsNullOrWhiteSpace(driverProfile.ConnectorType))
+                {
+                    return BadRequest(new
+                    {
+                        message = "Bạn chưa cấu hình loại cổng sạc cho xe. Vui lòng cập nhật thông tin xe trước khi sạc.",
+                        errorCode = "CONNECTOR_TYPE_NOT_CONFIGURED",
+                        suggestion = "Vui lòng cập nhật thông tin xe với connector type phù hợp (ví dụ: CCS2, CHAdeMO, Type2, Type1, AC)"
+                    });
+                }
+
+                if (string.IsNullOrWhiteSpace(chargingPoint.ConnectorType))
+                {
+                    return BadRequest(new
+                    {
+                        message = "Điểm sạc này chưa có thông tin loại cổng sạc. Vui lòng liên hệ quản trị viên.",
+                        errorCode = "POINT_CONNECTOR_TYPE_MISSING"
+                    });
+                }
+
+                if (!_compatibilityService.IsCompatible(driverProfile.ConnectorType, chargingPoint.ConnectorType))
+                {
+                    var compatibleTypes = _compatibilityService.GetCompatibleConnectorTypes(driverProfile.ConnectorType);
+                    return BadRequest(new
+                    {
+                        message = $"Cổng sạc của xe ({driverProfile.ConnectorType}) không tương thích với cổng sạc của điểm sạc ({chargingPoint.ConnectorType}).",
+                        errorCode = "CONNECTOR_TYPE_INCOMPATIBLE",
+                        vehicleConnectorType = driverProfile.ConnectorType,
+                        pointConnectorType = chargingPoint.ConnectorType,
+                        compatibleConnectorTypes = compatibleTypes,
+                        suggestion = compatibleTypes.Any() 
+                            ? $"Vui lòng chọn điểm sạc có cổng: {string.Join(", ", compatibleTypes)}"
+                            : "Vui lòng chọn điểm sạc phù hợp với cổng sạc của xe."
                     });
                 }
 

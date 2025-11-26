@@ -2,6 +2,7 @@ using EVCharging.BE.Common.DTOs.Payments;
 using EVCharging.BE.DAL;
 using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Payment;
+using EVCharging.BE.Services.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using PaymentEntity = EVCharging.BE.DAL.Entities.Payment;
 
@@ -16,15 +17,18 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
         private readonly EvchargingManagementContext _db;
         private readonly IWalletService _walletService;
         private readonly IInvoiceService _invoiceService;
+        private readonly INotificationService _notificationService;
 
         public PaymentService(
             EvchargingManagementContext db,
             IWalletService walletService,
-            IInvoiceService invoiceService)
+            IInvoiceService invoiceService,
+            INotificationService notificationService)
         {
             _db = db;
             _walletService = walletService;
             _invoiceService = invoiceService;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -132,10 +136,14 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
 
             // ✅ FinalCost đã được trừ deposit trong ChargingService, nên sử dụng trực tiếp
             // Tuy nhiên, nếu deposit > cost_after_discount, cần hoàn tiền dư
-            var amountToPay = session.FinalCost ?? 0m;
+            var amountToPay = session.FinalCost.Value; // Đã check HasValue ở trên
             
             // Tính cost sau discount (không có deposit)
             var costAfterDiscount = (session.CostBeforeDiscount ?? 0m) - (session.AppliedDiscount ?? 0m);
+            
+            Console.WriteLine($"[PayByWalletAsync] Session {sessionId}: FinalCost={amountToPay}, CostAfterDiscount={costAfterDiscount}, DepositAmount={depositAmount}, AmountToPay={amountToPay}");
+            
+            // ✅ amountToPay có thể là 0 (khi deposit đã cover hết), đó là hợp lệ và vẫn cần thanh toán để tạo invoice
             
             // Nếu deposit > cost_after_discount, hoàn tiền dư vào ví
             decimal refundAmount = 0m;
@@ -149,6 +157,9 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     sessionId
                 );
                 Console.WriteLine($"[PaymentService] Hoàn tiền cọc dư: Deposit={depositAmount}, CostAfterDiscount={costAfterDiscount}, Refund={refundAmount}");
+                
+                // ✅ Gửi notification về hoàn cọc dư
+                await SendDepositRefundNotificationAsync(userId, sessionId, refundAmount, session.Point?.Station?.Name ?? "trạm sạc");
             }
 
             // Kiểm tra số dư ví (chỉ nếu cần thanh toán thêm)
@@ -412,6 +423,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Distinct()
                 .ToListAsync();
 
+            // ✅ Bao gồm cả sessions có finalCost = 0 (vì vẫn cần thanh toán để tạo invoice và hoàn cọc dư)
             var unpaidSessions = await _db.ChargingSessions
                 // .Include(s => s.Driver)
                 .Include(s => s.Point)
@@ -419,7 +431,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Where(s => s.Driver.UserId == userId
                     && s.Status == "completed"
                     && s.FinalCost.HasValue
-                    && s.FinalCost.Value > 0
                     && !paidSessionIds.Contains(s.SessionId))
                 .OrderByDescending(s => s.EndTime ?? s.StartTime)
                 .Skip(skip)
@@ -430,7 +441,6 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 .Where(s => s.Driver.UserId == userId
                     && s.Status == "completed"
                     && s.FinalCost.HasValue
-                    && s.FinalCost.Value > 0
                     && !paidSessionIds.Contains(s.SessionId))
                 .CountAsync();
 
@@ -469,6 +479,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     DurationMinutes = s.DurationMinutes,
                     CostBeforeDiscount = s.CostBeforeDiscount,
                     AppliedDiscount = s.AppliedDiscount,
+                    DepositAmount = s.DepositAmount,
                     FinalCost = s.FinalCost,
                     StartTime = s.StartTime,
                     EndTime = s.EndTime,
@@ -545,6 +556,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     InvoiceId = invoice.InvoiceId,
                     InvoiceNumber = invoice.InvoiceNumber,
                     TotalAmount = invoice.TotalAmount,
+                    DepositAmount = session?.DepositAmount, // Thêm tiền cọc vào invoice
                     Status = invoice.Status,
                     PaymentMethod = payment?.PaymentMethod,
                     PaymentStatus = payment?.PaymentStatus,
@@ -570,6 +582,7 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                         DurationMinutes = session.DurationMinutes,
                         CostBeforeDiscount = session.CostBeforeDiscount,
                         AppliedDiscount = session.AppliedDiscount,
+                        DepositAmount = session.DepositAmount, // Thêm tiền cọc vào session info
                         FinalCost = session.FinalCost,
                         StartTime = session.StartTime,
                         EndTime = session.EndTime,
@@ -585,6 +598,33 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 Take = take,
                 Items = paidInvoicesList
             };
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hoàn tiền cọc dư sau khi sạc xong
+        /// </summary>
+        private async Task SendDepositRefundNotificationAsync(int userId, int sessionId, decimal refundAmount, string stationName)
+        {
+            try
+            {
+                var title = "Hoàn tiền cọc dư";
+                var message = $"Phiên sạc #{sessionId} tại {stationName} đã hoàn thành.\n" +
+                             $"✅ Đã hoàn lại tiền cọc dư: {refundAmount:N0} VND vào ví của bạn.";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "deposit_refund",
+                    sessionId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hoàn cọc dư {refundAmount:N0} VND cho user {userId}, session {sessionId}");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow thanh toán
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hoàn cọc dư cho session {sessionId}: {ex.Message}");
+            }
         }
     }
 }

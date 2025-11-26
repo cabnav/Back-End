@@ -242,7 +242,8 @@ namespace EVCharging.BE.API.Controllers
                 }
 
                 // Kiểm tra đã có chi phí cuối cùng chưa
-                if (!session.FinalCost.HasValue || session.FinalCost.Value <= 0)
+                // Lưu ý: finalCost = 0 là hợp lệ khi deposit đã cover hết chi phí, vẫn cần thanh toán để tạo invoice và hoàn cọc dư
+                if (!session.FinalCost.HasValue)
                 {
                     return BadRequest(new { message = "Phiên sạc chưa có chi phí cuối cùng." });
                 }
@@ -544,6 +545,10 @@ namespace EVCharging.BE.API.Controllers
                 };
 
                 _db.Payments.Add(payment);
+                
+                // ✅ Cập nhật DepositPaymentStatus của reservation
+                reservation.DepositPaymentStatus = "pending";
+                
                 await _db.SaveChangesAsync();
 
                 // Tạo MoMo payment request

@@ -120,11 +120,11 @@ builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
 builder.Services.AddSingleton<ISessionMonitorService, SessionMonitorService>(); // ✅ Singleton để tránh dispose khi request scope kết thúc
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+builder.Services.AddScoped<IConnectorCompatibilityService, ConnectorCompatibilityService>(); // ✅ Connector compatibility validation
 
 // Reservations
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
-builder.Services.AddScoped<IQRCodeService, QRCodeService>();
 builder.Services.AddScoped<IStationSearchService, StationSearchService>();
 builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.GetSection("ReservationBackground"));
 builder.Services.AddHostedService<ReservationExpiryWorker>();
@@ -165,6 +165,10 @@ builder.Services.AddScoped<IInteractiveMapService, InteractiveMapService>();
 
 // Analytics
 builder.Services.AddScoped<EVCharging.BE.Services.AnalyticsService>();
+
+// Chat
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Chat.IChatDataService, EVCharging.BE.Services.Services.Chat.Implementations.JsonChatDataService>();
+builder.Services.AddScoped<EVCharging.BE.Services.Services.Chat.IChatService, EVCharging.BE.Services.Services.Chat.Implementations.ChatService>();
 
 
 

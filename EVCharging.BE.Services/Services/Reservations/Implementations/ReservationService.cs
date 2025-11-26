@@ -6,6 +6,7 @@ using EVCharging.BE.DAL.Entities;
 using EVCharging.BE.Services.Services.Admin;
 using EVCharging.BE.Services.Services.Payment;
 using EVCharging.BE.Services.Services.Notification;
+using EVCharging.BE.Services.Services.Charging;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -26,19 +27,22 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
         private readonly IWalletService _walletService;
         private readonly IDepositService _depositService;
         private readonly INotificationService _notificationService;
+        private readonly IConnectorCompatibilityService _compatibilityService;
 
         public ReservationService(
             EvchargingManagementContext db,
             ITimeValidationService timeValidator,
             IWalletService walletService,
             IDepositService depositService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IConnectorCompatibilityService compatibilityService)
         {
             _db = db;
             _timeValidator = timeValidator;
             _walletService = walletService;
             _depositService = depositService;
             _notificationService = notificationService;
+            _compatibilityService = compatibilityService;
         }
 
         /// <summary>
@@ -73,6 +77,39 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
             // Validate slot (kiểm tra khung giờ)
             await _timeValidator.ValidateTimeSlotAsync(request.PointId, startUtc, endUtc);
+
+            // ✅ Validate connector compatibility
+            var point = await _db.ChargingPoints
+                .FirstOrDefaultAsync(p => p.PointId == request.PointId);
+            
+            var driver = await _db.DriverProfiles
+                .FirstOrDefaultAsync(d => d.DriverId == driverId);
+            
+            if (point != null && driver != null)
+            {
+                // Check connector type đã được cấu hình
+                if (string.IsNullOrWhiteSpace(driver.ConnectorType))
+                {
+                    throw new InvalidOperationException(
+                        "Bạn chưa cấu hình loại cổng sạc cho xe. Vui lòng cập nhật thông tin xe trước khi đặt chỗ.");
+                }
+
+                if (string.IsNullOrWhiteSpace(point.ConnectorType))
+                {
+                    throw new InvalidOperationException(
+                        "Điểm sạc này chưa có thông tin loại cổng sạc. Vui lòng liên hệ quản trị viên.");
+                }
+
+                if (!_compatibilityService.IsCompatible(driver.ConnectorType, point.ConnectorType))
+                {
+                    var compatibleTypes = _compatibilityService.GetCompatibleConnectorTypes(driver.ConnectorType);
+                    throw new InvalidOperationException(
+                        $"Cổng sạc của xe ({driver.ConnectorType}) không tương thích với điểm sạc đã chọn ({point.ConnectorType}). " +
+                        (compatibleTypes.Any() 
+                            ? $"Vui lòng chọn điểm sạc có cổng: {string.Join(", ", compatibleTypes)}"
+                            : "Vui lòng chọn điểm sạc phù hợp với cổng sạc của xe."));
+                }
+            }
 
             // Sử dụng EF Core execution strategy thay vì TransactionScope
             var strategy = _db.Database.CreateExecutionStrategy();
@@ -204,11 +241,19 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     };
 
                     _db.Payments.Add(depositPayment);
+                    
+                    // ✅ Cập nhật DepositPaymentStatus của reservation
+                    entity.DepositPaymentStatus = "success";
+                    
                     await _db.SaveChangesAsync();
                 }
                 else
                 {
-                    // Ví không đủ: throw exception với message đặc biệt để controller nhận biết
+                    // Ví không đủ: set DepositPaymentStatus = "pending" để đánh dấu cần thanh toán cọc
+                    entity.DepositPaymentStatus = "pending";
+                    await _db.SaveChangesAsync();
+                    
+                    // Throw exception với message đặc biệt để controller nhận biết
                     throw new InvalidOperationException(
                         $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
                         $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
@@ -518,7 +563,13 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
 
                 if (depositPayment == null)
                 {
-                    // Không có deposit payment → không cần hoàn cọc
+                    // Không có deposit payment → không cần hoàn cọc, nhưng vẫn gửi notification hủy thành công
+                    var reservationForNotification = await _db.Reservations
+                        .Include(r => r.Point)
+                            .ThenInclude(p => p.Station)
+                        .FirstOrDefaultAsync(r => r.ReservationId == reservation.ReservationId);
+                    
+                    await SendCancellationSuccessNotificationAsync(userId, reservationForNotification ?? reservation);
                     return;
                 }
 
@@ -546,6 +597,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                     );
 
                     Console.WriteLine($"✅ Đã hoàn cọc {depositAmount:F0} VNĐ cho reservation {reservation.ReservationId} (hủy trước {cancelBeforeStart.TotalMinutes:F0} phút)");
+                    
+                    // ✅ Gửi thông báo khi được hoàn cọc
+                    await SendRefundNotificationAsync(userId, reservationWithDetails ?? reservation, cancelBeforeStart.TotalMinutes, depositAmount);
                 }
                 else
                 {
@@ -561,6 +615,69 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 // Log lỗi nhưng không throw để reservation vẫn được hủy
                 Console.WriteLine($"❌ Lỗi khi xử lý hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
                 Console.WriteLine($"   StackTrace: {ex.StackTrace}");
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hủy reservation và được hoàn cọc
+        /// </summary>
+        private async Task SendRefundNotificationAsync(int userId, DAL.Entities.Reservation reservation, double minutesBeforeStart, decimal depositAmount)
+        {
+            try
+            {
+                var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                var startTime = reservation.StartTime;
+
+                var title = "Hủy đặt chỗ thành công - Đã hoàn cọc";
+                var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
+                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                             $"Mã đặt chỗ: {reservation.ReservationCode}\n" +
+                             $"Thời gian hủy: Còn {minutesBeforeStart:F0} phút trước giờ đặt chỗ\n" +
+                             $"✅ Cọc {depositAmount:N0} VND đã được hoàn lại vào ví của bạn.";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "reservation_cancelled_with_refund",
+                    reservation.ReservationId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hoàn cọc cho user {userId}, reservation {reservation.ReservationId}");
+            }
+            catch (Exception ex)
+            {
+                // Log lỗi nhưng không throw để không ảnh hưởng đến flow chính
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hoàn cọc cho reservation {reservation.ReservationId}: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Gửi thông báo khi hủy reservation thành công (không có deposit)
+        /// </summary>
+        private async Task SendCancellationSuccessNotificationAsync(int userId, DAL.Entities.Reservation reservation)
+        {
+            try
+            {
+                var stationName = reservation.Point?.Station?.Name ?? "trạm sạc";
+                var startTime = reservation.StartTime;
+
+                var title = "Hủy đặt chỗ thành công";
+                var message = $"Bạn đã hủy đặt chỗ tại {stationName}.\n" +
+                             $"Thời gian đặt chỗ: {startTime:HH:mm} ngày {startTime:dd/MM/yyyy}\n" +
+                             $"Mã đặt chỗ: {reservation.ReservationCode}";
+
+                await _notificationService.SendNotificationAsync(
+                    userId,
+                    title,
+                    message,
+                    "reservation_cancelled",
+                    reservation.ReservationId);
+
+                Console.WriteLine($"✅ Đã gửi thông báo hủy đặt chỗ thành công cho user {userId}, reservation {reservation.ReservationId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Lỗi khi gửi thông báo hủy đặt chỗ cho reservation {reservation.ReservationId}: {ex.Message}");
             }
         }
 
@@ -712,7 +829,9 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 },
                 // Thông tin trạm sạc (để dễ truy cập)
                 StationName = r.Point?.Station?.Name,
-                StationAddress = r.Point?.Station?.Address
+                StationAddress = r.Point?.Station?.Address,
+                // ✅ Trạng thái thanh toán tiền cọc
+                DepositPaymentStatus = r.DepositPaymentStatus
             };
         }
 

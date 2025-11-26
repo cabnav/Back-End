@@ -286,6 +286,17 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     payment.PaymentStatus = "success";
                     payment.CreatedAt = DateTime.UtcNow;
 
+                    // ✅ Cập nhật DepositPaymentStatus của reservation nếu đây là deposit payment
+                    if (payment.PaymentType == "deposit" && payment.ReservationId.HasValue)
+                    {
+                        var reservation = await _db.Reservations.FindAsync(payment.ReservationId.Value);
+                        if (reservation != null)
+                        {
+                            reservation.DepositPaymentStatus = "success";
+                            Console.WriteLine($"✅ Callback: Reservation DepositPaymentStatus updated to 'success' for ReservationId: {reservation.ReservationId}");
+                        }
+                    }
+
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Callback: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
@@ -366,6 +377,18 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 {
                     // Thanh toán thất bại
                     payment.PaymentStatus = "failed";
+                    
+                    // ✅ Cập nhật DepositPaymentStatus của reservation nếu đây là deposit payment
+                    if (payment.PaymentType == "deposit" && payment.ReservationId.HasValue)
+                    {
+                        var reservation = await _db.Reservations.FindAsync(payment.ReservationId.Value);
+                        if (reservation != null)
+                        {
+                            reservation.DepositPaymentStatus = "failed";
+                            Console.WriteLine($"❌ Callback: Reservation DepositPaymentStatus updated to 'failed' for ReservationId: {reservation.ReservationId}");
+                        }
+                    }
+                    
                     await _db.SaveChangesAsync();
 
                     // Lấy FrontendUrl từ config, nếu không có thì dùng BaseUrl
@@ -484,6 +507,17 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                     payment.PaymentStatus = "success";
                     payment.CreatedAt = DateTime.UtcNow;
 
+                    // ✅ Cập nhật DepositPaymentStatus của reservation nếu đây là deposit payment
+                    if (payment.PaymentType == "deposit" && payment.ReservationId.HasValue)
+                    {
+                        var reservation = await _db.Reservations.FindAsync(payment.ReservationId.Value);
+                        if (reservation != null)
+                        {
+                            reservation.DepositPaymentStatus = "success";
+                            Console.WriteLine($"✅ Notify: Reservation DepositPaymentStatus updated to 'success' for ReservationId: {reservation.ReservationId}");
+                        }
+                    }
+
                     await _db.SaveChangesAsync();
                     Console.WriteLine($"✅ Notify: Payment status updated to 'success' for PaymentId: {payment.PaymentId}, SessionId: {payment.SessionId}");
 
@@ -513,6 +547,18 @@ namespace EVCharging.BE.Services.Services.Payment.Implementations
                 {
                     // Thanh toán thất bại
                     payment.PaymentStatus = "failed";
+                    
+                    // ✅ Cập nhật DepositPaymentStatus của reservation nếu đây là deposit payment
+                    if (payment.PaymentType == "deposit" && payment.ReservationId.HasValue)
+                    {
+                        var reservation = await _db.Reservations.FindAsync(payment.ReservationId.Value);
+                        if (reservation != null)
+                        {
+                            reservation.DepositPaymentStatus = "failed";
+                            Console.WriteLine($"❌ Notify: Reservation DepositPaymentStatus updated to 'failed' for ReservationId: {reservation.ReservationId}");
+                        }
+                    }
+                    
                     await _db.SaveChangesAsync();
 
                     return new MomoNotifyResultDto

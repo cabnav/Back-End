@@ -19,7 +19,6 @@ namespace EVCharging.BE.API.Controllers
     {
         private readonly IReservationService _reservationService;
         private readonly EVCharging.BE.Services.Services.Charging.IChargingService _chargingService;
-        private readonly IQRCodeService _qrCodeService;
         private readonly IStationSearchService _stationSearchService;
         private readonly ReservationBackgroundOptions _opt;
         private readonly EvchargingManagementContext _db;
@@ -27,7 +26,6 @@ namespace EVCharging.BE.API.Controllers
 
         public ReservationsController(
             IReservationService reservationService,
-            IQRCodeService qrCodeService,
             IStationSearchService stationSearchService,
             EVCharging.BE.Services.Services.Charging.IChargingService chargingService,
             IOptions<ReservationBackgroundOptions> opt,
@@ -35,7 +33,6 @@ namespace EVCharging.BE.API.Controllers
             IDepositService depositService)
         {
             _reservationService = reservationService;
-            _qrCodeService = qrCodeService;
             _stationSearchService = stationSearchService;
             _chargingService = chargingService;
             _opt = opt.Value;
@@ -492,29 +489,5 @@ namespace EVCharging.BE.API.Controllers
         }
 
         // -------------------------------
-        // 8️⃣ GENERATE QR Code (tạo mã QR bằng reservation code)
-        // -------------------------------
-        [HttpGet("{reservationCode}/qrcode")]
-        public async Task<IActionResult> GetQRCode(string reservationCode)
-        {
-            var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-            var reservation = await _reservationService.GetReservationByCodeAsync(userId, reservationCode);
-            
-            if (reservation == null)
-                return NotFound(new { message = "Reservation not found or you don't have permission to view it." });
-
-            // Payload: nội dung mã QR tối ưu cho business logic
-            // Format: multi-line format, mỗi trường một dòng để dễ đọc và parse
-            // - Dùng tên đầy đủ (không viết tắt) để rõ ràng
-            // - Mỗi trường xuống dòng để dễ debug và maintain
-            // - StartTime dùng ISO 8601 format (YYYY-MM-DDTHH:mm:ss) để dễ đọc hơn Unix timestamp
-            // Dùng ISO 8601 round-trip (UTC có hậu tố 'Z')
-            var startTimeIso = reservation.StartTime.ToString("o");
-            var stationId = reservation.ChargingPoint?.StationId ?? 0;
-            var payload = $"EVCHG\nReservationCode={reservation.ReservationCode}\nPointId={reservation.PointId}\nStationId={stationId}\nStartTime={startTimeIso}";
-            var png = _qrCodeService.GenerateQRCode(payload);
-
-            return File(png, "image/png");
-        }
     }
 }

@@ -317,6 +317,9 @@ public partial class EvchargingManagementContext : DbContext
 
             entity.Property(e => e.DriverId).HasColumnName("driver_id");
             entity.Property(e => e.BatteryCapacity).HasColumnName("battery_capacity");
+            entity.Property(e => e.ConnectorType)
+                .HasMaxLength(50)
+                .HasColumnName("connector_type");
             entity.Property(e => e.CorporateId).HasColumnName("corporate_id");
             entity.Property(e => e.LicenseNumber)
                 .HasMaxLength(50)
@@ -696,6 +699,9 @@ public partial class EvchargingManagementContext : DbContext
                 .HasColumnName("updated_at");
             entity.Property(e => e.TargetSoc)
                 .HasColumnName("target_soc");
+            entity.Property(e => e.DepositPaymentStatus)
+                .HasMaxLength(20)
+                .HasColumnName("deposit_payment_status");
 
             entity.HasOne(d => d.Driver).WithMany(p => p.Reservations)
                 .HasForeignKey(d => d.DriverId)

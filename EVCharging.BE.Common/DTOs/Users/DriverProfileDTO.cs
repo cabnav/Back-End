@@ -13,6 +13,7 @@ namespace EVCharging.BE.Common.DTOs.Users
         public string VehicleModel { get; set; } = "";
         public string VehiclePlate { get; set; } = "";
         public int? BatteryCapacity { get; set; }
+        public string? ConnectorType { get; set; }
         public int? CorporateId { get; set; }
         public string? Status { get; set; } // "pending", "active", "rejected"
         public DateTime? CreatedAt { get; set; }
