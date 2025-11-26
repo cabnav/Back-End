@@ -133,6 +133,12 @@ namespace EVCharging.BE.Services.Services.Background
                         {
                             r.Status = "cancelled";
                             r.UpdatedAt = now;
+                            // ✅ Set DepositPaymentStatus = "failed" khi auto-cancel do chưa thanh toán cọc
+                            // Nếu đang "pending" hoặc null → set thành "failed" để đánh dấu thanh toán thất bại (timeout)
+                            if (r.DepositPaymentStatus != "success")
+                            {
+                                r.DepositPaymentStatus = "failed";
+                            }
                         }
 
                         await db.SaveChangesAsync(stoppingToken);

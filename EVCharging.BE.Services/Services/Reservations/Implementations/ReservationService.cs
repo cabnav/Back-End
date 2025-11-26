@@ -212,7 +212,11 @@ namespace EVCharging.BE.Services.Services.Reservations.Implementations
                 }
                 else
                 {
-                    // Ví không đủ: throw exception với message đặc biệt để controller nhận biết
+                    // Ví không đủ: set DepositPaymentStatus = "pending" để đánh dấu cần thanh toán cọc
+                    entity.DepositPaymentStatus = "pending";
+                    await _db.SaveChangesAsync();
+                    
+                    // Throw exception với message đặc biệt để controller nhận biết
                     throw new InvalidOperationException(
                         $"WALLET_INSUFFICIENT|Ví không đủ tiền để cọc. " +
                         $"Số dư hiện tại: {walletBalance:F0} VNĐ, " +
