@@ -120,6 +120,7 @@ builder.Services.AddScoped<IChargingStationService, ChargingStationService>();
 builder.Services.AddScoped<IChargingPointService, ChargingPointService>();
 builder.Services.AddSingleton<ISessionMonitorService, SessionMonitorService>(); // ✅ Singleton để tránh dispose khi request scope kết thúc
 builder.Services.AddScoped<ICostCalculationService, CostCalculationService>();
+builder.Services.AddScoped<IConnectorCompatibilityService, ConnectorCompatibilityService>(); // ✅ Connector compatibility validation
 
 // Reservations
 builder.Services.AddScoped<IReservationService, ReservationService>();
