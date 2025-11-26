@@ -1033,6 +1033,7 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                     return new List<PaymentResponse>();
 
                 // 2. Get pending payments for sessions at assigned stations
+                // ✅ Chỉ lấy payments của sessions đã completed (chỉ những payments có thể confirm)
                 var pendingPayments = await _db.Payments
                     .Include(p => p.Session)
                     .ThenInclude(s => s != null ? s.Point : null!)
@@ -1040,12 +1041,20 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                                (p.PaymentMethod == "cash" || p.PaymentMethod == "card" || p.PaymentMethod == "pos") &&
                                p.SessionId.HasValue &&
                                p.Session != null &&
+                               p.Session.Status == "completed" && // ✅ Chỉ lấy payments của sessions đã completed
                                p.Session.Point != null &&
                                stationIds.Contains(p.Session.Point.StationId))
                     .OrderByDescending(p => p.CreatedAt)
                     .ToListAsync();
 
-                return pendingPayments.Select(p => new PaymentResponse
+                // ✅ Double-check: Filter lại để đảm bảo chỉ trả về payments của sessions đã completed
+                var validPayments = pendingPayments
+                    .Where(p => p.SessionId.HasValue && 
+                               p.Session != null && 
+                               p.Session.Status == "completed")
+                    .ToList();
+
+                return validPayments.Select(p => new PaymentResponse
                 {
                     PaymentId = p.PaymentId,
                     UserId = p.UserId,
@@ -1097,8 +1106,25 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                     return null;
                 }
 
-                // 4. Verify staff has access to this payment's station
-                if (payment.SessionId.HasValue && payment.Session != null && payment.Session.Point != null)
+                // 4. ✅ Verify session exists and reload to get latest status
+                if (!payment.SessionId.HasValue || payment.Session == null)
+                {
+                    Console.WriteLine($"Payment {paymentId} has no associated session");
+                    return null;
+                }
+
+                // ✅ Reload session để đảm bảo có status mới nhất từ database
+                await _db.Entry(payment.Session).ReloadAsync();
+                
+                // ✅ Verify session is completed BEFORE allowing payment confirmation
+                if (payment.Session.Status != "completed")
+                {
+                    Console.WriteLine($"Payment {paymentId} cannot be confirmed. Session {payment.SessionId} is not completed. Current status: {payment.Session.Status}");
+                    return null;
+                }
+
+                // 5. Verify staff has access to this payment's station
+                if (payment.Session.Point != null)
                 {
                     var hasAccess = await VerifyStaffAssignmentAsync(staffId, payment.Session.Point.StationId);
                     if (!hasAccess)
@@ -1106,6 +1132,11 @@ namespace EVCharging.BE.Services.Services.Staff.Implementations
                         Console.WriteLine($"Staff {staffId} does not have access to station {payment.Session.Point.StationId}");
                         return null;
                     }
+                }
+                else
+                {
+                    Console.WriteLine($"Payment {paymentId} session has no associated charging point");
+                    return null;
                 }
 
                 // 5. Update payment status
