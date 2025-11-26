@@ -125,7 +125,6 @@ builder.Services.AddScoped<IRealTimeChargingService, RealTimeChargingService>();
 // Reservations
 builder.Services.AddScoped<IReservationService, ReservationService>();
 builder.Services.AddScoped<ITimeValidationService, TimeValidationService>();
-builder.Services.AddScoped<IQRCodeService, QRCodeService>();
 builder.Services.AddScoped<IStationSearchService, StationSearchService>();
 builder.Services.Configure<ReservationBackgroundOptions>(builder.Configuration.GetSection("ReservationBackground"));
 builder.Services.AddHostedService<ReservationExpiryWorker>();
