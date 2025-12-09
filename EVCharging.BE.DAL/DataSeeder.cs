@@ -301,11 +301,10 @@ namespace EVCharging.BE.DAL
                     });
                 }
 
-                // Chỉ add nếu các trạm đã tồn tại (đã có StationId)
+    
                 context.ChargingPoints.AddRange(chargingPoints);
             }
 
-            // Đảm bảo mọi thay đổi đã lưu vào DB
             context.SaveChanges();
         }
     }
