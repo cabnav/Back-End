@@ -305,7 +305,6 @@ namespace EVCharging.BE.DAL
                 context.ChargingPoints.AddRange(chargingPoints);
             }
 
-            // Đảm bảo mọi thay đổi đã lưu vào DB
             context.SaveChanges();
         }
     }
